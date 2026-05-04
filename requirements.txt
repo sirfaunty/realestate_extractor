@@ -1,0 +1,16 @@
+# Core PDF processing
+pdfplumber>=0.10.0
+
+# OCR for scanned documents
+pytesseract>=0.3.10
+pdf2image>=1.16.0
+Pillow>=10.0.0
+
+# Image preprocessing for dirty scans
+opencv-python-headless>=4.8.0
+
+# HTTP client for local LLM (Ollama)
+requests>=2.31.0
+
+# Web interface
+Flask>=3.0.0

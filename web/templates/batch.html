@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Batch Process — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Batch Process</h2>
+    <p>Process all PDFs in a folder at once</p>
+</div>
+
+<form method="POST" id="batch-form">
+    <div class="card">
+        <div class="card-header">Folder Location</div>
+
+        <div class="form-group">
+            <label for="folder_path">Folder Path</label>
+            <input type="text" name="folder_path" id="folder_path"
+                   placeholder="e.g., ~/Documents/leases or /Users/you/Desktop/pdfs">
+            <div class="hint">Enter the full path to the folder containing your PDF files. Use ~/Documents for your Documents folder.</div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-group">
+                <input type="checkbox" name="recursive">
+                Include subfolders
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Extraction Settings</div>
+
+        <div class="form-group">
+            <label for="doc_type">Document Type (for all files)</label>
+            <select name="doc_type" id="doc_type">
+                <option value="">Auto-detect each file</option>
+                {% for t in templates %}
+                <option value="{{ t.type }}">{{ t.name }}</option>
+                {% endfor %}
+            </select>
+            <div class="hint">Set a type if all files in this folder are the same document type. Otherwise leave as auto-detect.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="property_name">Property Name (for all files)</label>
+            <input type="text" name="property_name" id="property_name"
+                   placeholder="e.g., Riverside Plaza or Portfolio Q1 2025">
+            <div class="hint">Optional. Associates all documents in this batch with the same property.</div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-group">
+                <input type="checkbox" name="force_ocr">
+                Force OCR on all files
+            </label>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" id="submit-btn">
+        Start Batch Processing
+    </button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('batch-form').addEventListener('submit', function() {
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+});
+</script>
+{% endblock %}

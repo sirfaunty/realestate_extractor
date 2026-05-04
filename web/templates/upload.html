@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Upload PDF — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Upload PDF</h2>
+    <p>Upload a single document for extraction</p>
+</div>
+
+<form method="POST" enctype="multipart/form-data" id="upload-form">
+    <div class="card">
+        <div class="card-header">Select File</div>
+
+        <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <div class="icon">&#128196;</div>
+            <p>Drag and drop a PDF here, or <span class="browse">browse files</span></p>
+            <input type="file" name="file" id="file-input" accept=".pdf">
+        </div>
+        <div class="file-selected" id="file-selected"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Extraction Settings</div>
+
+        <div class="form-group">
+            <label for="doc_type">Document Type</label>
+            <select name="doc_type" id="doc_type">
+                <option value="">Auto-detect</option>
+                {% for t in templates %}
+                <option value="{{ t.type }}">{{ t.name }}</option>
+                {% endfor %}
+            </select>
+            <div class="hint">Leave as auto-detect to let the system classify the document.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="property_name">Property Name</label>
+            <input type="text" name="property_name" id="property_name"
+                   placeholder="e.g., 123 Main Street or Portfolio A">
+            <div class="hint">Optional. Associates this document with a property for portfolio queries.</div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-group">
+                <input type="checkbox" name="force_ocr">
+                Force OCR (use for scanned documents that aren't being detected automatically)
+            </label>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" id="submit-btn">
+        Process Document
+    </button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const fileSelected = document.getElementById('file-selected');
+const submitBtn = document.getElementById('submit-btn');
+
+// File selection
+fileInput.addEventListener('change', function() {
+    if (this.files.length) {
+        fileSelected.textContent = 'Selected: ' + this.files[0].name;
+        fileSelected.classList.add('visible');
+    }
+});
+
+// Drag and drop
+dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        fileSelected.textContent = 'Selected: ' + e.dataTransfer.files[0].name;
+        fileSelected.classList.add('visible');
+    }
+});
+
+// Prevent double submit
+document.getElementById('upload-form').addEventListener('submit', function() {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Processing...';
+});
+</script>
+{% endblock %}

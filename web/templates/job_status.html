@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Processing — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 id="page-title">
+        {% if job.type == 'single' %}Processing: {{ job.filename }}
+        {% else %}Batch Processing{% endif %}
+    </h2>
+    <p id="page-subtitle">
+        {% if job.status == 'processing' %}Extraction in progress...
+        {% elif job.status == 'completed' %}Processing complete
+        {% else %}Processing failed{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span id="status-badge" class="badge badge-{{ job.status }}">{{ job.status }}</span>
+        {% if job.type == 'batch' %}
+        <span style="margin-left: 8px; color: var(--text-muted); font-weight: 400; font-size: 13px;">
+            {{ job.get('folder', '') }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="progress-container" id="progress-section">
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"
+                 style="width: {{ (job.progress / job.total * 100) if job.total else 0 }}%"></div>
+        </div>
+        <div class="progress-text">
+            <span id="progress-count">{{ job.progress }} / {{ job.total }} files</span>
+            <span id="progress-pct">{{ ((job.progress / job.total * 100) if job.total else 0)|int }}%</span>
+        </div>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card" id="results-card">
+    <div class="card-header">Results</div>
+    <div id="results-list">
+        {% for r in job.results %}
+        <div class="result-item">
+            <div>
+                <span class="result-filename">
+                    {% if r.document_id %}
+                    <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+                    {% else %}
+                    {{ r.filename }}
+                    {% endif %}
+                </span>
+                {% if r.success %}
+                <span class="badge badge-success" style="margin-left: 8px;">OK</span>
+                {% else %}
+                <span class="badge badge-error" style="margin-left: 8px;">Failed</span>
+                {% endif %}
+                {% if r.document_type %}
+                <span class="badge badge-{{ r.document_type }}" style="margin-left: 4px;">{{ r.document_type }}</span>
+                {% endif %}
+            </div>
+            <div class="result-stats">
+                {% if r.success %}
+                <span>{{ r.financial_terms }} terms</span>
+                <span>{{ r.clauses }} clauses</span>
+                <span>{{ r.tabular_rows }} rows</span>
+                <span>{{ r.time }}s</span>
+                {% else %}
+                <span style="color: var(--danger);">{{ r.error }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not job.results %}
+    <div class="empty-state" id="waiting-state">
+        <p>Waiting for results...</p>
+    </div>
+    {% endif %}
+</div>
+
+<div id="done-actions" style="display: {{ 'flex' if job.status != 'processing' else 'none' }}; gap: 12px; margin-top: 16px;">
+    <a href="{{ url_for('documents') }}" class="btn btn-primary">View Documents</a>
+    <a href="{{ url_for('upload') }}" class="btn btn-secondary">Upload Another</a>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const jobId = '{{ job_id }}';
+let polling = {{ 'true' if job.status == 'processing' else 'false' }};
+
+function pollStatus() {
+    if (!polling) return;
+
+    fetch('/api/job/' + jobId)
+        .then(r => r.json())
+        .then(job => {
+            // Update progress
+            const pct = job.total ? Math.round(job.progress / job.total * 100) : 0;
+            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-count').textContent = job.progress + ' / ' + job.total + ' files';
+            document.getElementById('progress-pct').textContent = pct + '%';
+
+            // Update status badge
+            const badge = document.getElementById('status-badge');
+            badge.textContent = job.status;
+            badge.className = 'badge badge-' + job.status;
+
+            // Update subtitle
+            const subtitle = document.getElementById('page-subtitle');
+            if (job.status === 'completed') subtitle.textContent = 'Processing complete';
+            else if (job.status === 'failed') subtitle.textContent = 'Processing failed';
+
+            // Update results list
+            const resultsList = document.getElementById('results-list');
+            const waitingState = document.getElementById('waiting-state');
+            if (waitingState && job.results.length > 0) {
+                waitingState.remove();
+            }
+
+            // Rebuild results (simple approach)
+            if (job.results.length > 0) {
+                let html = '';
+                job.results.forEach(r => {
+                    html += '<div class="result-item"><div>';
+                    if (r.document_id) {
+                        html += '<a href="/document/' + r.document_id + '" class="result-filename">' + r.filename + '</a>';
+                    } else {
+                        html += '<span class="result-filename">' + r.filename + '</span>';
+                    }
+                    if (r.success) {
+                        html += ' <span class="badge badge-success">OK</span>';
+                    } else {
+                        html += ' <span class="badge badge-error">Failed</span>';
+                    }
+                    if (r.document_type) {
+                        html += ' <span class="badge badge-' + r.document_type + '">' + r.document_type + '</span>';
+                    }
+                    html += '</div><div class="result-stats">';
+                    if (r.success) {
+                        html += '<span>' + r.financial_terms + ' terms</span>';
+                        html += '<span>' + r.clauses + ' clauses</span>';
+                        html += '<span>' + r.tabular_rows + ' rows</span>';
+                        html += '<span>' + r.time + 's</span>';
+                    } else {
+                        html += '<span style="color:var(--danger)">' + (r.error || 'Unknown error') + '</span>';
+                    }
+                    html += '</div></div>';
+                });
+                resultsList.innerHTML = html;
+            }
+
+            // Stop polling if done
+            if (job.status !== 'processing') {
+                polling = false;
+                document.getElementById('done-actions').style.display = 'flex';
+            } else {
+                setTimeout(pollStatus, 2000);
+            }
+        })
+        .catch(() => setTimeout(pollStatus, 3000));
+}
+
+if (polling) {
+    setTimeout(pollStatus, 1500);
+}
+</script>
+{% endblock %}

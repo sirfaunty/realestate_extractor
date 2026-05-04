@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup — capactive</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="auth-page">
+    <div class="auth-container">
+        <div class="auth-brand">
+            <svg width="48" height="48" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="16" width="6" height="10" rx="1.5" fill="#3A8FD4"/>
+                <rect x="11" y="10" width="6" height="16" rx="1.5" fill="#6BB3E8"/>
+                <rect x="20" y="4" width="6" height="22" rx="1.5" fill="#FFFFFF"/>
+                <path d="M4 14 L14 7 L23 3" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            </svg>
+            <span class="brand-wordmark">capactive</span>
+            <span class="brand-product">Document Extractor</span>
+        </div>
+
+        <div class="auth-card">
+            <h2>Welcome</h2>
+            <p class="subtitle">Set up your organization to get started.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST">
+                <div class="form-group">
+                    <label for="org_name">Organization Name</label>
+                    <input type="text" id="org_name" name="org_name" placeholder="e.g. Capactive Capital" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="admin_name">Your Name</label>
+                    <input type="text" id="admin_name" name="admin_name" placeholder="e.g. Patrick Fauntleroy" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="admin_email">Your Email</label>
+                    <input type="email" id="admin_email" name="admin_email" placeholder="e.g. pat@capactive.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="license_key">License Key <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></label>
+                    <input type="text" id="license_key" name="license_key" placeholder="CAP-XXX-XXXXXXXX-XXXX">
+                    <p class="hint">Leave blank to start with a standard plan. You can upgrade later.</p>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Create Organization</button>
+            </form>
+        </div>
+
+        <p class="auth-footer">All data stays on this device. No cloud. No tracking.</p>
+    </div>
+</div>
+</body>
+</html>

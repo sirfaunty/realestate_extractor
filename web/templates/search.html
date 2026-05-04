@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Search — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Search</h2>
+    <p>Full-text search across all processed documents</p>
+</div>
+
+<div class="card">
+    <form method="GET" class="search-bar">
+        <input type="text" name="q" placeholder="Search for clauses, terms, tenants, amounts..."
+               value="{{ query }}">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if query %}
+        {% if results %}
+        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+            {{ results|length }} result{{ 's' if results|length != 1 else '' }} for "{{ query }}"
+        </div>
+
+        {% for r in results %}
+        <div class="search-result">
+            <div class="meta">
+                <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+                {% if r.doc_type %}
+                <span class="badge badge-{{ r.doc_type }}" style="margin-left: 4px;">{{ r.doc_type.replace('_', ' ') }}</span>
+                {% endif %}
+                &middot; Page {{ r.page_number }}
+            </div>
+            <div class="snippet">{{ r.snippet|safe }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <p>No results found for "{{ query }}"</p>
+        </div>
+        {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">&#8981;</div>
+        <p>Enter a search term to find content across all your processed documents.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

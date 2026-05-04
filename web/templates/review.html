@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Review Queue — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Review Queue</h2>
+    <p>Match processed documents to properties — {{ review_count }} pending</p>
+</div>
+
+{% if not queue %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#10003;</div>
+        <p>All caught up. No documents pending review.</p>
+        <a href="{{ url_for('upload') }}" class="btn btn-primary" style="margin-top: 8px;">Upload a PDF</a>
+    </div>
+</div>
+{% endif %}
+
+{% for doc in queue %}
+<div class="card review-card" id="review-{{ doc.id }}">
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+        <div>
+            <div style="font-weight: 600; font-size: 15px; color: var(--text);">
+                <a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
+                <span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span>
+                &middot; {{ doc.page_count or '?' }} pages
+                &middot; Processed {{ doc.processed_at[:10] if doc.processed_at else '' }}
+            </div>
+        </div>
+        <form method="POST" action="{{ url_for('review_skip', doc_id=doc.id) }}">
+            <button type="submit" class="btn btn-sm btn-secondary">Skip for now</button>
+        </form>
+    </div>
+
+    <!-- Extracted Property Info -->
+    <div style="background: var(--bg); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; font-size: 13px;">
+        <div style="font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px;">
+            Extracted from document
+        </div>
+        <div style="display: flex; gap: 24px;">
+            <div>
+                <span style="color: var(--text-muted);">Property:</span>
+                <strong>{{ doc.property_name or 'Not detected' }}</strong>
+            </div>
+            {% if doc.property_address %}
+            <div>
+                <span style="color: var(--text-muted);">Address:</span>
+                <strong>{{ doc.property_address }}</strong>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if doc.best_match %}
+    <!-- Suggested Match -->
+    <div class="match-suggestion match-{{ doc.confidence }}">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+                <span style="font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;">
+                    {% if doc.confidence == 'high' %}
+                    &#10003; High confidence match
+                    {% elif doc.confidence == 'medium' %}
+                    &#8776; Possible match
+                    {% else %}
+                    ? Low confidence
+                    {% endif %}
+                </span>
+                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">
+                    Score: {{ (doc.best_score * 100)|int }}%
+                </span>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="font-weight: 600; font-size: 15px; color: var(--cap-navy);">
+                    {{ doc.best_match.name }}
+                </div>
+                <div style="font-size: 13px; color: var(--text-secondary);">
+                    {{ doc.best_match.address or '' }}
+                    {% if doc.best_match.city %}{{ doc.best_match.city }}{% endif %}
+                    {% if doc.best_match.state %}, {{ doc.best_match.state }}{% endif %}
+                    &middot;
+                    <span class="badge badge-{{ doc.best_match.property_type }}">{{ doc.best_match.property_type.replace('_', ' ') }}</span>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('review_approve', doc_id=doc.id) }}">
+                <input type="hidden" name="property_id" value="{{ doc.best_match.id }}">
+                <button type="submit" class="btn btn-signal">Approve Match</button>
+            </form>
+        </div>
+
+        {% if doc.suggested_matches|length > 1 %}
+        <details style="margin-top: 12px;">
+            <summary style="font-size: 12px; color: var(--text-muted); cursor: pointer;">
+                {{ doc.suggested_matches|length - 1 }} other possible match{{ 'es' if doc.suggested_matches|length > 2 else '' }}
+            </summary>
+            <div style="margin-top: 8px;">
+                {% for match in doc.suggested_matches[1:] %}
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-subtle);">
+                    <div style="font-size: 13px;">
+                        <strong>{{ match.property.name }}</strong>
+                        <span style="color: var(--text-muted);">— {{ (match.score * 100)|int }}% match</span>
+                    </div>
+                    <form method="POST" action="{{ url_for('review_approve', doc_id=doc.id) }}">
+                        <input type="hidden" name="property_id" value="{{ match.property.id }}">
+                        <button type="submit" class="btn btn-sm btn-secondary">Link to this</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Manual Override -->
+    <details style="margin-top: 12px;">
+        <summary style="font-size: 13px; font-weight: 500; color: var(--cap-primary); cursor: pointer;">
+            {% if doc.best_match %}Choose a different property or create new{% else %}Select a property or create new{% endif %}
+        </summary>
+        <div style="margin-top: 12px; padding: 16px; background: var(--bg); border-radius: var(--radius);">
+
+            <!-- Pick from existing -->
+            {% if properties %}
+            <div style="margin-bottom: 16px;">
+                <div style="font-weight: 600; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Link to existing property</div>
+                <form method="POST" action="{{ url_for('review_approve', doc_id=doc.id) }}" style="display: flex; gap: 8px; align-items: end;">
+                    <select name="property_id" style="flex: 1;" required>
+                        <option value="">Select a property...</option>
+                        {% for p in properties %}
+                        <option value="{{ p.id }}">{{ p.name }} �� {{ p.property_type.replace('_', ' ') }}{% if p.city %}, {{ p.city }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-primary">Link</button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- Create new property -->
+            <div style="border-top: 1px solid var(--border); padding-top: 16px;">
+                <div style="font-weight: 600; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Create new property from this document</div>
+                <form method="POST" action="{{ url_for('review_create_property', doc_id=doc.id) }}">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <input type="text" name="name" placeholder="Property name"
+                                   value="{{ doc.property_name or '' }}" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <select name="property_type">
+                                <option value="multifamily">Multifamily</option>
+                                <option value="industrial">Industrial</option>
+                                <option value="commercial">Commercial</option>
+                                <option value="office">Office</option>
+                                <option value="retail">Retail</option>
+                                <option value="mixed_use">Mixed Use</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <select name="portfolio_id">
+                                <option value="">No portfolio</option>
+                                {% for pf in portfolios %}
+                                <option value="{{ pf.id }}">{{ pf.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <input type="text" name="address" placeholder="Address"
+                                   value="{{ doc.property_address or '' }}">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <input type="text" name="city" placeholder="City">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <input type="text" name="state" placeholder="ST">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <input type="text" name="zip_code" placeholder="ZIP">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">Create Property & Link</button>
+                </form>
+            </div>
+        </div>
+    </details>
+</div>
+{% endfor %}
+{% endblock %}

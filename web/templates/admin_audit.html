@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Audit Trail — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Audit Trail</h2>
+    <p>Activity log for compliance and review</p>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <form method="GET" class="filter-bar">
+        <label style="font-weight: 500; color: var(--text-secondary);">Filter:</label>
+
+        <select name="days" onchange="this.form.submit()">
+            <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
+            <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
+            <option value="90" {% if days == 90 %}selected{% endif %}>Last 90 days</option>
+            <option value="365" {% if days == 365 %}selected{% endif %}>Last year</option>
+        </select>
+
+        <select name="user" onchange="this.form.submit()">
+            <option value="">All users</option>
+            {% for u in users %}
+            <option value="{{ u.user_id }}" {% if user_filter == u.user_id %}selected{% endif %}>
+                {{ u.display_name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <span style="color: var(--text-muted); font-size: 13px; margin-left: auto;">
+            {{ activity|length }} event{{ 's' if activity|length != 1 else '' }}
+        </span>
+    </form>
+</div>
+
+<!-- Activity Table -->
+<div class="card">
+    {% if activity %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>User</th>
+                <th>Action</th>
+                <th>Document</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in activity %}
+            <tr>
+                <td style="font-size: 12px; white-space: nowrap; color: var(--text-muted);">
+                    {{ a.created_at[:19].replace('T', ' ') if a.created_at else '' }}
+                </td>
+                <td style="font-weight: 500;">{{ a.user_id or '—' }}</td>
+                <td>
+                    <span class="badge badge-{% if a.action == 'process_document' %}lease{% elif a.action == 'login' %}loan{% elif a.action == 'batch_process' %}rent_roll{% else %}closing{% endif %}">
+                        {{ a.action.replace('_', ' ') }}
+                    </span>
+                </td>
+                <td style="font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ a.filename or '—' }}
+                </td>
+                <td style="font-size: 12px;">{{ a.document_type or '—' }}</td>
+                <td>
+                    {% if a.success == 1 or a.success == True %}
+                    <span class="badge badge-success">OK</span>
+                    {% elif a.success == 0 or a.success == False %}
+                    <span class="badge badge-error">Failed</span>
+                    {% else %}
+                    <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 12px; color: var(--text-muted);">
+                    {% if a.processing_time %}
+                    {{ '%.1f'|format(a.processing_time) }}s
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">&#128196;</div>
+        <p>No activity found for the selected filters.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

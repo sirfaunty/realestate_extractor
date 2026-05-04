@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Documents — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Documents</h2>
+    <p>All processed documents</p>
+</div>
+
+<!-- Filters -->
+<div class="card" style="padding: 14px 24px;">
+    <form method="GET" style="display: flex; gap: 12px; align-items: center;">
+        <select name="type" style="width: auto;">
+            <option value="">All types</option>
+            {% for t in templates %}
+            <option value="{{ t.type }}" {% if filter_type == t.type %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="property" placeholder="Filter by property..."
+               value="{{ filter_property or '' }}" style="width: 220px;">
+        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+        {% if filter_type or filter_property %}
+        <a href="{{ url_for('documents') }}" class="btn btn-sm btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="card">
+    {% if documents %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Type</th>
+                <th>Property</th>
+                <th>Pages</th>
+                <th>Scan</th>
+                <th>Processed</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents %}
+            <tr>
+                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a></td>
+                <td><span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span></td>
+                <td>{{ doc.property_name or '—' }}</td>
+                <td>{{ doc.page_count or '—' }}</td>
+                <td>{% if doc.is_scanned %}OCR{% else %}Digital{% endif %}</td>
+                <td>{{ doc.processed_at[:16] if doc.processed_at else '—' }}</td>
+                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">&#128196;</div>
+        <p>No documents found{% if filter_type or filter_property %} matching your filters{% endif %}.</p>
+        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload a PDF</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

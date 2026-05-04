@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Dashboard</h2>
+    <p>Portfolio overview and processing status</p>
+</div>
+
+<!-- Stats -->
+<div class="card-grid" style="margin-bottom: 24px;">
+    <div class="stat-card">
+        <div class="stat-value">{{ summary.get('total_properties', 0) }}</div>
+        <div class="stat-label">Properties</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ documents|length }}</div>
+        <div class="stat-label">Documents</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ summary.get('rent_roll', {}).get('units', 0) or 0 }}</div>
+        <div class="stat-label">Rent Roll Units</div>
+    </div>
+    <div class="stat-card">
+        {% set monthly = summary.get('rent_roll', {}).get('total_monthly_rent', 0) or 0 %}
+        <div class="stat-value">${{ "{:,.0f}".format(monthly) }}</div>
+        <div class="stat-label">Monthly Rent</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <div class="card-header">Quick Actions</div>
+    <div style="display: flex; gap: 12px;">
+        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload PDF</a>
+        <a href="{{ url_for('batch') }}" class="btn btn-secondary">Batch Process Folder</a>
+        {% if documents %}
+        <a href="{{ url_for('search') }}" class="btn btn-secondary">Search Documents</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Documents by Type -->
+{% if summary.get('document_counts') %}
+<div class="card">
+    <div class="card-header">Documents by Type</div>
+    <div class="card-grid">
+        {% for dtype, count in summary.document_counts.items() %}
+        <div class="stat-card">
+            <div class="stat-value">{{ count }}</div>
+            <div class="stat-label">
+                <span class="badge badge-{{ dtype }}">{{ dtype.replace('_', ' ') }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Documents -->
+<div class="card">
+    <div class="card-header">Recent Documents</div>
+    {% if documents %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Type</th>
+                <th>Property</th>
+                <th>Pages</th>
+                <th>Processed</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents[:10] %}
+            <tr>
+                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a></td>
+                <td><span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span></td>
+                <td>{{ doc.property_name or '—' }}</td>
+                <td>{{ doc.page_count or '—' }}</td>
+                <td>{{ doc.processed_at[:16] if doc.processed_at else '—' }}</td>
+                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if documents|length > 10 %}
+    <div style="padding: 12px; text-align: center;">
+        <a href="{{ url_for('documents') }}" class="btn btn-sm btn-secondary">View all {{ documents|length }} documents</a>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">&#128196;</div>
+        <p>No documents processed yet.</p>
+        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload your first PDF</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Export -->
+{% if documents %}
+<div class="card">
+    <div class="card-header">Export Data</div>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="/api/export/documents" class="btn btn-sm btn-secondary">Documents CSV</a>
+        <a href="/api/export/financial_terms" class="btn btn-sm btn-secondary">Financial Terms CSV</a>
+        <a href="/api/export/clauses" class="btn btn-sm btn-secondary">Clauses CSV</a>
+        <a href="/api/export/rent_roll_entries" class="btn btn-sm btn-secondary">Rent Roll CSV</a>
+        <a href="/api/export/operating_statement_items" class="btn btn-sm btn-secondary">Operating Stmts CSV</a>
+        <a href="/api/export/gl_entries" class="btn btn-sm btn-secondary">GL Entries CSV</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,563 @@
+{% extends "base.html" %}
+{% block title %}{{ prop.name }} — capactive{% endblock %}
+
+{% block content %}
+<!-- Property Header -->
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
+    <div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+            <a href="{{ url_for('properties') }}" style="color: var(--text-muted);">Properties</a>
+            {% if prop.portfolio_name %} / <a href="{{ url_for('portfolios') }}" style="color: var(--text-muted);">{{ prop.portfolio_name }}</a>{% endif %}
+        </div>
+        <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">{{ prop.name }}</h2>
+        <div style="font-size: 14px; color: var(--text-secondary);">
+            {{ prop.address }}{% if prop.city %}, {{ prop.city }}{% endif %}{% if prop.state %}, {{ prop.state }}{% endif %} {{ prop.zip_code or '' }}
+        </div>
+    </div>
+    <div style="text-align: right;">
+        <span class="badge badge-{{ prop.property_type }}" style="font-size: 12px;">{{ prop.property_type.replace('_', ' ').title() }}</span>
+        <span class="badge badge-{% if prop.status == 'active' %}success{% elif prop.status == 'disposed' %}error{% else %}processing{% endif %}" style="margin-left: 4px;">
+            {{ prop.status.replace('_', ' ').title() }}
+        </span>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="card-grid" style="margin-bottom: 20px;">
+    <div class="stat-card">
+        <div class="stat-value">{{ operations.units.total_units or 0 }}</div>
+        <div class="stat-label">Units</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ operations.occupancy_rate }}%</div>
+        <div class="stat-label">Occupancy</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ '{:,.0f}'.format(operations.units.total_monthly_rent or 0) }}</div>
+        <div class="stat-label">Monthly Rent</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ '{:,.0f}'.format(valuation.calculated_noi or 0) }}</div>
+        <div class="stat-label">NOI</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ valuation.cap_rate or '—' }}{% if valuation.cap_rate %}%{% endif %}</div>
+        <div class="stat-label">Cap Rate</div>
+    </div>
+</div>
+
+<!-- Three-Bucket Tabs (permission-gated) -->
+<div class="tabs">
+    {% if can_read('property.operations') %}
+    <button class="tab active" onclick="showBucket('operations')">Operations</button>
+    {% endif %}
+    {% if can_read('property.debt') %}
+    <button class="tab" onclick="showBucket('debt')">Debt</button>
+    {% endif %}
+    {% if can_read('property.valuation') %}
+    <button class="tab" onclick="showBucket('valuation')">Valuation / NOI</button>
+    {% endif %}
+    {% if can_read('property.units') %}
+    <button class="tab" onclick="showBucket('assets')">Buildings & Units</button>
+    {% endif %}
+    {% if can_read('property.documents') %}
+    <button class="tab" onclick="showBucket('docs')">Documents ({{ documents|length }})</button>
+    {% endif %}
+</div>
+
+<!-- ═══ BUCKET 1: OPERATIONS ═══ -->
+<div id="bucket-operations" class="tab-content active">
+
+    <!-- Occupancy Overview -->
+    <div class="card">
+        <div class="card-header">Occupancy</div>
+        {% set occ = operations.units %}
+        <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">{{ occ.occupied or 0 }}</div>
+                <div class="stat-label">Occupied</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">{{ occ.vacant or 0 }}</div>
+                <div class="stat-label">Vacant</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">{{ '{:,.0f}'.format(occ.total_sqft or 0) }}</div>
+                <div class="stat-label">Total SF</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">${{ '{:,.0f}'.format(occ.avg_rent or 0) }}</div>
+                <div class="stat-label">Avg Rent</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">${{ '{:,.0f}'.format(occ.total_market_rent or 0) }}</div>
+                <div class="stat-label">Market Rent Total</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rent Roll -->
+    {% if operations.rent_roll %}
+    <div class="card">
+        <div class="card-header">Rent Roll</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Unit</th>
+                    <th>Tenant</th>
+                    <th>SF</th>
+                    <th style="text-align: right;">Monthly Rent</th>
+                    <th style="text-align: right;">Rent/SF</th>
+                    <th>Lease Start</th>
+                    <th>Lease End</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rr in operations.rent_roll %}
+                <tr>
+                    <td style="font-weight: 500;">{{ rr.unit_number or rr.suite or '—' }}</td>
+                    <td>{{ rr.tenant_name or '—' }}</td>
+                    <td>{{ '{:,.0f}'.format(rr.square_footage) if rr.square_footage else '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(rr.monthly_rent) if rr.monthly_rent else '—' }}</td>
+                    <td style="text-align: right;">{{ '${:,.2f}'.format(rr.rent_psf) if rr.rent_psf else '—' }}</td>
+                    <td style="font-size: 12px;">{{ rr.lease_start or '—' }}</td>
+                    <td style="font-size: 12px;">{{ rr.lease_end or '—' }}</td>
+                    <td><span class="badge badge-{% if rr.status == 'occupied' %}success{% elif rr.status == 'vacant' %}error{% else %}processing{% endif %}">{{ rr.status or '—' }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Lease Expirations -->
+    {% if operations.lease_expirations %}
+    <div class="card">
+        <div class="card-header">Upcoming Lease Expirations</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Unit</th><th>Tenant</th><th>Lease Expires</th><th style="text-align: right;">Rent</th></tr>
+            </thead>
+            <tbody>
+                {% for le in operations.lease_expirations %}
+                <tr>
+                    <td style="font-weight: 500;">{{ le.unit_number }}</td>
+                    <td>{{ le.current_tenant or '—' }}</td>
+                    <td>{{ le.lease_end }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(le.current_rent) if le.current_rent else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Operating Expenses -->
+    {% if operations.operating_expenses %}
+    <div class="card">
+        <div class="card-header">Operating Expenses</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Line Item</th><th>Category</th><th>Period</th><th style="text-align: right;">Amount</th></tr>
+            </thead>
+            <tbody>
+                {% for exp in operations.operating_expenses %}
+                <tr class="{% if exp.is_subtotal or exp.is_total %}{% endif %}" style="{% if exp.is_total %}font-weight: 600; border-top: 2px solid var(--border);{% endif %}">
+                    <td>{{ exp.line_item }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ exp.subcategory or '' }}</td>
+                    <td style="font-size: 12px;">{{ exp.period or '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(exp.amount) if exp.amount else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if not operations.rent_roll and not operations.lease_expirations and not operations.operating_expenses %}
+    <div class="card">
+        <div class="empty-state">
+            <p>No operations data yet. Link rent rolls, operating statements, and leases to this property to populate this view.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ═══ BUCKET 2: DEBT ═══ -->
+<div id="bucket-debt" class="tab-content">
+
+    <!-- Loan Terms -->
+    {% if debt.loan_terms %}
+    <div class="card">
+        <div class="card-header">Loan Terms</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Term</th><th>Value</th><th>Unit</th><th>Effective</th><th>Expires</th><th>Source</th></tr>
+            </thead>
+            <tbody>
+                {% for lt in debt.loan_terms %}
+                <tr>
+                    <td style="font-weight: 500;">{{ lt.term_type.replace('_', ' ').title() }}</td>
+                    <td>{{ lt.value_raw or ('{:,.2f}'.format(lt.value_numeric) if lt.value_numeric else '—') }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ lt.value_unit or '' }}</td>
+                    <td style="font-size: 12px;">{{ lt.effective_date or '—' }}</td>
+                    <td style="font-size: 12px;">{{ lt.expiration_date or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ lt.filename }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Loan Clauses -->
+    {% if debt.loan_clauses %}
+    <div class="card">
+        <div class="card-header">Covenants & Key Clauses</div>
+        {% for c in debt.loan_clauses %}
+        <div class="clause-card">
+            <div class="clause-header">
+                <span class="clause-type">{{ c.clause_type.replace('_', ' ').title() }}</span>
+                <span class="clause-ref">
+                    {{ c.section_ref or '' }}
+                    &middot; {{ c.document_type.replace('_', ' ').title() }}
+                </span>
+            </div>
+            {% if c.summary %}
+            <div class="clause-summary">{{ c.summary }}</div>
+            {% endif %}
+            <div class="clause-text">{{ c.full_text[:500] }}{% if c.full_text|length > 500 %}...{% endif %}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Guarantees -->
+    {% if debt.guarantees %}
+    <div class="card">
+        <div class="card-header">Guarantee Documents</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Document</th><th>Processed</th><th>Pages</th></tr>
+            </thead>
+            <tbody>
+                {% for g in debt.guarantees %}
+                <tr>
+                    <td><a href="{{ url_for('document_detail', doc_id=g.id) }}">{{ g.filename }}</a></td>
+                    <td style="font-size: 12px;">{{ g.processed_at[:10] if g.processed_at else '' }}</td>
+                    <td>{{ g.page_count or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if not debt.loan_terms and not debt.loan_clauses and not debt.guarantees %}
+    <div class="card">
+        <div class="empty-state">
+            <p>No debt data yet. Link loan documents and guarantees to this property to populate this view.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ═══ BUCKET 3: VALUATION / NOI ═══ -->
+<div id="bucket-valuation" class="tab-content">
+
+    <!-- NOI Summary -->
+    <div class="card">
+        <div class="card-header">Net Operating Income</div>
+        <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+            <div class="stat-card">
+                <div class="stat-value" style="font-size: 22px; color: var(--cap-signal);">${{ '{:,.0f}'.format(valuation.total_revenue) }}</div>
+                <div class="stat-label">Revenue</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="font-size: 22px; color: var(--danger);">${{ '{:,.0f}'.format(valuation.total_expenses) }}</div>
+                <div class="stat-label">Expenses</div>
+            </div>
+            <div class="stat-card" style="background: var(--cap-navy); border-color: var(--cap-navy);">
+                <div class="stat-value" style="font-size: 22px; color: #FFFFFF;">${{ '{:,.0f}'.format(valuation.calculated_noi) }}</div>
+                <div class="stat-label" style="color: var(--cap-light);">NOI</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="font-size: 22px;">{{ valuation.cap_rate or '—' }}{% if valuation.cap_rate %}%{% endif %}</div>
+                <div class="stat-label">Cap Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="font-size: 22px;">{{ valuation.dscr or '—' }}x</div>
+                <div class="stat-label">DSCR</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue -->
+    {% if valuation.revenue_items %}
+    <div class="card">
+        <div class="card-header">Revenue</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Line Item</th><th>Period</th><th style="text-align: right;">Amount</th><th style="text-align: right;">Per SF</th></tr>
+            </thead>
+            <tbody>
+                {% for r in valuation.revenue_items %}
+                <tr style="{% if r.is_total %}font-weight: 600; border-top: 2px solid var(--border);{% endif %}">
+                    <td>{{ r.line_item }}</td>
+                    <td style="font-size: 12px;">{{ r.period or '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(r.amount) if r.amount else '—' }}</td>
+                    <td style="text-align: right; font-size: 12px;">{{ '${:,.2f}'.format(r.amount_psf) if r.amount_psf else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Expenses -->
+    {% if valuation.expense_items %}
+    <div class="card">
+        <div class="card-header">Expenses</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Line Item</th><th>Category</th><th>Period</th><th style="text-align: right;">Amount</th></tr>
+            </thead>
+            <tbody>
+                {% for e in valuation.expense_items %}
+                <tr style="{% if e.is_total %}font-weight: 600; border-top: 2px solid var(--border);{% endif %}">
+                    <td>{{ e.line_item }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ e.subcategory or '' }}</td>
+                    <td style="font-size: 12px;">{{ e.period or '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(e.amount) if e.amount else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Debt Service -->
+    {% if valuation.debt_service_terms %}
+    <div class="card">
+        <div class="card-header">Debt Service</div>
+        <div style="font-size: 14px; color: var(--text-secondary);">
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-subtle);">
+                <span>Annual Debt Service</span>
+                <strong>${{ '{:,.0f}'.format(valuation.annual_debt_service) }}</strong>
+            </div>
+            {% if valuation.dscr %}
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-subtle);">
+                <span>Debt Service Coverage Ratio</span>
+                <strong>{{ valuation.dscr }}x</strong>
+            </div>
+            {% endif %}
+            {% if valuation.calculated_noi and valuation.annual_debt_service %}
+            <div style="display: flex; justify-content: space-between; padding: 10px 0;">
+                <span>Cash Flow After Debt Service</span>
+                <strong style="color: {% if valuation.calculated_noi - valuation.annual_debt_service > 0 %}var(--cap-signal){% else %}var(--danger){% endif %};">
+                    ${{ '{:,.0f}'.format(valuation.calculated_noi - valuation.annual_debt_service) }}
+                </strong>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not valuation.revenue_items and not valuation.expense_items %}
+    <div class="card">
+        <div class="empty-state">
+            <p>No valuation data yet. Link operating statements to this property to calculate NOI, cap rate, and DSCR.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ═══ BUILDINGS & UNITS ═══ -->
+<div id="bucket-assets" class="tab-content">
+
+    <!-- Add Building -->
+    {% if can_edit('property.units') %}
+    <div class="card">
+        <div class="card-header">Add Building</div>
+        <form method="POST" action="{{ url_for('create_building', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0; flex: 2;">
+                <label>Name</label>
+                <input type="text" name="name" placeholder="e.g. Building A" required>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                <label>Floors</label>
+                <input type="text" name="floors" placeholder="3">
+            </div>
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                <label>Units</label>
+                <input type="text" name="total_units" placeholder="60">
+            </div>
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                <label>Total SF</label>
+                <input type="text" name="total_sqft">
+            </div>
+            <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+    </div>
+
+    {% endif %}
+
+    {% if buildings and can_edit('property.units') %}
+    <!-- Add Unit (edit only) -->
+    <div class="card">
+        <div class="card-header">Add Unit</div>
+        <form method="POST" action="{{ url_for('create_unit', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Building</label>
+                <select name="building_id" required>
+                    {% for b in buildings %}
+                    <option value="{{ b.id }}">{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Unit #</label>
+                <input type="text" name="unit_number" placeholder="101" required style="width: 80px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Type</label>
+                <input type="text" name="unit_type" placeholder="2BR" style="width: 80px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>SF</label>
+                <input type="text" name="square_footage" placeholder="850" style="width: 80px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Bed</label>
+                <input type="text" name="bedrooms" placeholder="2" style="width: 60px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Bath</label>
+                <input type="text" name="bathrooms" placeholder="1" style="width: 60px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Market Rent</label>
+                <input type="text" name="market_rent" placeholder="1350" style="width: 100px;">
+            </div>
+            <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Units Table (read access) -->
+    <div class="card">
+        <div class="card-header">Units ({{ units|length }})</div>
+        {% if units %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Unit</th>
+                    <th>Building</th>
+                    <th>Type</th>
+                    <th>SF</th>
+                    <th>Bed/Bath</th>
+                    <th>Tenant</th>
+                    <th style="text-align: right;">Rent</th>
+                    <th style="text-align: right;">Market</th>
+                    <th>Lease End</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in units %}
+                <tr>
+                    <td style="font-weight: 500;">{{ u.unit_number }}</td>
+                    <td style="font-size: 12px;">{{ u.building_name }}</td>
+                    <td style="font-size: 12px;">{{ u.unit_type or '—' }}</td>
+                    <td>{{ '{:,.0f}'.format(u.square_footage) if u.square_footage else '—' }}</td>
+                    <td style="font-size: 12px;">{{ u.bedrooms or '—' }}/{{ u.bathrooms or '—' }}</td>
+                    <td>{{ u.current_tenant or '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(u.current_rent) if u.current_rent else '—' }}</td>
+                    <td style="text-align: right; font-size: 12px; color: var(--text-muted);">${{ '{:,.0f}'.format(u.market_rent) if u.market_rent else '—' }}</td>
+                    <td style="font-size: 12px;">{{ u.lease_end or '—' }}</td>
+                    <td>
+                        <span class="badge badge-{% if u.status == 'occupied' %}success{% elif u.status == 'vacant' %}error{% else %}processing{% endif %}">
+                            {{ u.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state"><p>No units added yet.</p></div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ═══ DOCUMENTS ═══ -->
+<div id="bucket-docs" class="tab-content">
+
+    <!-- Link Document (edit access only) -->
+    {% if can_edit('property.documents') %}
+    <div class="card">
+        <div class="card-header">Link Existing Document</div>
+        <form method="POST" action="{{ url_for('link_document', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0; flex: 2;">
+                <label>Document ID</label>
+                <input type="text" name="document_id" placeholder="Enter document ID from Documents page" required>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                <label>Building</label>
+                <select name="building_id">
+                    <option value="">Property-level</option>
+                    {% for b in buildings %}
+                    <option value="{{ b.id }}">{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-secondary">Link</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if documents %}
+    <div class="card">
+        <div class="card-header">Linked Documents</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Filename</th><th>Type</th><th>Processed</th><th>Pages</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for d in documents %}
+                <tr>
+                    <td><a href="{{ url_for('document_detail', doc_id=d.id) }}">{{ d.filename }}</a></td>
+                    <td><span class="badge badge-{{ d.document_type }}">{{ d.document_type.replace('_', ' ') }}</span></td>
+                    <td style="font-size: 12px;">{{ d.processed_at[:10] if d.processed_at else '' }}</td>
+                    <td>{{ d.page_count or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">ID: {{ d.id }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="empty-state">
+            <p>No documents linked to this property yet. Upload and process documents, then link them here.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showBucket(name) {
+    // Hide all buckets
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+
+    // Show selected
+    document.getElementById('bucket-' + name).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+{% endblock %}

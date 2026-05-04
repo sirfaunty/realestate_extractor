@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Users — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>User Management</h2>
+    <p>{{ org.org_name }} — {{ users|length }} of {{ org.features.max_users }} users</p>
+</div>
+
+<!-- Add User Form -->
+<div class="card">
+    <div class="card-header">Add User</div>
+    <form method="POST" style="display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 12px; align-items: end;">
+        <input type="hidden" name="action" value="add">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="display_name">Name</label>
+            <input type="text" id="display_name" name="display_name" placeholder="Full name" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" placeholder="user@company.com" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="role">Role</label>
+            <select id="role" name="role">
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+                <option value="viewer">Viewer</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Add User</button>
+    </form>
+</div>
+
+<!-- Users Table -->
+<div class="card">
+    <div class="card-header">All Users</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>User Key</th>
+                <th>Last Login</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr class="{% if not u.is_active %}user-row-inactive{% endif %}">
+                <td style="font-weight: 500; color: var(--text);">{{ u.display_name }}</td>
+                <td>{{ u.email }}</td>
+                <td>
+                    <span class="badge {% if u.role == 'admin' %}badge-lease{% elif u.role == 'viewer' %}badge-processing{% else %}badge-loan{% endif %}">
+                        {{ u.role }}
+                    </span>
+                </td>
+                <td>
+                    <span class="key-display" style="font-size: 11px; padding: 4px 8px;">{{ u.user_key }}</span>
+                </td>
+                <td style="font-size: 12px; color: var(--text-muted);">
+                    {{ u.last_login[:10] if u.last_login else 'Never' }}
+                </td>
+                <td>
+                    {% if u.is_active %}
+                    <span class="badge badge-success">Active</span>
+                    {% else %}
+                    <span class="badge badge-error">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if u.is_active and u.user_id != current_user.user_id %}
+                    <form method="POST" class="inline-form" onsubmit="return confirm('Deactivate this user?');">
+                        <input type="hidden" name="action" value="deactivate">
+                        <input type="hidden" name="user_id" value="{{ u.user_id }}">
+                        <button type="submit" class="btn btn-sm" style="color: var(--danger); background: none; border: 1px solid var(--border);">
+                            Deactivate
+                        </button>
+                    </form>
+                    {% elif u.user_id == current_user.user_id %}
+                    <span style="font-size: 12px; color: var(--text-muted);">You</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="background: var(--cap-cloud); border-color: transparent;">
+    <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+        <strong>Sharing user keys:</strong> Each user needs both the organization key and their personal user key to log in.
+        Copy a user's key from the table above and share it securely. Keys cannot be recovered — if lost, deactivate the user and create a new one.
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Admin — capactive{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <div>
+        <h2>{{ org.org_name }}</h2>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-top: 2px;">
+            Organization overview
+            <span class="plan-badge plan-badge-{{ org.plan }}" style="margin-left: 8px;">{{ org.plan }}</span>
+        </p>
+    </div>
+</div>
+
+<!-- Usage Stats -->
+<div class="card-grid" style="margin-bottom: 20px;">
+    <div class="stat-card">
+        <div class="stat-value">{{ usage.documents_processed }}</div>
+        <div class="stat-label">Documents This Month</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ usage.pages_processed }}</div>
+        <div class="stat-label">Pages Processed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ users|length }}</div>
+        <div class="stat-label">Total Users</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ usage.terms_extracted + usage.clauses_extracted }}</div>
+        <div class="stat-label">Terms & Clauses</div>
+    </div>
+</div>
+
+<!-- Volume Usage Bar -->
+<div class="card">
+    <div class="card-header">Monthly Volume</div>
+    {% set max_docs = org.features.max_documents_per_month %}
+    {% set pct = ((usage.documents_processed / max_docs) * 100) if max_docs > 0 else 0 %}
+    {% set bar_class = 'green' if pct < 70 else ('yellow' if pct < 90 else 'red') %}
+    <div class="usage-bar">
+        <div class="usage-fill {{ bar_class }}" style="width: {{ [pct, 100]|min }}%;"></div>
+    </div>
+    <div class="usage-label">
+        <span>{{ usage.documents_processed }} of {{ max_docs }} documents</span>
+        <span>{{ (max_docs - usage.documents_processed) }} remaining</span>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <!-- Usage History -->
+    <div class="card">
+        <div class="card-header">Usage History (6 Months)</div>
+        {% if usage_history %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th style="text-align: right;">Docs</th>
+                    <th style="text-align: right;">Pages</th>
+                    <th style="text-align: right;">Terms</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in usage_history %}
+                <tr>
+                    <td>{{ h.period }}</td>
+                    <td style="text-align: right;">{{ h.documents_processed }}</td>
+                    <td style="text-align: right;">{{ h.pages_processed }}</td>
+                    <td style="text-align: right;">{{ h.terms_extracted }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-muted); font-size: 13px;">No history yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card">
+        <div class="card-header">Recent Activity (7 Days)</div>
+        {% if recent_activity %}
+        {% for a in recent_activity %}
+        <div class="activity-item">
+            <div>
+                <span class="activity-action">{{ a.action.replace('_', ' ').title() }}</span>
+                {% if a.filename %}
+                <span style="color: var(--text-muted); font-size: 12px;"> — {{ a.filename }}</span>
+                {% endif %}
+                <div class="activity-user">{{ a.user_id or 'System' }}</div>
+            </div>
+            <span class="activity-time">{{ a.created_at[:16] }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color: var(--text-muted); font-size: 13px;">No recent activity.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Quick Links -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Admin Tools</div>
+    <div style="display: flex; gap: 12px;">
+        <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">Manage Users</a>
+        <a href="{{ url_for('admin_license') }}" class="btn btn-secondary">License & Plan</a>
+        <a href="{{ url_for('admin_audit') }}" class="btn btn-secondary">Audit Trail</a>
+    </div>
+</div>
+{% endblock %}

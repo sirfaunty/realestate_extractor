@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.filename }} — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>{{ doc.filename }}</h2>
+    <p>
+        <span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span>
+        {% if doc.property_name %} &middot; {{ doc.property_name }}{% endif %}
+        &middot; {{ doc.page_count }} pages
+        &middot; {% if doc.is_scanned %}Scanned (OCR{% if doc.ocr_confidence %}, {{ doc.ocr_confidence|round(1) }}% confidence{% endif %}){% else %}Digital{% endif %}
+        &middot; Processed {{ doc.processed_at[:16] if doc.processed_at else '' }}
+    </p>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    {% if terms %}
+    <button class="tab active" onclick="showTab('financial')">Financial Terms ({{ terms|length }})</button>
+    {% endif %}
+    {% if clauses %}
+    <button class="tab {% if not terms %}active{% endif %}" onclick="showTab('clauses')">Legal Clauses ({{ clauses|length }})</button>
+    {% endif %}
+    {% if rent_roll %}
+    <button class="tab {% if not terms and not clauses %}active{% endif %}" onclick="showTab('rentroll')">Rent Roll ({{ rent_roll|length }})</button>
+    {% endif %}
+    {% if opstat %}
+    <button class="tab" onclick="showTab('opstat')">Operating Statement ({{ opstat|length }})</button>
+    {% endif %}
+    {% if gl %}
+    <button class="tab" onclick="showTab('gl')">General Ledger ({{ gl|length }})</button>
+    {% endif %}
+</div>
+
+<!-- Financial Terms -->
+{% if terms %}
+<div class="tab-content active" id="tab-financial">
+    <div class="card">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Term</th>
+                    <th>Value</th>
+                    <th>Numeric</th>
+                    <th>Unit</th>
+                    <th>Section</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in terms %}
+                <tr>
+                    <td style="font-weight: 600;">{{ t.term_type.replace('_', ' ').title() }}</td>
+                    <td>{{ t.value_raw or '—' }}</td>
+                    <td>{% if t.value_numeric %}{{ "{:,.2f}".format(t.value_numeric) }}{% else %}—{% endif %}</td>
+                    <td>{{ t.value_unit or '—' }}</td>
+                    <td>{{ t.section_ref or '—' }}</td>
+                    <td>
+                        {% if t.confidence %}
+                        <span class="badge {% if t.confidence >= 0.8 %}badge-success{% elif t.confidence >= 0.5 %}badge-processing{% else %}badge-error{% endif %}">
+                            {{ (t.confidence * 100)|round|int }}%
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Legal Clauses -->
+{% if clauses %}
+<div class="tab-content {% if not terms %}active{% endif %}" id="tab-clauses">
+    {% for c in clauses %}
+    <div class="clause-card">
+        <div class="clause-header">
+            <span class="clause-type">{{ c.clause_type.replace('_', ' ').title() }}</span>
+            <div>
+                {% if c.section_ref %}
+                <span class="clause-ref">{{ c.section_ref }}</span>
+                {% endif %}
+                {% if c.confidence %}
+                <span class="badge {% if c.confidence >= 0.8 %}badge-success{% elif c.confidence >= 0.5 %}badge-processing{% else %}badge-error{% endif %}" style="margin-left: 8px;">
+                    {{ (c.confidence * 100)|round|int }}%
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% if c.clause_title %}
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">{{ c.clause_title }}</div>
+        {% endif %}
+        <div class="clause-text">{{ c.full_text }}</div>
+        {% if c.summary %}
+        <div class="clause-summary">Summary: {{ c.summary }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Rent Roll -->
+{% if rent_roll %}
+<div class="tab-content {% if not terms and not clauses %}active{% endif %}" id="tab-rentroll">
+    <div class="card">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Unit</th>
+                    <th>Tenant</th>
+                    <th>SF</th>
+                    <th>Monthly Rent</th>
+                    <th>Annual Rent</th>
+                    <th>Rent/SF</th>
+                    <th>Lease Start</th>
+                    <th>Lease End</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rent_roll %}
+                <tr>
+                    <td>{{ r.unit_number or '—' }}</td>
+                    <td style="font-weight: 500;">{{ r.tenant_name or '—' }}</td>
+                    <td>{% if r.square_footage %}{{ "{:,.0f}".format(r.square_footage) }}{% else %}—{% endif %}</td>
+                    <td>{% if r.monthly_rent %}${{ "{:,.2f}".format(r.monthly_rent) }}{% else %}—{% endif %}</td>
+                    <td>{% if r.annual_rent %}${{ "{:,.2f}".format(r.annual_rent) }}{% else %}—{% endif %}</td>
+                    <td>{% if r.rent_psf %}${{ "{:,.2f}".format(r.rent_psf) }}{% else %}—{% endif %}</td>
+                    <td>{{ r.lease_start or '—' }}</td>
+                    <td>{{ r.lease_end or '—' }}</td>
+                    <td>{{ r.status or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Operating Statement -->
+{% if opstat %}
+<div class="tab-content" id="tab-opstat">
+    <div class="card">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Line Item</th>
+                    <th>Amount</th>
+                    <th>$/SF</th>
+                    <th>Period</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in opstat %}
+                <tr {% if o.is_total %}style="font-weight: 700; border-top: 2px solid var(--border);"{% elif o.is_subtotal %}style="font-weight: 600;"{% endif %}>
+                    <td><span class="badge badge-{{ 'success' if o.category == 'revenue' else 'error' if o.category == 'expense' else 'processing' }}">{{ o.category }}</span></td>
+                    <td>{{ o.line_item }}</td>
+                    <td>{% if o.amount %}${{ "{:,.2f}".format(o.amount) }}{% else %}—{% endif %}</td>
+                    <td>{% if o.amount_psf %}${{ "{:,.2f}".format(o.amount_psf) }}{% else %}—{% endif %}</td>
+                    <td>{{ o.period or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- General Ledger -->
+{% if gl %}
+<div class="tab-content" id="tab-gl">
+    <div class="card">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Account</th>
+                    <th>Description</th>
+                    <th>Debit</th>
+                    <th>Credit</th>
+                    <th>Balance</th>
+                    <th>Vendor</th>
+                    <th>Ref</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for g in gl %}
+                <tr>
+                    <td>{{ g.entry_date or '—' }}</td>
+                    <td>{{ g.account_code or '' }} {{ g.account_name or '' }}</td>
+                    <td>{{ g.description or '—' }}</td>
+                    <td>{% if g.debit %}${{ "{:,.2f}".format(g.debit) }}{% else %}—{% endif %}</td>
+                    <td>{% if g.credit %}${{ "{:,.2f}".format(g.credit) }}{% else %}—{% endif %}</td>
+                    <td>{% if g.balance %}${{ "{:,.2f}".format(g.balance) }}{% else %}—{% endif %}</td>
+                    <td>{{ g.vendor or '—' }}</td>
+                    <td>{{ g.reference or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Empty state if nothing extracted -->
+{% if not terms and not clauses and not rent_roll and not opstat and not gl %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#128269;</div>
+        <p>No structured data was extracted from this document. The full text is still searchable.</p>
+        <a href="{{ url_for('search') }}" class="btn btn-secondary">Search documents</a>
+    </div>
+</div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('documents') }}" class="btn btn-secondary">Back to Documents</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(name) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+
+    // Show selected
+    const content = document.getElementById('tab-' + name);
+    if (content) content.classList.add('active');
+
+    // Activate tab button
+    event.target.classList.add('active');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}License — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>License & Plan</h2>
+    <p>{{ org.org_name }}</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+
+    <!-- Current Plan -->
+    <div class="card">
+        <div class="card-header">Current Plan</div>
+        <div style="text-align: center; padding: 16px 0 24px;">
+            <span class="plan-badge plan-badge-{{ org.plan }}" style="font-size: 18px; padding: 8px 24px;">
+                {{ org.plan }}
+            </span>
+        </div>
+
+        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
+                <span>Max Users</span>
+                <strong>{{ org.features.max_users }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
+                <span>Documents / Month</span>
+                <strong>{{ org.features.max_documents_per_month }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
+                <span>Max Pages / Document</span>
+                <strong>{{ org.features.max_pages_per_document }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                <span>Active Users</span>
+                <strong>{{ user_count }}</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- Organization Key -->
+    <div class="card">
+        <div class="card-header">Organization Key</div>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            This key identifies your organization. All users need it to log in.
+        </p>
+        <div class="key-display" style="font-size: 15px; padding: 12px 16px; text-align: center;">
+            {{ org.org_key }}
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+            Keep this key secure. Share only with authorized team members.
+        </p>
+    </div>
+
+</div>
+
+<!-- Feature Entitlements -->
+<div class="card">
+    <div class="card-header">Feature Entitlements</div>
+    <div class="feature-grid">
+        <div class="feature-item">
+            {% if org.features.ocr_enabled %}
+            <span class="check">&#10003;</span> OCR Processing
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">OCR Processing</span>
+            {% endif %}
+        </div>
+        <div class="feature-item">
+            {% if org.features.llm_extraction_enabled %}
+            <span class="check">&#10003;</span> LLM Extraction
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">LLM Extraction</span>
+            {% endif %}
+        </div>
+        <div class="feature-item">
+            {% if org.features.watch_mode_enabled %}
+            <span class="check">&#10003;</span> Watch Mode
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">Watch Mode</span>
+            {% endif %}
+        </div>
+        <div class="feature-item">
+            {% if org.features.batch_processing_enabled %}
+            <span class="check">&#10003;</span> Batch Processing
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">Batch Processing</span>
+            {% endif %}
+        </div>
+        <div class="feature-item">
+            {% if org.features.csv_export_enabled %}
+            <span class="check">&#10003;</span> CSV Export
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">CSV Export</span>
+            {% endif %}
+        </div>
+        <div class="feature-item">
+            {% if org.features.api_access_enabled %}
+            <span class="check">&#10003;</span> API Access
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">API Access</span>
+            {% endif %}
+        </div>
+        <div class="feature-item">
+            {% if org.features.custom_templates_enabled %}
+            <span class="check">&#10003;</span> Custom Templates
+            {% else %}
+            <span class="cross">&#10005;</span> <span style="opacity: 0.5;">Custom Templates</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Document Types -->
+<div class="card">
+    <div class="card-header">Enabled Document Types</div>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        {% for dt in org.features.document_types_enabled %}
+        <span class="badge badge-{{ dt }}">{{ dt.replace('_', ' ').title() }}</span>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Monthly Usage -->
+<div class="card">
+    <div class="card-header">Current Month Usage</div>
+    <div class="card-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ usage.documents_processed }}</div>
+            <div class="stat-label">Documents</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ usage.pages_processed }}</div>
+            <div class="stat-label">Pages</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ usage.ocr_pages }}</div>
+            <div class="stat-label">OCR Pages</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ usage.llm_calls }}</div>
+            <div class="stat-label">LLM Calls</div>
+        </div>
+    </div>
+</div>
+
+<!-- Plan Comparison -->
+<div class="card">
+    <div class="card-header">Plan Comparison</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Feature</th>
+                {% for name, feat in plan_features.items() %}
+                <th style="text-align: center;">
+                    {{ name.title() }}
+                    {% if name == org.plan %}
+                    <br><span style="font-size: 10px; color: var(--cap-primary);">Current</span>
+                    {% endif %}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Max Users</td>
+                {% for name, feat in plan_features.items() %}
+                <td style="text-align: center; {% if name == org.plan %}font-weight: 600; color: var(--cap-primary);{% endif %}">{{ feat.max_users }}</td>
+                {% endfor %}
+            </tr>
+            <tr>
+                <td>Documents / Month</td>
+                {% for name, feat in plan_features.items() %}
+                <td style="text-align: center; {% if name == org.plan %}font-weight: 600; color: var(--cap-primary);{% endif %}">{{ feat.max_documents_per_month }}</td>
+                {% endfor %}
+            </tr>
+            <tr>
+                <td>Max Pages / Doc</td>
+                {% for name, feat in plan_features.items() %}
+                <td style="text-align: center; {% if name == org.plan %}font-weight: 600; color: var(--cap-primary);{% endif %}">{{ feat.max_pages_per_document }}</td>
+                {% endfor %}
+            </tr>
+            <tr>
+                <td>API Access</td>
+                {% for name, feat in plan_features.items() %}
+                <td style="text-align: center;">{% if feat.api_access_enabled %}<span class="check" style="color: var(--cap-signal);">&#10003;</span>{% else %}<span style="color: var(--text-muted); opacity: 0.3;">&#10005;</span>{% endif %}</td>
+                {% endfor %}
+            </tr>
+            <tr>
+                <td>Custom Templates</td>
+                {% for name, feat in plan_features.items() %}
+                <td style="text-align: center;">{% if feat.custom_templates_enabled %}<span class="check" style="color: var(--cap-signal);">&#10003;</span>{% else %}<span style="color: var(--text-muted); opacity: 0.3;">&#10005;</span>{% endif %}</td>
+                {% endfor %}
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

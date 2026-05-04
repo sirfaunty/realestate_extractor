@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Properties — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Properties</h2>
+    <p>All property assets across your portfolios</p>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <label style="font-weight: 500;">Filter:</label>
+    <select onchange="window.location.href='{{ url_for('properties') }}?type=' + this.value + '{% if filter_status %}&status={{ filter_status }}{% endif %}'">
+        <option value="">All types</option>
+        <option value="multifamily" {% if filter_type == 'multifamily' %}selected{% endif %}>Multifamily</option>
+        <option value="industrial" {% if filter_type == 'industrial' %}selected{% endif %}>Industrial</option>
+        <option value="commercial" {% if filter_type == 'commercial' %}selected{% endif %}>Commercial</option>
+        <option value="office" {% if filter_type == 'office' %}selected{% endif %}>Office</option>
+        <option value="retail" {% if filter_type == 'retail' %}selected{% endif %}>Retail</option>
+        <option value="mixed_use" {% if filter_type == 'mixed_use' %}selected{% endif %}>Mixed Use</option>
+    </select>
+    <select onchange="window.location.href='{{ url_for('properties') }}?status=' + this.value + '{% if filter_type %}&type={{ filter_type }}{% endif %}'">
+        <option value="">All statuses</option>
+        <option value="active" {% if filter_status == 'active' %}selected{% endif %}>Active</option>
+        <option value="under_contract" {% if filter_status == 'under_contract' %}selected{% endif %}>Under Contract</option>
+        <option value="pipeline" {% if filter_status == 'pipeline' %}selected{% endif %}>Pipeline</option>
+        <option value="disposed" {% if filter_status == 'disposed' %}selected{% endif %}>Disposed</option>
+    </select>
+    <span style="margin-left: auto; color: var(--text-muted); font-size: 13px;">
+        {{ properties|length }} propert{{ 'ies' if properties|length != 1 else 'y' }}
+    </span>
+</div>
+
+<!-- Create Property -->
+<div class="card">
+    <div class="card-header">Add Property</div>
+    <form method="POST" action="{{ url_for('create_property') }}">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="name">Property Name</label>
+                <input type="text" id="name" name="name" placeholder="e.g. Parkview Apartments" required>
+            </div>
+            <div class="form-group">
+                <label for="property_type">Type</label>
+                <select id="property_type" name="property_type">
+                    <option value="multifamily">Multifamily</option>
+                    <option value="industrial">Industrial</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="office">Office</option>
+                    <option value="retail">Retail</option>
+                    <option value="mixed_use">Mixed Use</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="portfolio_id">Portfolio</label>
+                <select id="portfolio_id" name="portfolio_id">
+                    <option value="">None</option>
+                    {% for pf in portfolios %}
+                    <option value="{{ pf.id }}">{{ pf.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="address">Address</label>
+                <input type="text" id="address" name="address" placeholder="Street address">
+            </div>
+            <div class="form-group">
+                <label for="city">City</label>
+                <input type="text" id="city" name="city">
+            </div>
+            <div class="form-group">
+                <label for="state">State</label>
+                <input type="text" id="state" name="state" placeholder="IL">
+            </div>
+            <div class="form-group">
+                <label for="zip_code">Zip</label>
+                <input type="text" id="zip_code" name="zip_code">
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="year_built">Year Built</label>
+                <input type="text" id="year_built" name="year_built" placeholder="1985">
+            </div>
+            <div class="form-group">
+                <label for="total_units">Total Units</label>
+                <input type="text" id="total_units" name="total_units" placeholder="120">
+            </div>
+            <div class="form-group">
+                <label for="total_sqft">Total SF</label>
+                <input type="text" id="total_sqft" name="total_sqft" placeholder="95000">
+            </div>
+            <div class="form-group">
+                <label for="acquisition_price">Acquisition Price</label>
+                <input type="text" id="acquisition_price" name="acquisition_price" placeholder="12000000">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Property</button>
+    </form>
+</div>
+
+<!-- Properties Table -->
+{% if properties %}
+<div class="card">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Property</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Portfolio</th>
+                <th style="text-align: right;">Buildings</th>
+                <th style="text-align: right;">Units</th>
+                <th style="text-align: right;">Documents</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in properties %}
+            <tr>
+                <td><a href="{{ url_for('property_detail', property_id=p.id) }}" style="font-weight: 600;">{{ p.name }}</a></td>
+                <td><span class="badge badge-{{ p.property_type }}">{{ p.property_type.replace('_', ' ') }}</span></td>
+                <td style="font-size: 13px;">{{ p.city }}{{ ', ' + p.state if p.state else '' }}</td>
+                <td style="font-size: 13px; color: var(--text-muted);">{{ p.portfolio_name or '—' }}</td>
+                <td style="text-align: right;">{{ p.building_count }}</td>
+                <td style="text-align: right;">{{ p.unit_count }}</td>
+                <td style="text-align: right;">{{ p.document_count }}</td>
+                <td>
+                    <span class="badge badge-{% if p.status == 'active' %}success{% elif p.status == 'disposed' %}error{% else %}processing{% endif %}">
+                        {{ p.status.replace('_', ' ') }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#127970;</div>
+        <p>No properties yet. Add one above to start building your portfolio.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

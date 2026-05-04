@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Permissions — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>User Permissions</h2>
+    <p>Control what each user can see and do</p>
+</div>
+
+{% for u in users %}
+<div class="card" style="{% if not u.is_active %}opacity: 0.5;{% endif %}">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div>
+            <span style="font-weight: 600; font-size: 15px; color: var(--cap-navy);">{{ u.display_name }}</span>
+            <span style="font-size: 13px; color: var(--text-muted); margin-left: 8px;">{{ u.email }}</span>
+        </div>
+        {% if u.is_active %}
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <!-- Role Template Selector -->
+            <form method="POST" style="display: flex; align-items: center; gap: 8px;">
+                <input type="hidden" name="user_id" value="{{ u.user_id }}">
+                <input type="hidden" name="action" value="set_role">
+                <label style="font-size: 12px; font-weight: 500; color: var(--text-secondary);">Role:</label>
+                <select name="role_template" onchange="this.form.submit()" style="min-width: 130px; padding: 5px 8px; font-size: 13px;">
+                    {% for key, tmpl in role_templates.items() %}
+                    <option value="{{ key }}" {% if u.role_template == key %}selected{% endif %}>
+                        {{ tmpl.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+            <span class="plan-badge plan-badge-{% if u.role_template == 'admin' %}enterprise{% elif u.role_template == 'operator' %}professional{% elif u.role_template == 'analyst' %}standard{% else %}starter{% endif %}">
+                {{ role_templates[u.role_template].label if u.role_template in role_templates else 'Viewer' }}
+            </span>
+        </div>
+        {% else %}
+        <span class="badge badge-error">Inactive</span>
+        {% endif %}
+    </div>
+
+    {% if u.is_active %}
+    <!-- Permission Grid -->
+    <details{% if u.overrides %} open{% endif %}>
+        <summary style="font-size: 13px; font-weight: 500; color: var(--cap-primary); cursor: pointer; margin-bottom: 12px;">
+            {% if u.overrides %}
+            Permissions ({{ u.overrides|length }} override{{ 's' if u.overrides|length != 1 else '' }})
+            {% else %}
+            Customize permissions
+            {% endif %}
+        </summary>
+
+        <form method="POST">
+            <input type="hidden" name="user_id" value="{{ u.user_id }}">
+            <input type="hidden" name="action" value="set_overrides">
+
+            {% for cat_name, cat_scopes in scope_categories.items() %}
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-subtle);">
+                    {{ cat_name }}
+                </div>
+                {% for scope in cat_scopes %}
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0;">
+                    <div style="flex: 1;">
+                        <span style="font-size: 13px; font-weight: 500; color: var(--text);">{{ scope.label }}</span>
+                        <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">{{ scope.description }}</span>
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        {% set current_level = u.permissions.get(scope.key, 'none') %}
+                        {% set is_override = scope.key in u.overrides %}
+                        {% for level in levels %}
+                        <label style="display: flex; align-items: center; gap: 3px; padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;
+                            {% if current_level == level %}
+                                background: {% if level == 'edit' %}var(--success-light){% elif level == 'read' %}var(--cap-cloud){% else %}var(--danger-light){% endif %};
+                                font-weight: 600;
+                            {% else %}
+                                background: var(--bg);
+                            {% endif %}
+                            {% if is_override and current_level == level %}
+                                border: 1px solid var(--cap-active);
+                            {% else %}
+                                border: 1px solid var(--border-subtle);
+                            {% endif %}
+                        ">
+                            <input type="radio" name="perm_{{ scope.key }}" value="{{ level }}"
+                                   {% if current_level == level %}checked{% endif %}
+                                   style="display: none;">
+                            {{ level.title() }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle);">
+                <span style="font-size: 12px; color: var(--text-muted);">
+                    Changes that differ from the {{ role_templates[u.role_template].label if u.role_template in role_templates else 'Viewer' }} template will be saved as overrides.
+                </span>
+                <button type="submit" class="btn btn-sm btn-primary">Save Overrides</button>
+            </div>
+        </form>
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+
+<!-- Role Template Reference -->
+<div class="card" style="background: var(--cap-cloud); border-color: transparent;">
+    <div class="card-header" style="color: var(--cap-navy);">Role Template Reference</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+        {% for key, tmpl in role_templates.items() %}
+        <div>
+            <div style="font-weight: 600; font-size: 14px; color: var(--cap-navy); margin-bottom: 4px;">{{ tmpl.label }}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{{ tmpl.description }}</div>
+            {% for scope_key in scope_order %}
+            {% set level = tmpl.permissions[scope_key] %}
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; padding: 2px 0;">
+                <span>{{ scopes[scope_key].label }}</span>
+                <span style="font-weight: 500; color: {% if level == 'edit' %}var(--cap-signal){% elif level == 'read' %}var(--cap-primary){% else %}var(--text-muted){% endif %};">
+                    {{ level }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle radio buttons visually on click
+document.querySelectorAll('label[style*="cursor: pointer"]').forEach(label => {
+    label.addEventListener('click', function() {
+        const input = this.querySelector('input[type="radio"]');
+        if (input) {
+            input.checked = true;
+            // Update visual state for siblings
+            const name = input.name;
+            document.querySelectorAll(`input[name="${name}"]`).forEach(radio => {
+                const parent = radio.closest('label');
+                parent.style.fontWeight = radio.checked ? '600' : '400';
+                if (radio.checked) {
+                    const val = radio.value;
+                    if (val === 'edit') parent.style.background = 'var(--success-light)';
+                    else if (val === 'read') parent.style.background = 'var(--cap-cloud)';
+                    else parent.style.background = 'var(--danger-light)';
+                } else {
+                    parent.style.background = 'var(--bg)';
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %}

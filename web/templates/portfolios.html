@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Portfolios — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Portfolios</h2>
+    <p>Organize properties into portfolio groupings</p>
+</div>
+
+<!-- Create Portfolio -->
+<div class="card">
+    <div class="card-header">New Portfolio</div>
+    <form method="POST" action="{{ url_for('create_portfolio') }}" style="display: flex; gap: 12px; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0; flex: 1;">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" placeholder="e.g. Midwest Industrial Fund I" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0; flex: 2;">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" placeholder="Optional description">
+        </div>
+        <button type="submit" class="btn btn-primary">Create</button>
+    </form>
+</div>
+
+<!-- Portfolio List -->
+{% if portfolios %}
+<div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+    {% for pf in portfolios %}
+    <div class="card" style="margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+            <div>
+                <div style="font-weight: 600; font-size: 16px; color: var(--cap-navy);">{{ pf.name }}</div>
+                {% if pf.description %}
+                <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">{{ pf.description }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div style="display: flex; gap: 20px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+            <span><strong>{{ pf.property_count }}</strong> properties</span>
+            <span><strong>{{ pf.total_units }}</strong> units</span>
+        </div>
+        <a href="{{ url_for('properties') }}?portfolio={{ pf.id }}" class="btn btn-secondary btn-sm">View Properties</a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#127970;</div>
+        <p>No portfolios yet. Create one above to start organizing your properties.</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- Unlinked Properties -->
+{% if unlinked_properties %}
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Properties Not in a Portfolio</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Property</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Units</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in unlinked_properties %}
+            <tr>
+                <td><a href="{{ url_for('property_detail', property_id=p.id) }}">{{ p.name }}</a></td>
+                <td><span class="badge badge-{{ p.property_type }}">{{ p.property_type.replace('_', ' ') }}</span></td>
+                <td style="font-size: 13px; color: var(--text-muted);">{{ p.city }}{{ ', ' + p.state if p.state else '' }}</td>
+                <td>{{ p.unit_count }}</td>
+                <td style="font-size: 12px; color: var(--text-muted);">Not in portfolio</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
