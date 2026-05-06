@@ -19,6 +19,12 @@
         <span class="badge badge-{% if prop.status == 'active' %}success{% elif prop.status == 'disposed' %}error{% else %}processing{% endif %}" style="margin-left: 4px;">
             {{ prop.status.replace('_', ' ').title() }}
         </span>
+        <div style="margin-top: 8px;">
+            <a href="{{ url_for('export_property', property_id=prop.id) }}" class="btn btn-sm btn-secondary" title="Export all property data as Excel">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3M8 2v8M8 10l3-3M8 10l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Export
+            </a>
+        </div>
     </div>
 </div>
 

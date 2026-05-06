@@ -2,9 +2,15 @@
 {% block title %}Documents — capactive{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Documents</h2>
-    <p>All processed documents</p>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: start;">
+    <div>
+        <h2>Documents</h2>
+        <p>All processed documents</p>
+    </div>
+    <div style="display: flex; gap: 8px;">
+        <a href="{{ url_for('export_data', export_type='documents', format='csv') }}" class="btn btn-sm btn-secondary">Export CSV</a>
+        <a href="{{ url_for('export_data', export_type='documents', format='xlsx') }}" class="btn btn-sm btn-secondary">Export Excel</a>
+    </div>
 </div>
 
 <!-- Filters -->

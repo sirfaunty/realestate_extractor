@@ -15,11 +15,12 @@ import time
 import uuid
 import functools
 from pathlib import Path
+import re
 from datetime import datetime
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, jsonify, send_file, session, g
+    flash, jsonify, send_file, session, g, Response
 )
 from werkzeug.utils import secure_filename
 
@@ -370,8 +371,7 @@ def index():
         flash('Database error.', 'error')
         return redirect(url_for('login'))
     try:
-        documents = db.list_documents()
-        summary = db.get_portfolio_summary()
+        dashboard = db.get_dashboard_stats()
         llm = get_llm()
         llm_status = llm.is_available()
     finally:
@@ -385,11 +385,9 @@ def index():
         tracker.close()
 
     return render_template('index.html',
-                           documents=documents,
-                           summary=summary,
+                           dashboard=dashboard,
                            llm_status=llm_status,
-                           usage=usage,
-                           templates=list_templates())
+                           usage=usage)
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -437,7 +435,6 @@ def upload():
 
         doc_type = request.form.get('doc_type') or None
         property_name = request.form.get('property_name') or None
-        force_ocr = request.form.get('force_ocr') == 'on'
 
         # Check document type entitlement
         if doc_type:
@@ -467,7 +464,7 @@ def upload():
             try:
                 db = get_org_db(org_id)
                 llm = get_llm()
-                processor = BatchProcessor(db, llm, force_ocr=force_ocr)
+                processor = BatchProcessor(db, llm)
                 result = processor.process_single(filepath, document_type=doc_type,
                                                    property_name=property_name)
                 jobs[job_id]['results'] = [_result_to_dict(result)]
@@ -508,29 +505,22 @@ def upload():
 @login_required
 @permission_required('extraction.batch', 'edit')
 def batch():
-    """Batch folder processing."""
+    """Batch folder processing — accepts uploaded files via folder picker."""
     org_id = session['org_id']
     user_id = session['user_id']
 
     if request.method == 'POST':
-        folder_path = request.form.get('folder_path', '').strip()
+        uploaded_files = request.files.getlist('files')
 
-        if not folder_path:
-            flash('Please enter a folder path.', 'error')
+        # Filter to PDF files only
+        pdf_files = [f for f in uploaded_files
+                     if f.filename and f.filename.lower().endswith('.pdf')]
+
+        if not pdf_files:
+            flash('No PDF files found in the selected folder.', 'error')
             return redirect(request.url)
 
-        folder_path = os.path.expanduser(folder_path)
-
-        if not os.path.isdir(folder_path):
-            flash(f'Folder not found: {folder_path}', 'error')
-            return redirect(request.url)
-
-        pdf_count = len(list(Path(folder_path).glob('*.pdf'))) + \
-                    len(list(Path(folder_path).glob('*.PDF')))
-
-        if pdf_count == 0:
-            flash('No PDF files found in that folder.', 'error')
-            return redirect(request.url)
+        pdf_count = len(pdf_files)
 
         # Check volume limit
         store = get_config_store()
@@ -550,16 +540,26 @@ def batch():
             store.close()
             tracker.close()
 
+        # Save all uploaded PDFs to a batch subfolder
+        batch_id = str(uuid.uuid4())[:8]
+        batch_dir = os.path.join(UPLOAD_FOLDER, f'batch_{batch_id}')
+        os.makedirs(batch_dir, exist_ok=True)
+
+        saved_paths = []
+        for f in pdf_files:
+            filename = secure_filename(os.path.basename(f.filename))
+            filepath = os.path.join(batch_dir, filename)
+            f.save(filepath)
+            saved_paths.append(filepath)
+
         doc_type = request.form.get('doc_type') or None
         property_name = request.form.get('property_name') or None
-        recursive = request.form.get('recursive') == 'on'
-        force_ocr = request.form.get('force_ocr') == 'on'
 
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
             'status': 'processing',
             'type': 'batch',
-            'folder': folder_path,
+            'folder': f'Uploaded batch ({pdf_count} files)',
             'progress': 0,
             'total': pdf_count,
             'results': [],
@@ -570,11 +570,15 @@ def batch():
             try:
                 db = get_org_db(org_id)
                 llm = get_llm()
-                processor = BatchProcessor(db, llm, force_ocr=force_ocr)
+                processor = BatchProcessor(db, llm)
 
-                def on_progress(current, total, result):
-                    jobs[job_id]['progress'] = current
-                    jobs[job_id]['total'] = total
+                for i, filepath in enumerate(saved_paths):
+                    result = processor.process_single(
+                        filepath,
+                        document_type=doc_type,
+                        property_name=property_name
+                    )
+                    jobs[job_id]['progress'] = i + 1
                     jobs[job_id]['results'].append(_result_to_dict(result))
 
                     # Log each document
@@ -593,13 +597,6 @@ def batch():
                     finally:
                         t.close()
 
-                processor.process_folder(
-                    folder_path,
-                    document_type=doc_type,
-                    property_name=property_name,
-                    recursive=recursive,
-                    on_progress=on_progress
-                )
                 jobs[job_id]['status'] = 'completed'
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
@@ -668,19 +665,180 @@ def document_detail(doc_id):
 @login_required
 def search():
     query = request.args.get('q', '')
-    results = []
-    if query:
-        org_id = session['org_id']
-        db = get_org_db(org_id)
+    field = request.args.get('field', 'all')
+    property_id = request.args.get('property_id', type=int)
+    portfolio_id = request.args.get('portfolio_id', type=int)
+    document_type = request.args.get('doc_type', '')
+
+    results = {}
+    total_count = 0
+    properties_list = []
+    portfolios_list = []
+    stats = {}
+
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        properties_list = db.list_properties()
+        portfolios_list = db.list_portfolios()
+        stats = db.get_search_stats()
+
+        if query:
+            results = db.search_advanced(
+                query=query,
+                field=field,
+                property_id=property_id,
+                portfolio_id=portfolio_id,
+                document_type=document_type or None,
+            )
+            total_count = sum(len(v) for v in results.values())
+    finally:
+        db.close()
+
+    return render_template('search.html',
+                           query=query, field=field, results=results,
+                           total_count=total_count,
+                           properties=properties_list,
+                           portfolios=portfolios_list,
+                           stats=stats,
+                           filter_property_id=property_id,
+                           filter_portfolio_id=portfolio_id,
+                           filter_doc_type=document_type)
+
+
+# ─── Routes: Data Export ─────────────────────────────────────────────
+
+@app.route('/export/<export_type>')
+@login_required
+def export_data(export_type):
+    """Export data as CSV or Excel."""
+    from exports import EXPORT_TYPES, export_csv_bytes, export_excel, HAS_OPENPYXL
+
+    if export_type not in EXPORT_TYPES:
+        flash('Unknown export type.', 'error')
+        return redirect(url_for('index'))
+
+    # Check feature flag
+    user = get_current_user()
+    if user:
+        from config import ConfigStore
+        cfg = ConfigStore()
+        cfg.connect()
         try:
-            results = db.search_fulltext(query)
-            for r in results:
-                doc = db.get_document(int(r['document_id']))
-                r['filename'] = doc['filename'] if doc else 'Unknown'
-                r['doc_type'] = doc['document_type'] if doc else ''
+            org = cfg.get_org(session['org_id'])
+            if org and not org.features.csv_export_enabled:
+                flash('CSV/Excel export is not available on your current plan.', 'error')
+                return redirect(url_for('index'))
         finally:
-            db.close()
-    return render_template('search.html', query=query, results=results)
+            cfg.close()
+
+    fmt = request.args.get('format', 'csv')  # csv or xlsx
+    export_def = EXPORT_TYPES[export_type]
+
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        method = getattr(db, export_def['db_method'])
+        rows = method()
+    finally:
+        db.close()
+
+    timestamp = datetime.now().strftime('%Y%m%d')
+    base_name = f'capactive_{export_type}_{timestamp}'
+
+    if fmt == 'xlsx' and HAS_OPENPYXL:
+        data = export_excel(rows, export_def['columns'],
+                           sheet_name=export_def['label'],
+                           title=f'Capactive — {export_def["label"]}')
+        return Response(
+            data,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{base_name}.xlsx"'}
+        )
+    else:
+        data = export_csv_bytes(rows, export_def['columns'])
+        return Response(
+            data,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{base_name}.csv"'}
+        )
+
+
+@app.route('/export/property/<int:property_id>')
+@login_required
+def export_property(property_id):
+    """Export all data for a specific property as a multi-sheet Excel workbook."""
+    from exports import (export_property_workbook, export_csv_bytes,
+                         RENT_ROLL_COLUMNS, HAS_OPENPYXL)
+
+    # Check feature flag
+    user = get_current_user()
+    if user:
+        from config import ConfigStore
+        cfg = ConfigStore()
+        cfg.connect()
+        try:
+            org = cfg.get_org(session['org_id'])
+            if org and not org.features.csv_export_enabled:
+                flash('CSV/Excel export is not available on your current plan.', 'error')
+                return redirect(url_for('index'))
+        finally:
+            cfg.close()
+
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            flash('Property not found.', 'error')
+            return redirect(url_for('properties'))
+
+        # Gather all data linked to this property
+        docs = db.get_property_documents(property_id)
+        doc_ids = [d['id'] for d in docs]
+
+        rent_roll = []
+        operating_statement = []
+        financial_terms = []
+        gl_entries = []
+        clauses = []
+
+        for doc_id in doc_ids:
+            rent_roll.extend(db.get_rent_roll(document_id=doc_id))
+            operating_statement.extend(db.get_operating_statement(document_id=doc_id))
+            financial_terms.extend(db.get_financial_terms(document_id=doc_id))
+            gl_entries.extend(db.get_gl_entries(document_id=doc_id))
+            clauses.extend(db.get_clauses(document_id=doc_id))
+
+        data = {
+            'rent_roll': rent_roll,
+            'operating_statement': operating_statement,
+            'financial_terms': financial_terms,
+            'gl_entries': gl_entries,
+            'clauses': clauses,
+        }
+    finally:
+        db.close()
+
+    timestamp = datetime.now().strftime('%Y%m%d')
+    safe_name = re.sub(r'[^\w\s-]', '', prop['name']).strip().replace(' ', '_')
+    base_name = f'capactive_{safe_name}_{timestamp}'
+
+    if HAS_OPENPYXL:
+        workbook_bytes = export_property_workbook(prop['name'], data)
+        return Response(
+            workbook_bytes,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{base_name}.xlsx"'}
+        )
+    else:
+        # Fallback: export rent roll as CSV
+        csv_data = export_csv_bytes(rent_roll, RENT_ROLL_COLUMNS)
+        return Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{base_name}_rent_roll.csv"'}
+        )
 
 
 # ─── Routes: Admin Panel ────────────────────────────────────────────

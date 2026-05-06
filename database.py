@@ -948,6 +948,262 @@ class Database:
         """, (query, limit))
         return [dict(row) for row in cur.fetchall()]
 
+    def search_advanced(self, query: str, field: str = 'all',
+                        property_id: int = None, portfolio_id: int = None,
+                        document_type: str = None, limit: int = 50) -> Dict[str, List[Dict]]:
+        """
+        Advanced search across raw text and structured fields.
+
+        Args:
+            query: Search term
+            field: 'all', 'raw', 'clauses', 'financial', 'tenants',
+                   'expenses', 'gl', or 'documents'
+            property_id: Scope to a specific property
+            portfolio_id: Scope to a specific portfolio
+            document_type: Filter by document type
+            limit: Max results per category
+
+        Returns dict of result categories, each with a list of matches.
+        """
+        results = {}
+        like_q = f'%{query}%'
+
+        # Build property scope filter
+        scoped_doc_ids = None
+        if property_id or portfolio_id or document_type:
+            scope_sql = "SELECT id FROM documents WHERE 1=1"
+            scope_params = []
+            if property_id:
+                scope_sql += " AND property_id = ?"
+                scope_params.append(property_id)
+            if portfolio_id:
+                scope_sql += " AND portfolio_id = ?"
+                scope_params.append(portfolio_id)
+            if document_type:
+                scope_sql += " AND document_type = ?"
+                scope_params.append(document_type)
+            cur = self.conn.execute(scope_sql, scope_params)
+            scoped_doc_ids = [str(row['id']) for row in cur.fetchall()]
+            if not scoped_doc_ids:
+                return results  # no documents in scope
+
+        def scope_clause(col='document_id'):
+            """Return SQL fragment and params to limit to scoped docs."""
+            if scoped_doc_ids is None:
+                return "", []
+            placeholders = ','.join('?' * len(scoped_doc_ids))
+            return f" AND {col} IN ({placeholders})", list(scoped_doc_ids)
+
+        # ── Raw full-text search ──
+        if field in ('all', 'raw'):
+            try:
+                fts_sql = """
+                    SELECT ft.document_id, ft.page_number,
+                           snippet(document_fulltext, 2, '<mark>', '</mark>', '...', 50) as snippet,
+                           rank, d.filename, d.document_type, d.property_id,
+                           p.name as property_name
+                    FROM document_fulltext ft
+                    JOIN documents d ON CAST(ft.document_id AS INTEGER) = d.id
+                    LEFT JOIN properties p ON d.property_id = p.id
+                    WHERE ft.content MATCH ?
+                """
+                params = [query]
+                if scoped_doc_ids:
+                    placeholders = ','.join('?' * len(scoped_doc_ids))
+                    fts_sql += f" AND ft.document_id IN ({placeholders})"
+                    params.extend(scoped_doc_ids)
+                fts_sql += " ORDER BY rank LIMIT ?"
+                params.append(limit)
+                cur = self.conn.execute(fts_sql, params)
+                results['raw'] = [dict(row) for row in cur.fetchall()]
+            except Exception:
+                # FTS5 MATCH can fail on invalid syntax; fall back to LIKE
+                results['raw'] = []
+
+        # ── Clause search ──
+        if field in ('all', 'clauses'):
+            clause_sql = """
+                SELECT c.*, d.filename, d.document_type, d.property_id,
+                       p.name as property_name
+                FROM clauses c
+                JOIN documents d ON c.document_id = d.id
+                LEFT JOIN properties p ON d.property_id = p.id
+                WHERE (c.full_text LIKE ? OR c.summary LIKE ?
+                       OR c.clause_title LIKE ? OR c.clause_type LIKE ?)
+            """
+            params = [like_q, like_q, like_q, like_q]
+            sc, sp = scope_clause('c.document_id')
+            clause_sql += sc
+            params.extend(sp)
+            clause_sql += " ORDER BY c.confidence DESC LIMIT ?"
+            params.append(limit)
+            cur = self.conn.execute(clause_sql, params)
+            rows = [dict(row) for row in cur.fetchall()]
+            # Build snippet from full_text with highlight
+            for r in rows:
+                r['snippet'] = self._highlight_snippet(r.get('full_text', ''), query, 200)
+            results['clauses'] = rows
+
+        # ── Financial terms search ──
+        if field in ('all', 'financial'):
+            fin_sql = """
+                SELECT ft.*, d.filename, d.document_type, d.property_id,
+                       p.name as property_name
+                FROM financial_terms ft
+                JOIN documents d ON ft.document_id = d.id
+                LEFT JOIN properties p ON d.property_id = p.id
+                WHERE (ft.term_label LIKE ? OR ft.term_type LIKE ?
+                       OR ft.value_raw LIKE ? OR ft.escalation_detail LIKE ?)
+            """
+            params = [like_q, like_q, like_q, like_q]
+            sc, sp = scope_clause('ft.document_id')
+            fin_sql += sc
+            params.extend(sp)
+            fin_sql += " ORDER BY ft.confidence DESC LIMIT ?"
+            params.append(limit)
+            cur = self.conn.execute(fin_sql, params)
+            results['financial'] = [dict(row) for row in cur.fetchall()]
+
+        # ── Tenant / rent roll search ──
+        if field in ('all', 'tenants'):
+            tenant_sql = """
+                SELECT rr.*, d.filename, d.document_type, d.property_id,
+                       p.name as property_name
+                FROM rent_roll_entries rr
+                JOIN documents d ON rr.document_id = d.id
+                LEFT JOIN properties p ON COALESCE(rr.property_id, d.property_id) = p.id
+                WHERE (rr.tenant_name LIKE ? OR rr.unit_number LIKE ?
+                       OR rr.suite LIKE ? OR rr.notes LIKE ?)
+            """
+            params = [like_q, like_q, like_q, like_q]
+            sc, sp = scope_clause('rr.document_id')
+            tenant_sql += sc
+            params.extend(sp)
+            tenant_sql += " ORDER BY rr.tenant_name LIMIT ?"
+            params.append(limit)
+            cur = self.conn.execute(tenant_sql, params)
+            results['tenants'] = [dict(row) for row in cur.fetchall()]
+
+        # ── Operating expense search ──
+        if field in ('all', 'expenses'):
+            exp_sql = """
+                SELECT os.*, d.filename, d.document_type, d.property_id,
+                       p.name as property_name
+                FROM operating_statement_items os
+                JOIN documents d ON os.document_id = d.id
+                LEFT JOIN properties p ON COALESCE(os.property_id, d.property_id) = p.id
+                WHERE (os.line_item LIKE ? OR os.subcategory LIKE ?
+                       OR os.category LIKE ? OR os.period LIKE ?)
+            """
+            params = [like_q, like_q, like_q, like_q]
+            sc, sp = scope_clause('os.document_id')
+            exp_sql += sc
+            params.extend(sp)
+            exp_sql += " ORDER BY os.amount DESC LIMIT ?"
+            params.append(limit)
+            cur = self.conn.execute(exp_sql, params)
+            results['expenses'] = [dict(row) for row in cur.fetchall()]
+
+        # ── GL entry search ──
+        if field in ('all', 'gl'):
+            gl_sql = """
+                SELECT gl.*, d.filename, d.document_type, d.property_id,
+                       p.name as property_name
+                FROM gl_entries gl
+                JOIN documents d ON gl.document_id = d.id
+                LEFT JOIN properties p ON COALESCE(gl.property_id, d.property_id) = p.id
+                WHERE (gl.account_name LIKE ? OR gl.description LIKE ?
+                       OR gl.vendor LIKE ? OR gl.reference LIKE ?
+                       OR gl.account_code LIKE ?)
+            """
+            params = [like_q, like_q, like_q, like_q, like_q]
+            sc, sp = scope_clause('gl.document_id')
+            gl_sql += sc
+            params.extend(sp)
+            gl_sql += " ORDER BY gl.entry_date DESC LIMIT ?"
+            params.append(limit)
+            cur = self.conn.execute(gl_sql, params)
+            results['gl'] = [dict(row) for row in cur.fetchall()]
+
+        # ── Document metadata search ──
+        if field in ('all', 'documents'):
+            doc_sql = """
+                SELECT d.*, p.name as property_name
+                FROM documents d
+                LEFT JOIN properties p ON d.property_id = p.id
+                WHERE (d.filename LIKE ? OR d.property_name LIKE ?
+                       OR d.property_address LIKE ?)
+            """
+            params = [like_q, like_q, like_q]
+            if scoped_doc_ids:
+                placeholders = ','.join('?' * len(scoped_doc_ids))
+                doc_sql += f" AND d.id IN ({placeholders})"
+                params.extend([int(x) for x in scoped_doc_ids])
+            if document_type:
+                doc_sql += " AND d.document_type = ?"
+                params.append(document_type)
+            doc_sql += " ORDER BY d.processed_at DESC LIMIT ?"
+            params.append(limit)
+            cur = self.conn.execute(doc_sql, params)
+            results['documents'] = [dict(row) for row in cur.fetchall()]
+
+        return results
+
+    def get_search_stats(self) -> Dict[str, int]:
+        """Get counts for search UI: total docs, pages indexed, etc."""
+        stats = {}
+        for table, key in [('documents', 'documents'), ('clauses', 'clauses'),
+                           ('financial_terms', 'financial_terms'),
+                           ('rent_roll_entries', 'rent_roll_entries'),
+                           ('operating_statement_items', 'operating_items'),
+                           ('gl_entries', 'gl_entries')]:
+            cur = self.conn.execute(f"SELECT COUNT(*) as cnt FROM {table}")
+            stats[key] = cur.fetchone()['cnt']
+        try:
+            cur = self.conn.execute("SELECT COUNT(*) as cnt FROM document_fulltext")
+            stats['pages_indexed'] = cur.fetchone()['cnt']
+        except Exception:
+            stats['pages_indexed'] = 0
+        return stats
+
+    @staticmethod
+    def _highlight_snippet(text: str, query: str, max_length: int = 200) -> str:
+        """Extract a snippet from text centered around the query match, with highlighting."""
+        if not text or not query:
+            return text or ''
+        lower_text = text.lower()
+        lower_q = query.lower()
+        idx = lower_text.find(lower_q)
+        if idx == -1:
+            # Try individual words
+            for word in query.split():
+                idx = lower_text.find(word.lower())
+                if idx != -1:
+                    break
+        if idx == -1:
+            return text[:max_length] + ('...' if len(text) > max_length else '')
+
+        # Center the snippet around the match
+        start = max(0, idx - max_length // 2)
+        end = min(len(text), start + max_length)
+        snippet = text[start:end]
+        if start > 0:
+            snippet = '...' + snippet
+        if end < len(text):
+            snippet = snippet + '...'
+
+        # Highlight all occurrences of query terms
+        import re as _re
+        for word in query.split():
+            if word:
+                snippet = _re.sub(
+                    f'({_re.escape(word)})',
+                    r'<mark>\1</mark>',
+                    snippet,
+                    flags=_re.IGNORECASE
+                )
+        return snippet
+
     # ─── Clause Operations ───────────────────────────────────────────
 
     def insert_clause(self, document_id: int, clause_type: str, full_text: str,
@@ -1158,6 +1414,119 @@ class Database:
         summary['rent_roll'] = dict(row) if row else {}
 
         return summary
+
+    def get_dashboard_stats(self) -> Dict:
+        """Get comprehensive stats for the dashboard homepage."""
+        stats = {}
+
+        # ── Property counts ──
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM properties")
+        stats['property_count'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM portfolios")
+        stats['portfolio_count'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM buildings")
+        stats['building_count'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM units")
+        stats['unit_count'] = cur.fetchone()['cnt']
+
+        # ── Document counts ──
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM documents")
+        stats['document_count'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("""
+            SELECT document_type, COUNT(*) as count
+            FROM documents GROUP BY document_type ORDER BY count DESC
+        """)
+        stats['docs_by_type'] = {row['document_type']: row['count'] for row in cur.fetchall()}
+
+        # ── Review queue ──
+        cur = self.conn.execute(
+            "SELECT COUNT(*) as cnt FROM documents WHERE review_status = 'pending_review'")
+        stats['pending_review'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute(
+            "SELECT COUNT(*) as cnt FROM documents WHERE review_status = 'approved'")
+        stats['approved_docs'] = cur.fetchone()['cnt']
+
+        # ── Occupancy ──
+        cur = self.conn.execute(
+            "SELECT COUNT(*) as cnt FROM units WHERE status = 'occupied'")
+        stats['occupied_units'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute(
+            "SELECT COUNT(*) as cnt FROM units WHERE status = 'vacant'")
+        stats['vacant_units'] = cur.fetchone()['cnt']
+
+        if stats['unit_count'] > 0:
+            stats['occupancy_rate'] = round(
+                stats['occupied_units'] / stats['unit_count'] * 100, 1)
+        else:
+            stats['occupancy_rate'] = 0
+
+        # ── Financial rollups ──
+        cur = self.conn.execute(
+            "SELECT SUM(current_rent) as total FROM units WHERE current_rent IS NOT NULL")
+        row = cur.fetchone()
+        stats['total_monthly_rent'] = row['total'] or 0
+
+        cur = self.conn.execute(
+            "SELECT SUM(market_rent) as total FROM units WHERE market_rent IS NOT NULL")
+        row = cur.fetchone()
+        stats['total_market_rent'] = row['total'] or 0
+
+        # ── Extraction counts ──
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM clauses")
+        stats['clause_count'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM financial_terms")
+        stats['financial_term_count'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM rent_roll_entries")
+        stats['rent_roll_count'] = cur.fetchone()['cnt']
+
+        # ── Recent documents (last 10) ──
+        cur = self.conn.execute("""
+            SELECT d.*, p.name as linked_property_name
+            FROM documents d
+            LEFT JOIN properties p ON d.property_id = p.id
+            ORDER BY d.processed_at DESC LIMIT 10
+        """)
+        stats['recent_documents'] = [dict(row) for row in cur.fetchall()]
+
+        # ── Properties needing attention ──
+        # Properties with no linked documents
+        cur = self.conn.execute("""
+            SELECT p.id, p.name, p.property_type, p.status,
+                   COUNT(d.id) as doc_count
+            FROM properties p
+            LEFT JOIN documents d ON d.property_id = p.id
+            GROUP BY p.id
+            HAVING doc_count = 0
+            ORDER BY p.created_at DESC
+            LIMIT 5
+        """)
+        stats['properties_no_docs'] = [dict(row) for row in cur.fetchall()]
+
+        # ── Lease expirations (next 90 days) ──
+        cur = self.conn.execute("""
+            SELECT u.unit_number, u.current_tenant, u.current_rent,
+                   u.lease_end, b.name as building_name, p.name as property_name, p.id as property_id
+            FROM units u
+            JOIN buildings b ON u.building_id = b.id
+            JOIN properties p ON u.property_id = p.id
+            WHERE u.lease_end IS NOT NULL
+              AND u.lease_end != ''
+              AND u.lease_end <= date('now', '+90 days')
+              AND u.lease_end >= date('now')
+            ORDER BY u.lease_end ASC
+            LIMIT 10
+        """)
+        stats['upcoming_expirations'] = [dict(row) for row in cur.fetchall()]
+
+        return stats
 
     def export_to_csv(self, table: str, filepath: str, filters: Dict = None):
         """Export any table to CSV with optional filters."""

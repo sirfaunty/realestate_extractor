@@ -594,16 +594,47 @@ select:focus {
     border-bottom: 1px solid var(--border-subtle);
 }
 
-.search-result .meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 4px;
+.search-result:last-child {
+    border-bottom: none;
 }
 
-.search-result .snippet {
+.search-result-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.search-result-header a {
+    color: var(--cap-primary);
+    font-weight: 500;
+}
+
+.search-result-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.search-result-meta::before {
+    content: '\00B7';
+    margin-right: 6px;
+}
+
+.search-result-snippet {
     font-size: 13px;
     color: var(--text-secondary);
-    line-height: 1.5;
+    line-height: 1.6;
+}
+
+.search-result-snippet mark,
+.search-result .snippet mark {
+    background: var(--cap-cloud);
+    color: var(--cap-primary);
+    font-weight: 600;
+    padding: 1px 2px;
+    border-radius: 2px;
 }
 
 .search-result .snippet b {
@@ -611,7 +642,36 @@ select:focus {
     font-weight: 600;
 }
 
-/* ���── Flash Messages ─── */
+/* ───── Dashboard Attention Items ─── */
+
+.attention-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.attention-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.attention-item:first-child {
+    padding-top: 0;
+}
+
+.attention-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ───── Flash Messages ─── */
 
 .flash {
     padding: 12px 16px;

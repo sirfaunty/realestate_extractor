@@ -4,44 +4,427 @@
 {% block content %}
 <div class="page-header">
     <h2>Search</h2>
-    <p>Full-text search across all processed documents</p>
+    <p>Search across all extracted document data — raw text, clauses, financials, tenants, and more</p>
 </div>
 
+<!-- Search Form -->
 <div class="card">
-    <form method="GET" class="search-bar">
-        <input type="text" name="q" placeholder="Search for clauses, terms, tenants, amounts..."
-               value="{{ query }}">
-        <button type="submit" class="btn btn-primary">Search</button>
-    </form>
-
-    {% if query %}
-        {% if results %}
-        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-            {{ results|length }} result{{ 's' if results|length != 1 else '' }} for "{{ query }}"
+    <form method="GET" action="{{ url_for('search') }}" id="search-form">
+        <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+            <input type="text" name="q" placeholder="Search for clauses, tenants, amounts, terms, vendors..."
+                   value="{{ query }}" style="flex: 3;" autofocus>
+            <button type="submit" class="btn btn-primary">Search</button>
         </div>
 
-        {% for r in results %}
-        <div class="search-result">
-            <div class="meta">
-                <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
-                {% if r.doc_type %}
-                <span class="badge badge-{{ r.doc_type }}" style="margin-left: 4px;">{{ r.doc_type.replace('_', ' ') }}</span>
-                {% endif %}
-                &middot; Page {{ r.page_number }}
+        <!-- Filter Row -->
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Search In</label>
+                <select name="field" onchange="document.getElementById('search-form').submit()">
+                    <option value="all" {% if field == 'all' %}selected{% endif %}>All Categories</option>
+                    <option value="raw" {% if field == 'raw' %}selected{% endif %}>Raw Document Text</option>
+                    <option value="clauses" {% if field == 'clauses' %}selected{% endif %}>Clauses & Covenants</option>
+                    <option value="financial" {% if field == 'financial' %}selected{% endif %}>Financial Terms</option>
+                    <option value="tenants" {% if field == 'tenants' %}selected{% endif %}>Tenants & Rent Roll</option>
+                    <option value="expenses" {% if field == 'expenses' %}selected{% endif %}>Operating Expenses</option>
+                    <option value="gl" {% if field == 'gl' %}selected{% endif %}>General Ledger</option>
+                    <option value="documents" {% if field == 'documents' %}selected{% endif %}>Documents</option>
+                </select>
             </div>
-            <div class="snippet">{{ r.snippet|safe }}</div>
+            <div class="form-group" style="margin-bottom: 0; min-width: 160px;">
+                <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Property</label>
+                <select name="property_id">
+                    <option value="">All Properties</option>
+                    {% for p in properties %}
+                    <option value="{{ p.id }}" {% if filter_property_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; min-width: 160px;">
+                <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Portfolio</label>
+                <select name="portfolio_id">
+                    <option value="">All Portfolios</option>
+                    {% for pf in portfolios %}
+                    <option value="{{ pf.id }}" {% if filter_portfolio_id == pf.id %}selected{% endif %}>{{ pf.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Document Type</label>
+                <select name="doc_type">
+                    <option value="">All Types</option>
+                    <option value="lease" {% if filter_doc_type == 'lease' %}selected{% endif %}>Lease</option>
+                    <option value="loan" {% if filter_doc_type == 'loan' %}selected{% endif %}>Loan</option>
+                    <option value="closing" {% if filter_doc_type == 'closing' %}selected{% endif %}>Closing</option>
+                    <option value="guarantee" {% if filter_doc_type == 'guarantee' %}selected{% endif %}>Guarantee</option>
+                    <option value="rent_roll" {% if filter_doc_type == 'rent_roll' %}selected{% endif %}>Rent Roll</option>
+                    <option value="operating_statement" {% if filter_doc_type == 'operating_statement' %}selected{% endif %}>Operating Statement</option>
+                    <option value="general_ledger" {% if filter_doc_type == 'general_ledger' %}selected{% endif %}>General Ledger</option>
+                </select>
+            </div>
+            {% if query %}
+            <a href="{{ url_for('search') }}" style="font-size: 12px; color: var(--text-muted); padding: 8px 0;">Clear filters</a>
+            {% endif %}
         </div>
-        {% endfor %}
-        {% else %}
-        <div class="empty-state">
-            <p>No results found for "{{ query }}"</p>
+    </form>
+</div>
+
+{% if query %}
+<!-- Results Summary -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <div style="font-size: 14px; color: var(--text-secondary);">
+        <strong>{{ total_count }}</strong> result{{ 's' if total_count != 1 else '' }} for "<strong>{{ query }}</strong>"
+        {% if filter_property_id or filter_portfolio_id or filter_doc_type %}
+        <span style="color: var(--text-muted);">
+            (filtered{% if filter_doc_type %} · {{ filter_doc_type.replace('_', ' ') }}{% endif %})
+        </span>
+        {% endif %}
+    </div>
+</div>
+
+{% if total_count == 0 %}
+<div class="card">
+    <div class="empty-state">
+        <p>No results found for "{{ query }}". Try broadening your search or removing filters.</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══ RAW TEXT RESULTS ═══ -->
+{% if results.raw %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.5"/></svg>
+            Raw Document Text
+        </span>
+        <span class="badge badge-processing">{{ results.raw|length }}</span>
+    </div>
+    {% for r in results.raw %}
+    <div class="search-result">
+        <div class="search-result-header">
+            <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+            <span class="badge badge-{{ r.document_type }}" style="margin-left: 6px;">{{ r.document_type.replace('_', ' ') }}</span>
+            <span class="search-result-meta">Page {{ r.page_number }}</span>
+            {% if r.property_name %}
+            <span class="search-result-meta">
+                <a href="{{ url_for('property_detail', property_id=r.property_id) }}" style="color: var(--cap-primary);">{{ r.property_name }}</a>
+            </span>
+            {% endif %}
+        </div>
+        <div class="search-result-snippet">{{ r.snippet|safe }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- ═══ CLAUSE RESULTS ═══ -->
+{% if results.clauses %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><path d="M2 3h12v10H2V3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 7h6M5 10h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Clauses & Covenants
+        </span>
+        <span class="badge badge-processing">{{ results.clauses|length }}</span>
+    </div>
+    {% for r in results.clauses %}
+    <div class="search-result">
+        <div class="search-result-header">
+            <span style="font-weight: 600; color: var(--cap-navy);">{{ r.clause_type.replace('_', ' ').title() }}</span>
+            {% if r.section_ref %}
+            <span style="font-size: 12px; color: var(--text-muted);">{{ r.section_ref }}</span>
+            {% endif %}
+            <span class="search-result-meta">
+                <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+            </span>
+            {% if r.property_name %}
+            <span class="search-result-meta">
+                <a href="{{ url_for('property_detail', property_id=r.property_id) }}" style="color: var(--cap-primary);">{{ r.property_name }}</a>
+            </span>
+            {% endif %}
+        </div>
+        {% if r.summary %}
+        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">{{ r.summary }}</div>
+        {% endif %}
+        <div class="search-result-snippet">{{ r.snippet|safe }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- ═══ FINANCIAL TERMS RESULTS ═══ -->
+{% if results.financial %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 5h6M5 8h4M5 11h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Financial Terms
+        </span>
+        <span class="badge badge-processing">{{ results.financial|length }}</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Term</th>
+                <th>Label</th>
+                <th style="text-align: right;">Value</th>
+                <th>Unit</th>
+                <th>Effective</th>
+                <th>Document</th>
+                <th>Property</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results.financial %}
+            <tr>
+                <td style="font-weight: 500;">{{ r.term_type.replace('_', ' ').title() }}</td>
+                <td style="font-size: 13px;">{{ r.term_label or '—' }}</td>
+                <td style="text-align: right;">
+                    {% if r.value_numeric %}
+                    {{ '${:,.2f}'.format(r.value_numeric) }}
+                    {% else %}
+                    {{ r.value_raw or '—' }}
+                    {% endif %}
+                </td>
+                <td style="font-size: 12px; color: var(--text-muted);">{{ r.value_unit or '' }}</td>
+                <td style="font-size: 12px;">{{ r.effective_date or '—' }}</td>
+                <td style="font-size: 12px;">
+                    <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+                </td>
+                <td style="font-size: 12px;">
+                    {% if r.property_name %}
+                    <a href="{{ url_for('property_detail', property_id=r.property_id) }}">{{ r.property_name }}</a>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- ═══ TENANT / RENT ROLL RESULTS ═══ -->
+{% if results.tenants %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Tenants & Rent Roll
+        </span>
+        <span class="badge badge-processing">{{ results.tenants|length }}</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Tenant</th>
+                <th>Unit</th>
+                <th>SF</th>
+                <th style="text-align: right;">Monthly Rent</th>
+                <th>Lease Period</th>
+                <th>Status</th>
+                <th>Property</th>
+                <th>Document</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results.tenants %}
+            <tr>
+                <td style="font-weight: 500;">{{ r.tenant_name or '—' }}</td>
+                <td>{{ r.unit_number or r.suite or '—' }}</td>
+                <td>{{ '{:,.0f}'.format(r.square_footage) if r.square_footage else '—' }}</td>
+                <td style="text-align: right;">${{ '{:,.0f}'.format(r.monthly_rent) if r.monthly_rent else '—' }}</td>
+                <td style="font-size: 12px;">{{ r.lease_start or '?' }} — {{ r.lease_end or '?' }}</td>
+                <td>
+                    {% if r.status %}
+                    <span class="badge badge-{% if r.status == 'occupied' %}success{% elif r.status == 'vacant' %}error{% else %}processing{% endif %}">{{ r.status }}</span>
+                    {% else %}—{% endif %}
+                </td>
+                <td style="font-size: 12px;">
+                    {% if r.property_name %}
+                    <a href="{{ url_for('property_detail', property_id=r.property_id) }}">{{ r.property_name }}</a>
+                    {% else %}—{% endif %}
+                </td>
+                <td style="font-size: 12px;">
+                    <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- ═══ OPERATING EXPENSE RESULTS ═══ -->
+{% if results.expenses %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12M6 6v8" stroke="currentColor" stroke-width="1.5"/></svg>
+            Operating Expenses
+        </span>
+        <span class="badge badge-processing">{{ results.expenses|length }}</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Line Item</th>
+                <th>Category</th>
+                <th>Period</th>
+                <th style="text-align: right;">Amount</th>
+                <th>Property</th>
+                <th>Document</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results.expenses %}
+            <tr>
+                <td style="font-weight: 500;">{{ r.line_item }}</td>
+                <td style="font-size: 12px; color: var(--text-muted);">{{ r.subcategory or r.category }}</td>
+                <td style="font-size: 12px;">{{ r.period or '—' }}</td>
+                <td style="text-align: right;">${{ '{:,.0f}'.format(r.amount) if r.amount else '—' }}</td>
+                <td style="font-size: 12px;">
+                    {% if r.property_name %}
+                    <a href="{{ url_for('property_detail', property_id=r.property_id) }}">{{ r.property_name }}</a>
+                    {% else %}—{% endif %}
+                </td>
+                <td style="font-size: 12px;">
+                    <a href="{{ url_for('document_detail', doc_id=r.document_id) }}">{{ r.filename }}</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- ═══ GENERAL LEDGER RESULTS ═══ -->
+{% if results.gl %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            General Ledger
+        </span>
+        <span class="badge badge-processing">{{ results.gl|length }}</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Account</th>
+                <th>Description</th>
+                <th>Vendor</th>
+                <th style="text-align: right;">Debit</th>
+                <th style="text-align: right;">Credit</th>
+                <th>Property</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results.gl %}
+            <tr>
+                <td style="font-size: 12px;">{{ r.entry_date or '—' }}</td>
+                <td style="font-weight: 500;">{{ r.account_name or r.account_code or '—' }}</td>
+                <td style="font-size: 13px;">{{ r.description or '—' }}</td>
+                <td style="font-size: 12px;">{{ r.vendor or '—' }}</td>
+                <td style="text-align: right;">{{ '${:,.2f}'.format(r.debit) if r.debit else '' }}</td>
+                <td style="text-align: right;">{{ '${:,.2f}'.format(r.credit) if r.credit else '' }}</td>
+                <td style="font-size: 12px;">
+                    {% if r.property_name %}
+                    <a href="{{ url_for('property_detail', property_id=r.property_id) }}">{{ r.property_name }}</a>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- ═══ DOCUMENT RESULTS ═══ -->
+{% if results.documents %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.5"/></svg>
+            Documents
+        </span>
+        <span class="badge badge-processing">{{ results.documents|length }}</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Type</th>
+                <th>Property</th>
+                <th>Pages</th>
+                <th>Processed</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results.documents %}
+            <tr>
+                <td><a href="{{ url_for('document_detail', doc_id=r.id) }}" style="font-weight: 500;">{{ r.filename }}</a></td>
+                <td><span class="badge badge-{{ r.document_type }}">{{ r.document_type.replace('_', ' ') }}</span></td>
+                <td style="font-size: 12px;">
+                    {% if r.property_name %}
+                    <a href="{{ url_for('property_detail', property_id=r.property_id) }}">{{ r.property_name }}</a>
+                    {% elif r.property_address %}{{ r.property_address }}{% else %}—{% endif %}
+                </td>
+                <td>{{ r.page_count or '—' }}</td>
+                <td style="font-size: 12px;">{{ r.processed_at[:10] if r.processed_at else '—' }}</td>
+                <td>
+                    <span class="badge badge-{% if r.review_status == 'approved' %}success{% elif r.review_status == 'skipped' %}error{% else %}processing{% endif %}">
+                        {{ r.review_status.replace('_', ' ') }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% else %}
+<!-- Empty State (no query yet) -->
+<div class="card">
+    <div style="text-align: center; padding: 40px 20px;">
+        <div style="font-size: 48px; margin-bottom: 12px; opacity: 0.3;">
+            <svg width="48" height="48" viewBox="0 0 16 16" fill="none" style="display: inline;"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <p style="color: var(--text-secondary); font-size: 15px; margin-bottom: 8px;">Search across all your extracted document data</p>
+        <p style="color: var(--text-muted); font-size: 13px; max-width: 500px; margin: 0 auto;">
+            Find tenants, lease clauses, financial terms, operating expenses, GL entries, and raw document text.
+            Use the filters to narrow results to a specific property, portfolio, or document type.
+        </p>
+
+        {% if stats %}
+        <div style="display: flex; justify-content: center; gap: 24px; margin-top: 24px;">
+            <div style="text-align: center;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--cap-navy);">{{ stats.documents }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Documents</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--cap-navy);">{{ stats.pages_indexed }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Pages Indexed</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--cap-navy);">{{ stats.clauses }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Clauses</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--cap-navy);">{{ stats.financial_terms }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Financial Terms</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--cap-navy);">{{ stats.rent_roll_entries }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Rent Roll Entries</div>
+            </div>
         </div>
         {% endif %}
-    {% else %}
-    <div class="empty-state">
-        <div class="icon">&#8981;</div>
-        <p>Enter a search term to find content across all your processed documents.</p>
     </div>
-    {% endif %}
 </div>
+{% endif %}
+
 {% endblock %}

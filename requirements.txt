@@ -14,3 +14,6 @@ requests>=2.31.0
 
 # Web interface
 Flask>=3.0.0
+
+# Excel export
+openpyxl>=3.1.0

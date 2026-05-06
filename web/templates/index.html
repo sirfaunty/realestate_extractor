@@ -2,65 +2,227 @@
 {% block title %}Dashboard — capactive{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Dashboard</h2>
-    <p>Portfolio overview and processing status</p>
-</div>
 
-<!-- Stats -->
-<div class="card-grid" style="margin-bottom: 24px;">
-    <div class="stat-card">
-        <div class="stat-value">{{ summary.get('total_properties', 0) }}</div>
-        <div class="stat-label">Properties</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value">{{ documents|length }}</div>
-        <div class="stat-label">Documents</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value">{{ summary.get('rent_roll', {}).get('units', 0) or 0 }}</div>
-        <div class="stat-label">Rent Roll Units</div>
-    </div>
-    <div class="stat-card">
-        {% set monthly = summary.get('rent_roll', {}).get('total_monthly_rent', 0) or 0 %}
-        <div class="stat-value">${{ "{:,.0f}".format(monthly) }}</div>
-        <div class="stat-label">Monthly Rent</div>
-    </div>
-</div>
+{% set d = dashboard %}
 
-<!-- Quick Actions -->
-<div class="card">
-    <div class="card-header">Quick Actions</div>
-    <div style="display: flex; gap: 12px;">
+<!-- Welcome Header -->
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
+    <div>
+        <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">Dashboard</h2>
+        <p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
+            {% if d.document_count == 0 %}
+            Welcome to Capactive. Upload your first document to get started.
+            {% else %}
+            {{ d.property_count }} propert{{ 'ies' if d.property_count != 1 else 'y' }}, {{ d.document_count }} document{{ 's' if d.document_count != 1 else '' }} processed
+            {% endif %}
+        </p>
+    </div>
+    <div style="display: flex; gap: 8px;">
+        {% if can_edit('extraction.upload') %}
         <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload PDF</a>
-        <a href="{{ url_for('batch') }}" class="btn btn-secondary">Batch Process Folder</a>
-        {% if documents %}
-        <a href="{{ url_for('search') }}" class="btn btn-secondary">Search Documents</a>
+        {% endif %}
+        {% if can_edit('extraction.batch') %}
+        <a href="{{ url_for('batch') }}" class="btn btn-secondary">Batch Process</a>
         {% endif %}
     </div>
 </div>
 
-<!-- Documents by Type -->
-{% if summary.get('document_counts') %}
-<div class="card">
-    <div class="card-header">Documents by Type</div>
-    <div class="card-grid">
-        {% for dtype, count in summary.document_counts.items() %}
-        <div class="stat-card">
-            <div class="stat-value">{{ count }}</div>
-            <div class="stat-label">
+<!-- ═══ TOP STATS ROW ═══ -->
+<div class="card-grid" style="margin-bottom: 20px;">
+    <div class="stat-card">
+        <div class="stat-value">{{ d.property_count }}</div>
+        <div class="stat-label">Properties</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ d.unit_count }}</div>
+        <div class="stat-label">Units</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ d.occupancy_rate }}%</div>
+        <div class="stat-label">Occupancy</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ '{:,.0f}'.format(d.total_monthly_rent) }}</div>
+        <div class="stat-label">Monthly Rent</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ d.document_count }}</div>
+        <div class="stat-label">Documents</div>
+    </div>
+</div>
+
+<!-- ═══ ATTENTION ITEMS ═══ -->
+{% if d.pending_review > 0 or d.properties_no_docs or d.upcoming_expirations %}
+<div class="card" style="border-left: 3px solid var(--cap-active); margin-bottom: 20px;">
+    <div class="card-header" style="color: var(--cap-navy);">Needs Attention</div>
+
+    {% if d.pending_review > 0 %}
+    <div class="attention-item">
+        <div class="attention-icon" style="background: var(--cap-cloud); color: var(--cap-primary);">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3h12v10H2V3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 7l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex: 1;">
+            <div style="font-weight: 500; font-size: 14px; color: var(--text);">
+                {{ d.pending_review }} document{{ 's' if d.pending_review != 1 else '' }} pending review
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted);">Documents need to be matched to properties</div>
+        </div>
+        {% if can_read('extraction.review') %}
+        <a href="{{ url_for('review_queue') }}" class="btn btn-sm btn-primary">Review</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if d.upcoming_expirations %}
+    <div class="attention-item">
+        <div class="attention-icon" style="background: #FEF3CD; color: #856404;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8.5L10.5 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <div style="flex: 1;">
+            <div style="font-weight: 500; font-size: 14px; color: var(--text);">
+                {{ d.upcoming_expirations|length }} lease{{ 's' if d.upcoming_expirations|length != 1 else '' }} expiring within 90 days
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted);">
+                {% for exp in d.upcoming_expirations[:3] %}
+                {{ exp.current_tenant or exp.unit_number }} ({{ exp.lease_end }}){% if not loop.last %}, {% endif %}
+                {% endfor %}
+                {% if d.upcoming_expirations|length > 3 %}and {{ d.upcoming_expirations|length - 3 }} more{% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if d.properties_no_docs %}
+    <div class="attention-item">
+        <div class="attention-icon" style="background: var(--danger-light, #FDE8E8); color: var(--danger, #E53E3E);">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14V7l6-5 6 5v7H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="6" y="9" width="4" height="5" rx="0.5" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+        <div style="flex: 1;">
+            <div style="font-weight: 500; font-size: 14px; color: var(--text);">
+                {{ d.properties_no_docs|length }} propert{{ 'ies' if d.properties_no_docs|length != 1 else 'y' }} with no linked documents
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted);">
+                {% for prop in d.properties_no_docs[:3] %}
+                {{ prop.name }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+                {% if d.properties_no_docs|length > 3 %}and {{ d.properties_no_docs|length - 3 }} more{% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- ═══ TWO-COLUMN LAYOUT ═══ -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+
+    <!-- Documents by Type -->
+    {% if d.docs_by_type %}
+    <div class="card">
+        <div class="card-header">Documents by Type</div>
+        {% for dtype, count in d.docs_by_type.items() %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
+            <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="badge badge-{{ dtype }}">{{ dtype.replace('_', ' ') }}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 120px; height: 6px; background: var(--border-subtle); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 100%; width: {{ (count / d.document_count * 100) if d.document_count > 0 else 0 }}%; background: var(--cap-active); border-radius: 3px;"></div>
+                </div>
+                <span style="font-weight: 600; font-size: 14px; color: var(--cap-navy); min-width: 28px; text-align: right;">{{ count }}</span>
             </div>
         </div>
         {% endfor %}
     </div>
+    {% endif %}
+
+    <!-- Extraction Summary -->
+    <div class="card">
+        <div class="card-header">Extraction Summary</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 20px;">{{ d.clause_count }}</div>
+                <div class="stat-label">Clauses Extracted</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 20px;">{{ d.financial_term_count }}</div>
+                <div class="stat-label">Financial Terms</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 20px;">{{ d.rent_roll_count }}</div>
+                <div class="stat-label">Rent Roll Entries</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 20px;">{{ d.approved_docs }}</div>
+                <div class="stat-label">Docs Linked</div>
+            </div>
+        </div>
+
+        <!-- Asset counts -->
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px;">Asset Hierarchy</div>
+            <div style="display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary);">
+                <span><strong style="color: var(--cap-navy);">{{ d.portfolio_count }}</strong> Portfolios</span>
+                <span><strong style="color: var(--cap-navy);">{{ d.property_count }}</strong> Properties</span>
+                <span><strong style="color: var(--cap-navy);">{{ d.building_count }}</strong> Buildings</span>
+                <span><strong style="color: var(--cap-navy);">{{ d.unit_count }}</strong> Units</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ OCCUPANCY BAR (if units exist) ═══ -->
+{% if d.unit_count > 0 %}
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Occupancy Overview</span>
+        <span style="font-size: 13px; color: var(--text-muted);">
+            {{ d.occupied_units }} occupied / {{ d.vacant_units }} vacant
+        </span>
+    </div>
+    <div style="display: flex; gap: 20px; align-items: center;">
+        <div style="flex: 1;">
+            <div style="height: 24px; background: var(--border-subtle); border-radius: 12px; overflow: hidden; position: relative;">
+                <div style="height: 100%; width: {{ d.occupancy_rate }}%; background: linear-gradient(90deg, var(--cap-primary), var(--cap-signal)); border-radius: 12px; transition: width 0.5s;"></div>
+            </div>
+        </div>
+        <div style="font-size: 24px; font-weight: 700; color: var(--cap-navy); min-width: 70px; text-align: right;">
+            {{ d.occupancy_rate }}%
+        </div>
+    </div>
+    {% if d.total_monthly_rent > 0 %}
+    <div style="display: flex; gap: 24px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px;">
+        <div>
+            <span style="color: var(--text-muted);">Monthly Rent</span>
+            <strong style="margin-left: 6px; color: var(--cap-navy);">${{ '{:,.0f}'.format(d.total_monthly_rent) }}</strong>
+        </div>
+        <div>
+            <span style="color: var(--text-muted);">Market Rent</span>
+            <strong style="margin-left: 6px; color: var(--cap-navy);">${{ '{:,.0f}'.format(d.total_market_rent) }}</strong>
+        </div>
+        {% if d.total_market_rent > 0 and d.total_monthly_rent > 0 %}
+        <div>
+            <span style="color: var(--text-muted);">Loss-to-Lease</span>
+            {% set ltl = d.total_market_rent - d.total_monthly_rent %}
+            <strong style="margin-left: 6px; color: {% if ltl > 0 %}var(--danger, #E53E3E){% else %}var(--cap-signal){% endif %};">
+                ${{ '{:,.0f}'.format(ltl|abs) }}{% if ltl > 0 %} below market{% endif %}
+            </strong>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
-<!-- Recent Documents -->
+<!-- ═══ RECENT DOCUMENTS ═══ -->
 <div class="card">
-    <div class="card-header">Recent Documents</div>
-    {% if documents %}
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Recent Documents</span>
+        {% if d.document_count > 0 %}
+        <a href="{{ url_for('documents') }}" style="font-size: 12px; color: var(--cap-primary);">View all {{ d.document_count }}</a>
+        {% endif %}
+    </div>
+    {% if d.recent_documents %}
     <table class="data-table">
         <thead>
             <tr>
@@ -68,49 +230,71 @@
                 <th>Type</th>
                 <th>Property</th>
                 <th>Pages</th>
+                <th>Status</th>
                 <th>Processed</th>
-                <th></th>
             </tr>
         </thead>
         <tbody>
-            {% for doc in documents[:10] %}
+            {% for doc in d.recent_documents %}
             <tr>
-                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a></td>
+                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}" style="font-weight: 500;">{{ doc.filename }}</a></td>
                 <td><span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span></td>
-                <td>{{ doc.property_name or '—' }}</td>
+                <td style="font-size: 13px;">
+                    {% if doc.linked_property_name %}
+                    <a href="{{ url_for('property_detail', property_id=doc.property_id) }}">{{ doc.linked_property_name }}</a>
+                    {% elif doc.property_name %}
+                    {{ doc.property_name }}
+                    {% else %}
+                    <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
                 <td>{{ doc.page_count or '—' }}</td>
-                <td>{{ doc.processed_at[:16] if doc.processed_at else '—' }}</td>
-                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+                <td>
+                    <span class="badge badge-{% if doc.review_status == 'approved' %}success{% elif doc.review_status == 'skipped' %}error{% else %}processing{% endif %}">
+                        {{ doc.review_status.replace('_', ' ') }}
+                    </span>
+                </td>
+                <td style="font-size: 12px; color: var(--text-muted);">{{ doc.processed_at[:10] if doc.processed_at else '—' }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-    {% if documents|length > 10 %}
-    <div style="padding: 12px; text-align: center;">
-        <a href="{{ url_for('documents') }}" class="btn btn-sm btn-secondary">View all {{ documents|length }} documents</a>
-    </div>
-    {% endif %}
     {% else %}
     <div class="empty-state">
-        <div class="icon">&#128196;</div>
-        <p>No documents processed yet.</p>
-        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload your first PDF</a>
+        <div style="margin-bottom: 12px;">
+            <svg width="48" height="48" viewBox="0 0 28 28" fill="none" style="opacity: 0.3;">
+                <rect x="2" y="16" width="6" height="10" rx="1.5" fill="var(--cap-primary)"/>
+                <rect x="11" y="10" width="6" height="16" rx="1.5" fill="var(--cap-active)"/>
+                <rect x="20" y="4" width="6" height="22" rx="1.5" fill="var(--cap-navy)"/>
+            </svg>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 8px;">No documents processed yet</p>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Upload a PDF to start extracting lease terms, rent rolls, and financial data.</p>
+        {% if can_edit('extraction.upload') %}
+        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload Your First PDF</a>
+        {% endif %}
     </div>
     {% endif %}
 </div>
 
-<!-- Export -->
-{% if documents %}
+<!-- ═══ EXPORT QUICK LINKS ═══ -->
+{% if d.document_count > 0 %}
 <div class="card">
     <div class="card-header">Export Data</div>
     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <a href="/api/export/documents" class="btn btn-sm btn-secondary">Documents CSV</a>
-        <a href="/api/export/financial_terms" class="btn btn-sm btn-secondary">Financial Terms CSV</a>
-        <a href="/api/export/clauses" class="btn btn-sm btn-secondary">Clauses CSV</a>
-        <a href="/api/export/rent_roll_entries" class="btn btn-sm btn-secondary">Rent Roll CSV</a>
-        <a href="/api/export/operating_statement_items" class="btn btn-sm btn-secondary">Operating Stmts CSV</a>
-        <a href="/api/export/gl_entries" class="btn btn-sm btn-secondary">GL Entries CSV</a>
+        {% if d.rent_roll_count > 0 %}
+        <a href="{{ url_for('export_data', export_type='rent_roll', format='xlsx') }}" class="btn btn-sm btn-secondary">Rent Roll</a>
+        {% endif %}
+        <a href="{{ url_for('export_data', export_type='documents', format='xlsx') }}" class="btn btn-sm btn-secondary">Document Index</a>
+        {% if d.financial_term_count > 0 %}
+        <a href="{{ url_for('export_data', export_type='financial_terms', format='xlsx') }}" class="btn btn-sm btn-secondary">Financial Terms</a>
+        {% endif %}
+        {% if d.clause_count > 0 %}
+        <a href="{{ url_for('export_data', export_type='clauses', format='xlsx') }}" class="btn btn-sm btn-secondary">Clauses</a>
+        {% endif %}
+        <a href="{{ url_for('export_data', export_type='properties', format='xlsx') }}" class="btn btn-sm btn-secondary">Properties</a>
     </div>
 </div>
 {% endif %}
+
 {% endblock %}

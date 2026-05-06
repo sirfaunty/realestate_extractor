@@ -4,26 +4,19 @@
 {% block content %}
 <div class="page-header">
     <h2>Batch Process</h2>
-    <p>Process all PDFs in a folder at once</p>
+    <p>Upload an entire folder of PDFs at once</p>
 </div>
 
-<form method="POST" id="batch-form">
+<form method="POST" enctype="multipart/form-data" id="batch-form">
     <div class="card">
-        <div class="card-header">Folder Location</div>
+        <div class="card-header">Choose Folder</div>
 
-        <div class="form-group">
-            <label for="folder_path">Folder Path</label>
-            <input type="text" name="folder_path" id="folder_path"
-                   placeholder="e.g., ~/Documents/leases or /Users/you/Desktop/pdfs">
-            <div class="hint">Enter the full path to the folder containing your PDF files. Use ~/Documents for your Documents folder.</div>
+        <div class="upload-zone" id="drop-zone" onclick="document.getElementById('folder-input').click()">
+            <div class="icon">&#128193;</div>
+            <p>Click to <span class="browse">choose a folder</span> containing your PDFs</p>
+            <input type="file" name="files" id="folder-input" webkitdirectory multiple style="display: none;">
         </div>
-
-        <div class="form-group">
-            <label class="checkbox-group">
-                <input type="checkbox" name="recursive">
-                Include subfolders
-            </label>
-        </div>
+        <div class="file-selected" id="files-selected"></div>
     </div>
 
     <div class="card">
@@ -47,15 +40,13 @@
             <div class="hint">Optional. Associates all documents in this batch with the same property.</div>
         </div>
 
-        <div class="form-group">
-            <label class="checkbox-group">
-                <input type="checkbox" name="force_ocr">
-                Force OCR on all files
-            </label>
+        <div class="hint" style="margin-top: 8px; padding: 10px 14px; background: var(--cap-cloud); border-radius: 6px;">
+            <strong>Scanned documents detected automatically.</strong>
+            Each PDF is analyzed individually — scanned pages will be routed through OCR without any extra steps.
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary" id="submit-btn">
+    <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
         Start Batch Processing
     </button>
 </form>
@@ -63,10 +54,63 @@
 
 {% block scripts %}
 <script>
+const folderInput = document.getElementById('folder-input');
+const filesSelected = document.getElementById('files-selected');
+const submitBtn = document.getElementById('submit-btn');
+
+folderInput.addEventListener('change', function() {
+    if (this.files.length) {
+        // Filter to only PDFs
+        const pdfs = Array.from(this.files).filter(f =>
+            f.name.toLowerCase().endsWith('.pdf')
+        );
+        const nonPdfs = this.files.length - pdfs.length;
+
+        if (pdfs.length === 0) {
+            filesSelected.innerHTML = '<span style="color: var(--cap-danger);">No PDF files found in the selected folder.</span>';
+            filesSelected.classList.add('visible');
+            submitBtn.disabled = true;
+            return;
+        }
+
+        let msg = '<strong>' + pdfs.length + ' PDF' + (pdfs.length !== 1 ? 's' : '') + '</strong> found';
+        if (nonPdfs > 0) {
+            msg += ' <span style="color: var(--cap-muted);">(' + nonPdfs + ' non-PDF file' + (nonPdfs !== 1 ? 's' : '') + ' will be skipped)</span>';
+        }
+        filesSelected.innerHTML = msg;
+        filesSelected.classList.add('visible');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Process ' + pdfs.length + ' PDF' + (pdfs.length !== 1 ? 's' : '');
+    }
+});
+
+// Drag and drop support
+const dropZone = document.getElementById('drop-zone');
+
+dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+    // Note: drag-and-drop folder upload has limited browser support.
+    // If files are dropped, we handle them as individual files.
+    if (e.dataTransfer.files.length) {
+        folderInput.files = e.dataTransfer.files;
+        folderInput.dispatchEvent(new Event('change'));
+    }
+});
+
 document.getElementById('batch-form').addEventListener('submit', function() {
-    const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
-    btn.textContent = 'Starting...';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Uploading & Processing...';
 });
 </script>
 {% endblock %}
