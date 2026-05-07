@@ -87,7 +87,14 @@ class ExtractionEngine:
         if self.llm_available and template.llm_extraction_prompt:
             return self._extract_financial_llm(doc, template)
         else:
-            return self._extract_financial_rules(doc, template)
+            # Rule-based + prose + inference (no LLM gap-fill)
+            rule_terms = self._extract_financial_rules(doc, template)
+            found_fields = {t['term_type'] for t in rule_terms}
+
+            prose_terms = self._extract_prose_patterns(doc, template, found_fields, rule_terms)
+            rule_terms.extend(prose_terms)
+
+            return rule_terms
 
     def _extract_financial_llm(self, doc: DocumentContent,
                                 template: DocumentTemplate) -> List[Dict]:
@@ -104,7 +111,7 @@ class ExtractionEngine:
         found_fields = {t['term_type'] for t in rule_terms}
 
         # Step 2: Prose-pattern extraction for text fields
-        prose_terms = self._extract_prose_patterns(doc, template, found_fields)
+        prose_terms = self._extract_prose_patterns(doc, template, found_fields, rule_terms)
         found_fields.update(t['term_type'] for t in prose_terms)
         rule_terms.extend(prose_terms)
 
@@ -195,7 +202,8 @@ class ExtractionEngine:
 
     def _extract_prose_patterns(self, doc: DocumentContent,
                                  template: DocumentTemplate,
-                                 already_found: set) -> List[Dict]:
+                                 already_found: set,
+                                 rule_terms: List[Dict] = None) -> List[Dict]:
         """
         Extract text fields using prose_patterns defined on FieldDefinitions.
 
@@ -226,12 +234,13 @@ class ExtractionEngine:
                     break  # first match wins
 
         # Inference-based extraction for fields that can be deduced
-        terms.extend(self._infer_fields(doc, template, already_found, terms))
+        terms.extend(self._infer_fields(doc, template, already_found, terms, rule_terms or []))
 
         return terms
 
     def _infer_fields(self, doc: DocumentContent, template: DocumentTemplate,
-                       already_found: set, prose_terms: List[Dict]) -> List[Dict]:
+                       already_found: set, prose_terms: List[Dict],
+                       all_terms: List[Dict] = None) -> List[Dict]:
         """
         Infer field values that aren't explicitly stated but can be deduced.
 
@@ -239,8 +248,10 @@ class ExtractionEngine:
         - rate_type = "Fixed" if no variable-rate indicators appear
         - loan_term can be calculated from origination + maturity dates
         - default_rate from "Default Interest Rate" mentions
+        - recourse = infer from document structure
         """
         inferred = []
+        all_terms = all_terms or []
         found = already_found | {t['term_type'] for t in prose_terms}
         text_lower = doc.full_text.lower().replace('\n', ' ')
 
@@ -258,11 +269,68 @@ class ExtractionEngine:
                         "confidence": 0.75,
                     })
 
-        # Loan term: calculate from origination and maturity dates if both found
+        # Loan term: calculate from origination and maturity dates
         if 'loan_term' not in found:
-            orig = next((t for t in list(already_found) if t == 'origination_date'), None)
-            mat = next((t for t in list(already_found) if t == 'maturity_date'), None)
-            # We could calculate, but let the LLM do this more accurately
+            orig_term = next((t for t in all_terms if t['term_type'] == 'origination_date'), None)
+            mat_term = next((t for t in all_terms if t['term_type'] == 'maturity_date'), None)
+            if orig_term and mat_term:
+                term_str = self._calculate_loan_term(
+                    orig_term.get('value_raw', ''),
+                    mat_term.get('value_raw', '')
+                )
+                if term_str:
+                    inferred.append({
+                        "term_type": "loan_term",
+                        "term_label": "loan term",
+                        "value_raw": term_str,
+                        "confidence": 0.85,
+                    })
+
+        # Recourse: infer from document context
+        if 'recourse' not in found:
+            has_field = any(f.name == 'recourse' for f in template.financial_fields)
+            if has_field:
+                # Check for non-recourse indicators
+                if re.search(r'(?i)non[- ]?recourse', text_lower):
+                    inferred.append({
+                        "term_type": "recourse",
+                        "term_label": "recourse",
+                        "value_raw": "Non-recourse",
+                        "confidence": 0.80,
+                    })
+                # If there's a separate guaranty document referenced, likely recourse
+                elif re.search(r'(?i)guaranty|guarantor|personal\s*(?:liability|guarantee)', text_lower):
+                    inferred.append({
+                        "term_type": "recourse",
+                        "term_label": "recourse",
+                        "value_raw": "Recourse (guaranty referenced)",
+                        "confidence": 0.70,
+                    })
+
+        # Prepayment: if prose pattern matched something generic, try to improve it
+        prepay_term = next((t for t in prose_terms if t['term_type'] == 'prepayment_terms'), None)
+        if prepay_term and 'stated therein' in prepay_term.get('value_raw', '').lower():
+            # The match is just a reference to the Note — replace with what we can find
+            # Look for the actual prepayment structure mentioned
+            m = re.search(
+                r'(?i)(?:prepayment\s+(?:premium|penalty|fee))'
+                r'[^.]*?'
+                r'((?:yield\s*maintenance|defeasance|lockout|'
+                r'(?:\d+%?\s*(?:of|the)\s*)?(?:outstanding|unpaid|principal)'
+                r')[^.]{0,100})',
+                text_lower
+            )
+            if m:
+                prepay_term['value_raw'] = m.group(0).strip()[:150]
+            else:
+                # Check for lockout period or premium percentage
+                if 'lockout' in text_lower:
+                    prepay_term['value_raw'] = "Lockout period applies (see Note)"
+                elif re.search(r'(?i)prepayment\s+premium', text_lower):
+                    prepay_term['value_raw'] = "Prepayment premium required (per Note terms)"
+                else:
+                    prepay_term['value_raw'] = "Subject to prepayment premium per Note"
+                prepay_term['confidence'] = 0.65
 
         # Default interest rate: look for the written-out rate near
         # "Default Interest Rate" definition
@@ -744,6 +812,42 @@ class ExtractionEngine:
         'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5,
         'sixth': 6, 'seventh': 7, 'eighth': 8, 'ninth': 9, 'tenth': 10,
     }
+
+    @staticmethod
+    def _calculate_loan_term(origination_raw: str, maturity_raw: str) -> Optional[str]:
+        """Calculate loan term from origination and maturity dates."""
+        from datetime import datetime as dt
+        try:
+            # Parse MM/DD/YYYY format (our normalized output)
+            def parse_date(s):
+                for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+                    try:
+                        return dt.strptime(s.strip(), fmt)
+                    except ValueError:
+                        continue
+                return None
+
+            orig = parse_date(origination_raw)
+            mat = parse_date(maturity_raw)
+            if not orig or not mat:
+                return None
+
+            # Calculate difference in months
+            months = (mat.year - orig.year) * 12 + (mat.month - orig.month)
+            if months <= 0:
+                return None
+
+            years = months // 12
+            remaining_months = months % 12
+
+            if remaining_months == 0:
+                return f"{years} {'year' if years == 1 else 'years'}"
+            elif years == 0:
+                return f"{remaining_months} {'month' if remaining_months == 1 else 'months'}"
+            else:
+                return f"{years} {'year' if years == 1 else 'years'}, {remaining_months} {'month' if remaining_months == 1 else 'months'}"
+        except Exception:
+            return None
 
     @classmethod
     def _normalize_date(cls, raw: str) -> Optional[str]:
