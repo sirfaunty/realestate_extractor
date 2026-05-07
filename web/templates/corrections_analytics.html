@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Corrections Analytics — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Corrections Analytics</h2>
+    <p>Understand extraction quality by analyzing user corrections</p>
+</div>
+
+<!-- Summary Stats -->
+{% if analytics.summary %}
+<div class="card-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ analytics.summary.total_corrections }}</div>
+        <div class="stat-label">Total Corrections</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ analytics.summary.documents_with_corrections }}</div>
+        <div class="stat-label">Documents Corrected</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ analytics.summary.field_types_corrected }}</div>
+        <div class="stat-label">Field Types Corrected</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ analytics.summary.correction_rate }}%</div>
+        <div class="stat-label">Overall Correction Rate</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Field Breakdown -->
+<div class="card">
+    <div class="card-header">Field Type Breakdown</div>
+    {% if analytics.field_breakdown %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Field Type</th>
+                <th>Total Extracted</th>
+                <th>Corrections</th>
+                <th>Correction Rate</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for field in analytics.field_breakdown %}
+            <tr>
+                <td><strong>{{ field.term_type }}</strong></td>
+                <td>{{ field.total_terms }}</td>
+                <td>{{ field.corrections }}</td>
+                <td>
+                    <span class="badge {% if field.correction_rate >= 50 %}badge-error{% elif field.correction_rate >= 20 %}badge-processing{% else %}badge-success{% endif %}">
+                        {{ field.correction_rate }}%
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 24px; text-align: center; color: var(--text-muted);">
+        No corrections yet. Users can correct values in the document detail view.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Recent Corrections Table -->
+<div class="card">
+    <div class="card-header">Recent Corrections</div>
+    {% if analytics.recent_corrections %}
+    <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Field Type</th>
+                    <th>Original Value</th>
+                    <th>Corrected Value</th>
+                    <th>Edited</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for correction in analytics.recent_corrections %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('document_detail', doc_id=correction.document_id) }}">
+                            {{ correction.filename }}
+                        </a>
+                    </td>
+                    <td><code style="background: var(--cap-cloud); padding: 2px 6px; border-radius: 4px; font-size: 12px;">{{ correction.term_type }}</code></td>
+                    <td style="color: var(--text-muted); font-family: monospace; font-size: 13px;">{{ correction.value_raw or '—' }}</td>
+                    <td style="color: var(--cap-primary); font-family: monospace; font-size: 13px; font-weight: 500;">{{ correction.user_value_raw or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ correction.user_modified_at[:16] if correction.user_modified_at else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="padding: 24px; text-align: center; color: var(--text-muted);">
+        No corrections made yet. When users edit extracted values in documents, they will appear here.
+    </div>
+    {% endif %}
+</div>
+
+<div style="margin-top: 16px; padding: 16px; background: var(--cap-cloud); border-radius: var(--radius); font-size: 13px; color: var(--text-secondary);">
+    <strong>What this tells you:</strong> High correction rates for specific field types indicate that the extraction model may need improvement for those fields. Low correction rates suggest good extraction accuracy for those field types.
+</div>
+
+{% endblock %}

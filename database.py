@@ -1593,3 +1593,61 @@ class Database:
                 writer.writerows([tuple(row) for row in rows])
             return len(rows)
         return 0
+
+    def get_corrections_analytics(self) -> Dict:
+        """Get analytics on user corrections to extracted financial terms."""
+        analytics = {}
+
+        # Summary stats
+        cur = self.conn.execute("""
+            SELECT COUNT(*) as total_corrections,
+                   COUNT(DISTINCT document_id) as documents_with_corrections,
+                   COUNT(DISTINCT term_type) as field_types_corrected
+            FROM financial_terms
+            WHERE user_value_raw IS NOT NULL
+        """)
+        row = cur.fetchone()
+        analytics['summary'] = dict(row) if row else {
+            'total_corrections': 0,
+            'documents_with_corrections': 0,
+            'field_types_corrected': 0
+        }
+
+        # Overall correction rate
+        cur = self.conn.execute("""
+            SELECT COUNT(*) as total_terms,
+                   SUM(CASE WHEN user_value_raw IS NOT NULL THEN 1 ELSE 0 END) as correction_count
+            FROM financial_terms
+        """)
+        row = cur.fetchone()
+        if row and row['total_terms'] > 0:
+            analytics['summary']['correction_rate'] = round(
+                (row['correction_count'] or 0) / row['total_terms'] * 100, 1
+            )
+        else:
+            analytics['summary']['correction_rate'] = 0
+
+        # Field breakdown by term type
+        cur = self.conn.execute("""
+            SELECT term_type,
+                   COUNT(*) as total_terms,
+                   SUM(CASE WHEN user_value_raw IS NOT NULL THEN 1 ELSE 0 END) as corrections,
+                   ROUND(SUM(CASE WHEN user_value_raw IS NOT NULL THEN 1.0 ELSE 0.0 END) / COUNT(*) * 100, 1) as correction_rate
+            FROM financial_terms
+            GROUP BY term_type
+            ORDER BY corrections DESC
+        """)
+        analytics['field_breakdown'] = [dict(row) for row in cur.fetchall()]
+
+        # Most common corrections
+        cur = self.conn.execute("""
+            SELECT ft.*, d.filename
+            FROM financial_terms ft
+            JOIN documents d ON ft.document_id = d.id
+            WHERE ft.user_value_raw IS NOT NULL
+            ORDER BY ft.user_modified_at DESC
+            LIMIT 50
+        """)
+        analytics['recent_corrections'] = [dict(row) for row in cur.fetchall()]
+
+        return analytics

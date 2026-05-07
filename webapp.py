@@ -1125,6 +1125,20 @@ def admin_audit():
                            days=days, user_filter=user_filter)
 
 
+@app.route('/analytics/corrections')
+@login_required
+def corrections_analytics():
+    """Corrections analytics page — identify extraction quality patterns."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        analytics = db.get_corrections_analytics()
+    finally:
+        db.close()
+
+    return render_template('corrections_analytics.html', analytics=analytics)
+
+
 # ─── Routes: Document Review Queue ───────────────────────────────────
 
 @app.route('/review')
