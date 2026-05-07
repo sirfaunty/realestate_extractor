@@ -259,10 +259,7 @@ LOAN_DOCUMENT = DocumentTemplate(
                         ]),
         FieldDefinition("loan_term", "Term of the loan (e.g., '30 years', '10 years')",
                         priority=FieldPriority.IMPORTANT,
-                        aliases=["term"],
-                        prose_patterns=[
-                            r"(?i)(?:term|period)\s+(?:of|is)\s+([\w\s]+(?:year|month)s?)",
-                        ]),
+                        aliases=["term", "loan term", "mortgage term"]),
         FieldDefinition("payment_amount", "Monthly/periodic payment amount", field_type="currency",
                         priority=FieldPriority.IMPORTANT,
                         aliases=["debt service", "monthly payment", "installment"]),

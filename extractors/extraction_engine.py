@@ -840,6 +840,12 @@ class ExtractionEngine:
             years = months // 12
             remaining_months = months % 12
 
+            # In CRE, if both dates are on the 1st and remainder is 1 month,
+            # it's typically just the next round year (e.g., 03/01 to 04/01 = 12 years, not 12y 1m)
+            if remaining_months == 1 and orig.day <= 1 and mat.day <= 1:
+                years += 0  # keep as-is but present as "~12 years"
+                return f"{years} {'year' if years == 1 else 'years'}"
+
             if remaining_months == 0:
                 return f"{years} {'year' if years == 1 else 'years'}"
             elif years == 0:

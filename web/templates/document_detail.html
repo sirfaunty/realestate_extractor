@@ -43,20 +43,29 @@
                     <th>Value</th>
                     <th>Numeric</th>
                     <th>Unit</th>
-                    <th>Section</th>
                     <th>Confidence</th>
                 </tr>
             </thead>
             <tbody>
                 {% for t in terms %}
-                <tr>
+                <tr data-term-id="{{ t.id }}">
                     <td style="font-weight: 600;">{{ t.term_type.replace('_', ' ').title() }}</td>
-                    <td>{{ t.value_raw or '—' }}</td>
-                    <td>{% if t.value_numeric %}{{ "{:,.2f}".format(t.value_numeric) }}{% else %}—{% endif %}</td>
+                    <td class="editable-cell" data-field="value">
+                        <span class="cell-display">
+                            {% if t.user_value_raw %}
+                                <span class="user-corrected" title="User corrected (original: {{ t.value_raw or 'empty' }})">{{ t.user_value_raw }}</span>
+                            {% else %}
+                                {{ t.value_raw or '—' }}
+                            {% endif %}
+                        </span>
+                        <input type="text" class="cell-input" value="{{ t.user_value_raw or t.value_raw or '' }}" style="display:none;">
+                    </td>
+                    <td>{% if t.user_value_numeric %}{{ "{:,.2f}".format(t.user_value_numeric) }}{% elif t.value_numeric %}{{ "{:,.2f}".format(t.value_numeric) }}{% else %}—{% endif %}</td>
                     <td>{{ t.value_unit or '—' }}</td>
-                    <td>{{ t.section_ref or '—' }}</td>
                     <td>
-                        {% if t.confidence %}
+                        {% if t.user_modified_at %}
+                        <span class="badge badge-info" title="Edited {{ t.user_modified_at[:16] }}">Edited</span>
+                        {% elif t.confidence %}
                         <span class="badge {% if t.confidence >= 0.8 %}badge-success{% elif t.confidence >= 0.5 %}badge-processing{% else %}badge-error{% endif %}">
                             {{ (t.confidence * 100)|round|int }}%
                         </span>
@@ -221,18 +230,128 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.editable-cell {
+    cursor: pointer;
+    position: relative;
+    min-width: 140px;
+}
+.editable-cell:hover .cell-display {
+    background: var(--cap-cloud);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: -2px -6px;
+}
+.editable-cell .cell-input {
+    width: 100%;
+    font-size: inherit;
+    font-family: inherit;
+    padding: 4px 8px;
+    border: 1.5px solid var(--cap-primary);
+    border-radius: 4px;
+    background: var(--bg-card);
+    outline: none;
+}
+.user-corrected {
+    color: var(--cap-primary);
+    border-bottom: 1px dashed var(--cap-primary);
+}
+.badge-info {
+    background: var(--cap-cloud);
+    color: var(--cap-primary);
+}
+.save-indicator {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: var(--cap-signal);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.save-indicator.show {
+    opacity: 1;
+}
+</style>
+
 <script>
 function showTab(name) {
-    // Hide all tab contents
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-
-    // Show selected
     const content = document.getElementById('tab-' + name);
     if (content) content.classList.add('active');
-
-    // Activate tab button
     event.target.classList.add('active');
 }
+
+// Inline editing for financial terms
+(function() {
+    document.querySelectorAll('.editable-cell').forEach(cell => {
+        const display = cell.querySelector('.cell-display');
+        const input = cell.querySelector('.cell-input');
+        const row = cell.closest('tr');
+        const termId = row.dataset.termId;
+
+        // Click to edit
+        display.addEventListener('click', function() {
+            display.style.display = 'none';
+            input.style.display = 'block';
+            input.focus();
+            input.select();
+        });
+
+        // Save on blur or Enter
+        function save() {
+            const newValue = input.value.trim();
+            input.style.display = 'none';
+            display.style.display = '';
+
+            if (!newValue) return;
+
+            // Check if value actually changed
+            const originalText = display.textContent.trim();
+            if (newValue === originalText) return;
+
+            // Save via API
+            fetch('/api/term/' + termId, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({value: newValue})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    display.innerHTML = '<span class="user-corrected" title="User corrected">' +
+                        newValue.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
+
+                    // Update numeric column
+                    const numCell = row.children[2];
+                    if (data.numeric !== null && data.numeric !== undefined) {
+                        numCell.textContent = Number(data.numeric).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    }
+
+                    // Update confidence column to show "Edited"
+                    const confCell = row.children[4];
+                    confCell.innerHTML = '<span class="badge badge-info">Edited</span>';
+
+                    // Flash confirmation
+                    row.style.background = 'var(--cap-cloud)';
+                    setTimeout(() => row.style.background = '', 600);
+                }
+            })
+            .catch(err => {
+                console.error('Save failed:', err);
+                display.style.background = 'var(--danger-light, #fee)';
+                setTimeout(() => display.style.background = '', 1500);
+            });
+        }
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            if (e.key === 'Escape') { input.style.display = 'none'; display.style.display = ''; }
+        });
+    });
+})();
 </script>
 {% endblock %}

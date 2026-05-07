@@ -145,7 +145,10 @@ CREATE TABLE IF NOT EXISTS financial_terms (
     section_ref     TEXT,
     page_number     INTEGER,
     confidence      REAL,
-    metadata        TEXT
+    metadata        TEXT,
+    user_value_raw  TEXT,                   -- user-corrected value (original preserved in value_raw)
+    user_value_numeric REAL,               -- user-corrected numeric value
+    user_modified_at TEXT                   -- ISO timestamp of user edit
 );
 
 -- ─── Rent Roll Entries ──────────────────────────────────────────────
@@ -257,7 +260,17 @@ class Database:
     def _create_schema(self):
         """Create all tables and indexes if they don't exist."""
         self.conn.executescript(SCHEMA_SQL)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self):
+        """Add columns for schema evolution on existing databases."""
+        # Check if user_value_raw column exists on financial_terms
+        cols = [row[1] for row in self.conn.execute("PRAGMA table_info(financial_terms)")]
+        if 'user_value_raw' not in cols:
+            self.conn.execute("ALTER TABLE financial_terms ADD COLUMN user_value_raw TEXT")
+            self.conn.execute("ALTER TABLE financial_terms ADD COLUMN user_value_numeric REAL")
+            self.conn.execute("ALTER TABLE financial_terms ADD COLUMN user_modified_at TEXT")
 
     def close(self):
         if self.conn:
@@ -1286,7 +1299,19 @@ class Database:
         cur = self.conn.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
 
-    # ─── Rent Roll Operations ────────────────────────────────────────
+    def update_financial_term(self, term_id: int, user_value_raw: str,
+                              user_value_numeric: float = None) -> bool:
+        """Save a user correction to a financial term, preserving the original."""
+        from datetime import datetime
+        self.conn.execute("""
+            UPDATE financial_terms
+            SET user_value_raw = ?, user_value_numeric = ?, user_modified_at = ?
+            WHERE id = ?
+        """, (user_value_raw, user_value_numeric, datetime.utcnow().isoformat(), term_id))
+        self.conn.commit()
+        return self.conn.total_changes > 0
+
+    # ─── Rent Roll Operations ────────────���───────────────────────────
 
     def insert_rent_roll_entry(self, document_id: int, **kwargs) -> int:
         fields = ['property_name', 'unit_number', 'tenant_name', 'suite',

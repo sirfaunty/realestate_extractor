@@ -1424,6 +1424,36 @@ def api_job_status(job_id):
     return jsonify(job)
 
 
+@app.route('/api/term/<int:term_id>', methods=['PUT'])
+@login_required
+def api_update_term(term_id):
+    """Update a financial term with user correction."""
+    data = request.get_json()
+    if not data or 'value' not in data:
+        return jsonify({'error': 'Missing value'}), 400
+
+    user_value = data['value'].strip()
+    if not user_value:
+        return jsonify({'error': 'Value cannot be empty'}), 400
+
+    # Try to parse a numeric value
+    user_numeric = None
+    try:
+        cleaned = user_value.replace(',', '').replace('$', '').replace('%', '').strip()
+        user_numeric = float(cleaned)
+    except (ValueError, TypeError):
+        pass
+
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        db.update_financial_term(term_id, user_value, user_numeric)
+    finally:
+        db.close()
+
+    return jsonify({'success': True, 'value': user_value, 'numeric': user_numeric})
+
+
 @app.route('/api/properties/search')
 @login_required
 def api_property_search():
