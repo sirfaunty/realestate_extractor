@@ -1109,3 +1109,39 @@ details[open] summary::before {
     .main { margin-left: 0; padding: 20px; }
     .card-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ─── Autocomplete ─── */
+
+.autocomplete-wrap {
+    position: relative;
+}
+
+.autocomplete-list {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    z-index: 100;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.autocomplete-item {
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 80ms ease;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+    background: var(--cap-cloud);
+    color: var(--cap-primary);
+}

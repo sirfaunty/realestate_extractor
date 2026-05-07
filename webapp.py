@@ -53,6 +53,10 @@ OLLAMA_URL = os.environ.get('CAPACTIVE_OLLAMA_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.environ.get('CAPACTIVE_OLLAMA_MODEL', 'llama3.1:8b')
 ALLOWED_EXTENSIONS = {'pdf'}
 
+# Dev mode: skip login/setup for local testing
+# Set CAPACTIVE_DEV_MODE=1 to bypass authentication
+DEV_MODE = os.environ.get('CAPACTIVE_DEV_MODE', '0') == '1'
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -120,10 +124,53 @@ def get_current_user():
 
 # ──�� Auth Decorators ─────────────────────────────────────────────────
 
+def _ensure_dev_session():
+    """In dev mode, auto-create org/user and populate session if needed."""
+    if 'user_id' in session:
+        return
+    # Auto-provision a dev org and admin user
+    store = get_config_store()
+    try:
+        orgs = store.list_orgs()
+        if not orgs:
+            from .licensing import generate_org_key, generate_user_key
+            org_key = generate_org_key('dev', 'enterprise')
+            store.create_org('dev', 'Dev Testing', org_key, plan='enterprise')
+            store.create_user('dev', 'admin', 'admin@capactive.local',
+                              'Dev Admin', role='admin')
+            # Init permissions
+            pstore = get_permission_store()
+            try:
+                pstore.init_user_permissions('admin', 'dev', role='admin')
+            finally:
+                pstore.close()
+        org = store.get_org('dev') or store.list_orgs()[0]
+        users = store.list_users(org.org_id)
+        user = users[0] if users else None
+    finally:
+        store.close()
+
+    if org and user:
+        session['user_id'] = user['user_id']
+        session['org_id'] = org.org_id
+        session['org_name'] = org.org_name
+        session['display_name'] = user['display_name']
+        session['role'] = user['role']
+        session['plan'] = org.plan
+
+    # Ensure the org's extraction database exists
+    db = get_org_db(session.get('org_id', 'dev'))
+    if db:
+        db.close()
+
+
 def login_required(f):
     """Require authentication for a route."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        if DEV_MODE:
+            _ensure_dev_session()
+            return f(*args, **kwargs)
         if not is_setup_complete():
             return redirect(url_for('setup'))
         if 'user_id' not in session:
@@ -135,6 +182,9 @@ def admin_required(f):
     """Require admin role for a route."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        if DEV_MODE:
+            _ensure_dev_session()
+            return f(*args, **kwargs)
         if 'user_id' not in session:
             return redirect(url_for('login'))
         if session.get('role') != 'admin':
@@ -149,6 +199,9 @@ def permission_required(scope, level='read'):
     def decorator(f):
         @functools.wraps(f)
         def decorated(*args, **kwargs):
+            if DEV_MODE:
+                _ensure_dev_session()
+                return f(*args, **kwargs)
             if 'user_id' not in session:
                 return redirect(url_for('login'))
             store = get_permission_store()
@@ -458,15 +511,28 @@ def upload():
             'total': 1,
             'results': [],
             'started': datetime.now().isoformat(),
+            'step': 'ingesting',
+            'step_detail': f'Reading {filename}...',
+            'steps_log': [{'step': 'ingesting', 'detail': f'Reading {filename}...', 'time': datetime.now().isoformat()}],
         }
+
+        def on_step(step, detail=''):
+            jobs[job_id]['step'] = step
+            jobs[job_id]['step_detail'] = detail
+            jobs[job_id]['steps_log'].append({
+                'step': step, 'detail': detail,
+                'time': datetime.now().isoformat()
+            })
 
         def process_async():
             try:
                 db = get_org_db(org_id)
                 llm = get_llm()
                 processor = BatchProcessor(db, llm)
+                processor._on_step = on_step
                 result = processor.process_single(filepath, document_type=doc_type,
                                                    property_name=property_name)
+                on_step('complete', 'Done')
                 jobs[job_id]['results'] = [_result_to_dict(result)]
                 jobs[job_id]['progress'] = 1
                 jobs[job_id]['status'] = 'completed' if result.success else 'failed'
@@ -564,13 +630,25 @@ def batch():
             'total': pdf_count,
             'results': [],
             'started': datetime.now().isoformat(),
+            'step': 'ingesting',
+            'step_detail': 'Starting batch...',
+            'steps_log': [{'step': 'ingesting', 'detail': 'Starting batch...', 'time': datetime.now().isoformat()}],
         }
+
+        def on_step(step, detail=''):
+            jobs[job_id]['step'] = step
+            jobs[job_id]['step_detail'] = detail
+            jobs[job_id]['steps_log'].append({
+                'step': step, 'detail': detail,
+                'time': datetime.now().isoformat()
+            })
 
         def process_async():
             try:
                 db = get_org_db(org_id)
                 llm = get_llm()
                 processor = BatchProcessor(db, llm)
+                processor._on_step = on_step
 
                 for i, filepath in enumerate(saved_paths):
                     result = processor.process_single(
@@ -597,6 +675,7 @@ def batch():
                     finally:
                         t.close()
 
+                on_step('complete', 'All files processed')
                 jobs[job_id]['status'] = 'completed'
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
@@ -1343,6 +1422,22 @@ def api_job_status(job_id):
     if not job:
         return jsonify({'error': 'Job not found'}), 404
     return jsonify(job)
+
+
+@app.route('/api/properties/search')
+@login_required
+def api_property_search():
+    """Autocomplete endpoint for property names."""
+    q = request.args.get('q', '').strip()
+    if len(q) < 1:
+        return jsonify([])
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        names = db.search_property_names(q, limit=10)
+    finally:
+        db.close()
+    return jsonify(names)
 
 
 @app.route('/api/export/<table>')

@@ -14,16 +14,68 @@
     </p>
 </div>
 
-<div class="card">
-    <div class="card-header">
+<!-- Pipeline Steps -->
+<div class="card" id="pipeline-card">
+    <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <span>Pipeline</span>
         <span id="status-badge" class="badge badge-{{ job.status }}">{{ job.status }}</span>
-        {% if job.type == 'batch' %}
-        <span style="margin-left: 8px; color: var(--text-muted); font-weight: 400; font-size: 13px;">
-            {{ job.get('folder', '') }}
-        </span>
-        {% endif %}
     </div>
 
+    <div class="pipeline-steps" id="pipeline-steps">
+        {% set steps = ['ingesting', 'classifying', 'extracting', 'storing', 'complete'] %}
+        {% set step_labels = {'ingesting': 'Ingest', 'classifying': 'Classify', 'extracting': 'Extract', 'storing': 'Store', 'complete': 'Done'} %}
+        {% set step_icons = {'ingesting': '1', 'classifying': '2', 'extracting': '3', 'storing': '4', 'complete': '&#10003;'} %}
+        {% set current_step = job.get('step', 'ingesting') %}
+
+        {% set ns = namespace(reached_current=false) %}
+        {% for s in steps %}
+            {% if s == current_step %}
+                {% set ns.reached_current = true %}
+                <div class="pipeline-step active" data-step="{{ s }}">
+                    <div class="step-dot active">
+                        {% if s == 'complete' %}&#10003;{% else %}{{ loop.index }}{% endif %}
+                    </div>
+                    <div class="step-label">{{ step_labels[s] }}</div>
+                </div>
+            {% elif not ns.reached_current %}
+                <div class="pipeline-step done" data-step="{{ s }}">
+                    <div class="step-dot done">&#10003;</div>
+                    <div class="step-label">{{ step_labels[s] }}</div>
+                </div>
+            {% else %}
+                <div class="pipeline-step pending" data-step="{{ s }}">
+                    <div class="step-dot pending">{{ loop.index }}</div>
+                    <div class="step-label">{{ step_labels[s] }}</div>
+                </div>
+            {% endif %}
+
+            {% if not loop.last %}
+            <div class="step-connector {% if not ns.reached_current %}done{% elif s == current_step %}active{% else %}pending{% endif %}"></div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="step-detail-bar" id="step-detail-bar">
+        <span class="step-detail-icon" id="step-spinner">
+            {% if job.status == 'processing' %}
+            <svg class="spin-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6.5" stroke="var(--cap-active)" stroke-width="2" stroke-dasharray="10 20" stroke-linecap="round"/>
+            </svg>
+            {% else %}
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6.5" stroke="var(--cap-signal)" stroke-width="2"/>
+                <path d="M5 8l2 2 4-4" stroke="var(--cap-signal)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {% endif %}
+        </span>
+        <span id="step-detail-text">{{ job.get('step_detail', '') }}</span>
+        <span id="elapsed-time" class="step-elapsed"></span>
+    </div>
+</div>
+
+<!-- Progress (batch only or single) -->
+<div class="card" id="progress-card" {% if job.type == 'single' and job.total == 1 %}style="display:none"{% endif %}>
+    <div class="card-header">Progress</div>
     <div class="progress-container" id="progress-section">
         <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"
@@ -85,12 +137,200 @@
     <a href="{{ url_for('upload') }}" class="btn btn-secondary">Upload Another</a>
     <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
 </div>
+
+<style>
+/* Pipeline stepper */
+.pipeline-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px 16px;
+    gap: 0;
+}
+
+.pipeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.step-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.step-dot.pending {
+    background: var(--cap-paper);
+    color: var(--text-muted);
+    border: 2px solid var(--border);
+}
+
+.step-dot.active {
+    background: var(--cap-primary);
+    color: white;
+    border: 2px solid var(--cap-primary);
+    box-shadow: 0 0 0 4px var(--cap-cloud);
+    animation: pulse-ring 2s ease-in-out infinite;
+}
+
+.step-dot.done {
+    background: var(--cap-signal);
+    color: white;
+    border: 2px solid var(--cap-signal);
+}
+
+.step-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pipeline-step.active .step-label {
+    color: var(--cap-primary);
+    font-weight: 600;
+}
+
+.pipeline-step.done .step-label {
+    color: var(--cap-signal);
+}
+
+.step-connector {
+    flex: 1;
+    height: 2px;
+    min-width: 32px;
+    max-width: 64px;
+    margin: 0 4px;
+    margin-bottom: 22px;
+    border-radius: 1px;
+    transition: background 0.3s ease;
+}
+
+.step-connector.done {
+    background: var(--cap-signal);
+}
+
+.step-connector.active {
+    background: linear-gradient(90deg, var(--cap-signal), var(--cap-active));
+}
+
+.step-connector.pending {
+    background: var(--border);
+}
+
+/* Step detail bar */
+.step-detail-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--cap-paper);
+    border-top: 1px solid var(--border-subtle);
+    border-radius: 0 0 var(--radius) var(--radius);
+    font-size: 13px;
+    color: var(--text-secondary);
+    min-height: 40px;
+}
+
+.step-detail-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.step-elapsed {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* Spinner animation */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.spin-icon {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 4px var(--cap-cloud); }
+    50% { box-shadow: 0 0 0 8px rgba(24, 95, 165, 0.08); }
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
 <script>
 const jobId = '{{ job_id }}';
+const startedAt = new Date('{{ job.started }}');
 let polling = {{ 'true' if job.status == 'processing' else 'false' }};
+
+const STEP_ORDER = ['ingesting', 'classifying', 'extracting', 'storing', 'complete'];
+const STEP_LABELS = {ingesting: 'Ingest', classifying: 'Classify', extracting: 'Extract', storing: 'Store', complete: 'Done'};
+
+function updatePipelineUI(currentStep) {
+    const stepEls = document.querySelectorAll('.pipeline-step');
+    const connectors = document.querySelectorAll('.step-connector');
+    const currentIdx = STEP_ORDER.indexOf(currentStep);
+
+    stepEls.forEach((el, i) => {
+        const dot = el.querySelector('.step-dot');
+        const step = STEP_ORDER[i];
+
+        // Reset classes
+        el.className = 'pipeline-step';
+        dot.className = 'step-dot';
+
+        if (i < currentIdx) {
+            el.classList.add('done');
+            dot.classList.add('done');
+            dot.innerHTML = '&#10003;';
+        } else if (i === currentIdx) {
+            el.classList.add('active');
+            dot.classList.add('active');
+            dot.innerHTML = step === 'complete' ? '&#10003;' : String(i + 1);
+        } else {
+            el.classList.add('pending');
+            dot.classList.add('pending');
+            dot.innerHTML = String(i + 1);
+        }
+    });
+
+    connectors.forEach((conn, i) => {
+        conn.className = 'step-connector';
+        if (i < currentIdx) {
+            conn.classList.add('done');
+        } else if (i === currentIdx) {
+            conn.classList.add('active');
+        } else {
+            conn.classList.add('pending');
+        }
+    });
+}
+
+function updateElapsed() {
+    const el = document.getElementById('elapsed-time');
+    if (!el || !polling) return;
+    const secs = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    el.textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// Update elapsed every second
+setInterval(updateElapsed, 1000);
+updateElapsed();
 
 function pollStatus() {
     if (!polling) return;
@@ -114,6 +354,12 @@ function pollStatus() {
             if (job.status === 'completed') subtitle.textContent = 'Processing complete';
             else if (job.status === 'failed') subtitle.textContent = 'Processing failed';
 
+            // Update pipeline steps
+            if (job.step) {
+                updatePipelineUI(job.step);
+                document.getElementById('step-detail-text').textContent = job.step_detail || '';
+            }
+
             // Update results list
             const resultsList = document.getElementById('results-list');
             const waitingState = document.getElementById('waiting-state');
@@ -121,7 +367,6 @@ function pollStatus() {
                 waitingState.remove();
             }
 
-            // Rebuild results (simple approach)
             if (job.results.length > 0) {
                 let html = '';
                 job.results.forEach(r => {
@@ -157,6 +402,17 @@ function pollStatus() {
             if (job.status !== 'processing') {
                 polling = false;
                 document.getElementById('done-actions').style.display = 'flex';
+
+                // Swap spinner for check icon
+                const spinner = document.getElementById('step-spinner');
+                if (job.status === 'completed') {
+                    spinner.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="var(--cap-signal)" stroke-width="2"/><path d="M5 8l2 2 4-4" stroke="var(--cap-signal)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                } else {
+                    spinner.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="var(--danger)" stroke-width="2"/><path d="M6 6l4 4M10 6l-4 4" stroke="var(--danger)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+                }
+
+                // Show final elapsed
+                updateElapsed();
             } else {
                 setTimeout(pollStatus, 2000);
             }

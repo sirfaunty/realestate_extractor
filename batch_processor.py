@@ -62,6 +62,15 @@ class BatchProcessor:
         self.classifier = DocumentClassifier(self.llm)
         self.force_ocr = force_ocr
         self.preprocess_ocr = preprocess_ocr
+        self._on_step: Optional[Callable] = None  # callback(step, detail)
+
+    def _emit_step(self, step: str, detail: str = ''):
+        """Notify the caller about pipeline progress."""
+        if self._on_step:
+            try:
+                self._on_step(step, detail)
+            except Exception:
+                pass  # never let callback errors break processing
 
     def process_single(self, filepath: str,
                        document_type: str = None,
@@ -82,6 +91,7 @@ class BatchProcessor:
 
         try:
             # Step 1: Check for duplicates
+            self._emit_step('ingesting', f'Reading {result.filename}...')
             file_hash = compute_file_hash(filepath)
             if self.db.document_exists(file_hash):
                 result.error = "Duplicate document (already processed)"
@@ -92,8 +102,10 @@ class BatchProcessor:
             logger.info(f"Ingesting: {filepath}")
             doc = ingest_pdf(filepath, force_ocr=self.force_ocr,
                             preprocess=self.preprocess_ocr)
+            self._emit_step('ingesting', f'{doc.page_count} pages extracted')
 
             # Step 3: Classify document type
+            self._emit_step('classifying', 'Detecting document type...')
             if document_type:
                 doc_type = document_type
                 classification_confidence = 1.0
@@ -103,6 +115,7 @@ class BatchProcessor:
                     f"Classified as '{doc_type}' "
                     f"(confidence: {classification_confidence:.2f})"
                 )
+            self._emit_step('classifying', f'Identified as {doc_type} ({classification_confidence:.0%} confidence)')
 
             result.document_type = doc_type
 
@@ -119,10 +132,16 @@ class BatchProcessor:
                 return result
 
             # Step 5: Run extraction
+            self._emit_step('extracting', 'Running financial & legal extraction...')
             logger.info(f"Running extraction ({', '.join(m.value for m in template.extraction_modes)})")
             extraction = self.engine.extract(doc, template)
 
+            terms_found = len(extraction.get('financial_terms', []))
+            clauses_found = len(extraction.get('clauses', []))
+            self._emit_step('extracting', f'Found {terms_found} terms, {clauses_found} clauses')
+
             # Step 6: Store everything in database
+            self._emit_step('storing', 'Saving to database...')
             doc_id = self._store_document_record(
                 doc, doc_type, property_name, file_hash,
                 classification_confidence=classification_confidence

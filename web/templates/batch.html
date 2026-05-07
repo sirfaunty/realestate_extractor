@@ -35,9 +35,13 @@
 
         <div class="form-group">
             <label for="property_name">Property Name (for all files)</label>
-            <input type="text" name="property_name" id="property_name"
-                   placeholder="e.g., Riverside Plaza or Portfolio Q1 2025">
-            <div class="hint">Optional. Associates all documents in this batch with the same property.</div>
+            <div class="autocomplete-wrap">
+                <input type="text" name="property_name" id="property_name"
+                       placeholder="e.g., Riverside Plaza or Portfolio Q1 2025"
+                       autocomplete="off">
+                <div class="autocomplete-list" id="property-suggestions"></div>
+            </div>
+            <div class="hint">Optional. Associates all documents in this batch with the same property. Start typing to search existing properties.</div>
         </div>
 
         <div class="hint" style="margin-top: 8px; padding: 10px 14px; background: var(--cap-cloud); border-radius: 6px;">
@@ -112,5 +116,67 @@ document.getElementById('batch-form').addEventListener('submit', function() {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Uploading & Processing...';
 });
+
+// Property name autocomplete
+(function() {
+    const input = document.getElementById('property_name');
+    const list = document.getElementById('property-suggestions');
+    let debounce = null;
+    let activeIdx = -1;
+
+    input.addEventListener('input', function() {
+        clearTimeout(debounce);
+        const q = this.value.trim();
+        if (q.length < 1) { list.innerHTML = ''; list.style.display = 'none'; return; }
+        debounce = setTimeout(() => {
+            fetch('/api/properties/search?q=' + encodeURIComponent(q))
+                .then(r => r.json())
+                .then(names => {
+                    activeIdx = -1;
+                    if (!names.length) { list.innerHTML = ''; list.style.display = 'none'; return; }
+                    list.innerHTML = names.map((n, i) => {
+                        const esc = n.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+                        return '<div class="autocomplete-item" data-index="' + i + '">' + esc + '</div>';
+                    }).join('');
+                    list.style.display = 'block';
+                    list.querySelectorAll('.autocomplete-item').forEach(item => {
+                        item.addEventListener('mousedown', function(e) {
+                            e.preventDefault();
+                            input.value = this.textContent;
+                            list.style.display = 'none';
+                        });
+                    });
+                });
+        }, 200);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        const items = list.querySelectorAll('.autocomplete-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+        } else if (e.key === 'Enter' && activeIdx >= 0) {
+            e.preventDefault();
+            input.value = items[activeIdx].textContent;
+            list.style.display = 'none';
+            activeIdx = -1;
+            return;
+        } else if (e.key === 'Escape') {
+            list.style.display = 'none';
+            activeIdx = -1;
+            return;
+        } else { return; }
+        items.forEach(it => it.classList.remove('active'));
+        if (activeIdx >= 0) items[activeIdx].classList.add('active');
+    });
+
+    input.addEventListener('blur', function() {
+        setTimeout(() => { list.style.display = 'none'; }, 150);
+    });
+})();
 </script>
 {% endblock %}

@@ -84,11 +84,17 @@ class LocalLLMClient:
             payload["format"] = "json"
 
         try:
-            logger.info(f"Sending request to local LLM ({self.model})...")
+            prompt_len = len(prompt)
+            logger.info(
+                f"Sending request to local LLM ({self.model}) — "
+                f"{prompt_len:,} chars prompt..."
+            )
+            import time as _time
+            _start = _time.time()
             resp = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
-                timeout=300  # 5 min timeout for long documents
+                timeout=120  # 2 min timeout per chunk
             )
 
             if resp.status_code == 200:

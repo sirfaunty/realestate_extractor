@@ -372,6 +372,24 @@ class Database:
         cur = self.conn.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
 
+    def search_property_names(self, query: str, limit: int = 10) -> List[str]:
+        """
+        Search for distinct property names across both the properties table
+        and the documents table. Returns matching names for autocomplete.
+        """
+        q = f"%{query}%"
+        cur = self.conn.execute("""
+            SELECT DISTINCT name FROM (
+                SELECT name FROM properties WHERE name LIKE ? AND name IS NOT NULL
+                UNION
+                SELECT property_name AS name FROM documents
+                WHERE property_name LIKE ? AND property_name IS NOT NULL AND property_name != ''
+            )
+            ORDER BY name
+            LIMIT ?
+        """, (q, q, limit))
+        return [row['name'] for row in cur.fetchall()]
+
     def update_property(self, property_id: int, **kwargs):
         allowed = ['name', 'property_type', 'portfolio_id', 'address', 'city',
                     'state', 'zip_code', 'year_built', 'total_units', 'total_sqft',

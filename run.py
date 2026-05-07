@@ -17,6 +17,8 @@ import os
 # Add parent directory to path so the package can be found
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import logging
+
 from realestate_extractor.webapp import run_webapp
 
 
@@ -26,6 +28,13 @@ def main():
     parser.add_argument('--port', type=int, default=5000, help='Port to run on (default: 5000)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     args = parser.parse_args()
+
+    # Enable logging so pipeline progress shows in terminal
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(name)s] %(message)s',
+        datefmt='%H:%M:%S'
+    )
 
     run_webapp(host=args.host, port=args.port, debug=args.debug)
 
