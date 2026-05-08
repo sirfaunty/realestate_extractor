@@ -134,10 +134,12 @@ def _ensure_dev_session():
         orgs = store.list_orgs()
         if not orgs:
             from .licensing import generate_org_key, generate_user_key
+            from werkzeug.security import generate_password_hash
             org_key = generate_org_key('dev', 'enterprise')
             store.create_org('dev', 'Dev Testing', org_key, plan='enterprise')
             store.create_user('dev', 'admin', 'admin@capactive.local',
-                              'Dev Admin', role='admin')
+                              'Dev Admin', role='admin',
+                              password_hash=generate_password_hash('devadmin'))
             # Init permissions
             pstore = get_permission_store()
             try:
@@ -255,13 +257,25 @@ def setup():
         return redirect(url_for('login'))
 
     if request.method == 'POST':
+        from werkzeug.security import generate_password_hash
+
         org_name = request.form.get('org_name', '').strip()
         admin_name = request.form.get('admin_name', '').strip()
         admin_email = request.form.get('admin_email', '').strip()
+        password = request.form.get('password', '')
+        password_confirm = request.form.get('password_confirm', '')
         license_key = request.form.get('license_key', '').strip()
 
-        if not all([org_name, admin_name, admin_email]):
+        if not all([org_name, admin_name, admin_email, password]):
             flash('All fields are required.', 'error')
+            return redirect(request.url)
+
+        if len(password) < 8:
+            flash('Password must be at least 8 characters.', 'error')
+            return redirect(request.url)
+
+        if password != password_confirm:
+            flash('Passwords do not match.', 'error')
             return redirect(request.url)
 
         # Determine plan from license key or default to standard
@@ -280,13 +294,14 @@ def setup():
         if not license_key:
             license_key = generate_org_key(org_id, plan)
 
-        user_key = generate_user_key(org_id, user_id)
+        pw_hash = generate_password_hash(password)
 
         store = get_config_store()
         try:
             org = store.create_org(org_id, org_name, license_key, plan=plan)
             user = store.create_user(org_id, user_id, admin_email,
-                                     admin_name, role='admin')
+                                     admin_name, role='admin',
+                                     password_hash=pw_hash)
         finally:
             store.close()
 
@@ -311,7 +326,6 @@ def setup():
         session['plan'] = plan
 
         flash(f'Welcome to capactive, {admin_name}! Your organization is ready.', 'success')
-        flash(f'Your user key: {user_key} — save this for future logins.', 'success')
         return redirect(url_for('index'))
 
     return render_template('setup.html')
@@ -321,66 +335,49 @@ def setup():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """User login page."""
+    """User login page — email and password."""
     if not is_setup_complete():
         return redirect(url_for('setup'))
 
     if request.method == 'POST':
-        org_key = request.form.get('org_key', '').strip()
-        user_key = request.form.get('user_key', '').strip()
+        from werkzeug.security import check_password_hash
 
-        if not org_key or not user_key:
-            flash('Both organization key and user key are required.', 'error')
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+
+        if not email or not password:
+            flash('Email and password are required.', 'error')
             return redirect(request.url)
 
-        # Validate org key
-        valid, plan = validate_org_key(org_key)
-        if not valid:
-            flash('Invalid organization key.', 'error')
-            return redirect(request.url)
-
-        # Validate user key format
-        if not validate_user_key(user_key):
-            flash('Invalid user key.', 'error')
-            return redirect(request.url)
-
-        # Find org by key
         store = get_config_store()
         try:
-            org = store.get_org_by_key(org_key)
-            if not org:
-                flash('Organization not found.', 'error')
+            user = store.get_user_by_email(email)
+            if not user:
+                flash('Invalid email or password.', 'error')
                 return redirect(request.url)
 
-            if not org.is_active:
-                flash('This organization has been deactivated.', 'error')
+            if not user.get('password_hash'):
+                flash('No password set for this account. Contact your admin.', 'error')
                 return redirect(request.url)
 
-            # Find matching user in the org
-            users = store.list_users(org.org_id)
-            matched_user = None
-            for u in users:
-                expected_key = generate_user_key(org.org_id, u['user_id'])
-                if expected_key == user_key:
-                    matched_user = u
-                    break
-
-            if not matched_user:
-                flash('User key does not match any user in this organization.', 'error')
+            if not check_password_hash(user['password_hash'], password):
+                flash('Invalid email or password.', 'error')
                 return redirect(request.url)
 
-            if not matched_user['is_active']:
-                flash('This user account has been deactivated.', 'error')
+            # Get the org
+            org = store.get_org(user['org_id'])
+            if not org or not org.is_active:
+                flash('Organization is not active.', 'error')
                 return redirect(request.url)
 
             # Login successful
-            store.update_user_login(matched_user['user_id'])
+            store.update_user_login(user['user_id'])
 
-            session['user_id'] = matched_user['user_id']
+            session['user_id'] = user['user_id']
             session['org_id'] = org.org_id
             session['org_name'] = org.org_name
-            session['display_name'] = matched_user['display_name']
-            session['role'] = matched_user['role']
+            session['display_name'] = user['display_name']
+            session['role'] = user['role']
             session['plan'] = org.plan
 
         finally:
@@ -392,13 +389,13 @@ def login():
             from .usage import UsageEvent
             tracker.log_event(UsageEvent(
                 org_id=org.org_id,
-                user_id=matched_user['user_id'],
+                user_id=user['user_id'],
                 action='login',
             ))
         finally:
             tracker.close()
 
-        flash(f'Welcome back, {matched_user["display_name"]}!', 'success')
+        flash(f'Welcome back, {user["display_name"]}!', 'success')
         return redirect(url_for('index'))
 
     return render_template('login.html')

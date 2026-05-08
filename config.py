@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS users (
     org_id          TEXT NOT NULL REFERENCES organizations(org_id),
     email           TEXT NOT NULL,
     display_name    TEXT NOT NULL,
+    password_hash   TEXT,
     role            TEXT DEFAULT 'member',
     is_active       BOOLEAN DEFAULT 1,
     created_at      TEXT,
@@ -190,7 +191,14 @@ class ConfigStore:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(CONFIG_SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self):
+        """Add columns for schema evolution on existing databases."""
+        cols = [row[1] for row in self.conn.execute("PRAGMA table_info(users)")]
+        if 'password_hash' not in cols:
+            self.conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
 
     def close(self):
         if self.conn:
@@ -287,7 +295,8 @@ class ConfigStore:
     # ─── User Management ─────────────────────────────────────────────
 
     def create_user(self, org_id: str, user_id: str, email: str,
-                    display_name: str, role: str = "member") -> UserProfile:
+                    display_name: str, role: str = "member",
+                    password_hash: str = None) -> UserProfile:
         """Create a user within an organization."""
         # Check user limit
         org = self.get_org(org_id)
@@ -307,11 +316,12 @@ class ConfigStore:
         )
 
         self.conn.execute("""
-            INSERT INTO users (user_id, org_id, email, display_name, role,
-                               is_active, created_at, last_login)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (user_id, org_id, email, display_name, password_hash,
+                               role, is_active, created_at, last_login)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (user.user_id, org_id, user.email, user.display_name,
-              user.role, user.is_active, user.created_at, user.last_login))
+              password_hash, user.role, user.is_active,
+              user.created_at, user.last_login))
         self.conn.commit()
 
         return user
@@ -334,6 +344,20 @@ class ConfigStore:
             query += " AND is_active = 1"
         cur = self.conn.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
+
+    def get_user_by_email(self, email: str) -> Optional[Dict]:
+        """Look up a user by email address (across all orgs)."""
+        cur = self.conn.execute(
+            "SELECT * FROM users WHERE email = ? AND is_active = 1", (email,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def update_user_password(self, user_id: str, password_hash: str):
+        """Update a user's password hash."""
+        self.conn.execute(
+            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            (password_hash, user_id))
+        self.conn.commit()
 
     def update_user_login(self, user_id: str):
         """Record user login timestamp."""

@@ -22,7 +22,7 @@
 
         <div class="auth-card">
             <h2>Sign in</h2>
-            <p class="subtitle">Enter your organization and user keys to continue.</p>
+            <p class="subtitle">Enter your email and password to continue.</p>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -34,13 +34,13 @@
 
             <form method="POST">
                 <div class="form-group">
-                    <label for="org_key">Organization Key</label>
-                    <input type="text" id="org_key" name="org_key" placeholder="CAP-XXX-XXXXXXXX-XXXX" required>
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="you@company.com" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="user_key">User Key</label>
-                    <input type="text" id="user_key" name="user_key" placeholder="CU-XXXX-XXXXXXXX-XXXX" required>
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" required>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Sign In</button>
