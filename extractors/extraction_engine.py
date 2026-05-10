@@ -1317,7 +1317,10 @@ class DocumentClassifier:
         "operating_statement": [
             "operating statement", "income and expense", "revenue",
             "operating expenses", "net operating income", "noi",
-            "property tax", "insurance", "maintenance", "utilities"
+            "property tax", "insurance", "maintenance", "utilities",
+            "budget", "projected", "forecast", "fiscal year",
+            "annual budget", "operating budget", "variance",
+            "actual vs budget", "line item"
         ],
         "general_ledger": [
             "general ledger", "gl detail", "account code", "debit",
@@ -1334,11 +1337,20 @@ class DocumentClassifier:
 
         Returns (document_type, confidence) tuple.
         """
-        text_lower = doc.full_text[:5000].lower()  # check first ~5000 chars
+        text_lower = doc.full_text[:5000].lower()
+
+        # Title/header text gets heavier weight — first 500 chars typically
+        # contain the document title and key identifiers
+        title_text = doc.full_text[:500].lower()
 
         scores = {}
         for doc_type, keywords in self.TYPE_KEYWORDS.items():
-            score = sum(1 for kw in keywords if kw in text_lower)
+            score = 0
+            for kw in keywords:
+                if kw in title_text:
+                    score += 3  # strong signal: keyword in title/header
+                elif kw in text_lower:
+                    score += 1  # weaker signal: keyword in body
             # Normalize by keyword count
             scores[doc_type] = score / len(keywords)
 
@@ -1352,7 +1364,7 @@ class DocumentClassifier:
         if best_score < 0.15 and self.llm and self.llm.is_available():
             return self._classify_llm(doc)
 
-        return best_type, min(best_score * 3, 1.0)  # scale up confidence
+        return best_type, min(best_score * 2, 1.0)  # scale up confidence
 
     def _classify_llm(self, doc: DocumentContent) -> Tuple[str, float]:
         """Use LLM to classify ambiguous documents."""
@@ -1362,7 +1374,7 @@ class DocumentClassifier:
 - closing: Purchase/closing document
 - guarantee: Guarantee agreement
 - rent_roll: Rent roll
-- operating_statement: Operating statement / income & expense
+- operating_statement: Operating statement / income & expense / budget / forecast
 - general_ledger: General ledger detail
 
 Return JSON: {{"document_type": "<type>", "confidence": <0-1>}}
