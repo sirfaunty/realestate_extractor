@@ -141,7 +141,171 @@
     </main>
 </div>
 
+<!-- Modal System -->
+<div class="cap-modal-overlay" id="cap-modal-overlay">
+    <div class="cap-modal" id="cap-modal">
+        <div class="cap-modal-icon" id="cap-modal-icon"></div>
+        <h3 class="cap-modal-title" id="cap-modal-title"></h3>
+        <p class="cap-modal-body" id="cap-modal-body"></p>
+        <div class="cap-modal-actions" id="cap-modal-actions"></div>
+    </div>
+</div>
+
+<style>
+.cap-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    animation: cap-fade-in 0.15s ease;
+}
+.cap-modal-overlay.visible {
+    display: flex;
+}
+.cap-modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px var(--border);
+    padding: 28px 32px 24px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    animation: cap-modal-in 0.2s ease;
+}
+.cap-modal-icon {
+    margin-bottom: 16px;
+}
+.cap-modal-icon svg {
+    width: 44px;
+    height: 44px;
+}
+.cap-modal-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px;
+}
+.cap-modal-body {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 24px;
+}
+.cap-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+.cap-modal-actions .btn {
+    min-width: 110px;
+    font-size: 13.5px;
+    padding: 9px 20px;
+}
+.btn-danger {
+    background: var(--danger);
+    color: white;
+    border: none;
+}
+.btn-danger:hover {
+    background: #b91c1c;
+}
+@keyframes cap-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes cap-modal-in {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+</style>
+
 <script>
+// ─── Modal API ──────────────────────────────────────────────────────
+const capModal = {
+    _overlay: null,
+    _resolve: null,
+
+    _el() {
+        if (!this._overlay) this._overlay = document.getElementById('cap-modal-overlay');
+        return this._overlay;
+    },
+
+    _show(opts) {
+        const overlay = this._el();
+        document.getElementById('cap-modal-icon').innerHTML = opts.icon || '';
+        document.getElementById('cap-modal-title').textContent = opts.title || '';
+        document.getElementById('cap-modal-body').textContent = opts.message || '';
+
+        const actions = document.getElementById('cap-modal-actions');
+        actions.innerHTML = '';
+        (opts.buttons || []).forEach(b => {
+            const btn = document.createElement('button');
+            btn.className = 'btn ' + (b.className || 'btn-secondary');
+            btn.textContent = b.label;
+            btn.onclick = () => { this._close(); if (b.action) b.action(); };
+            actions.appendChild(btn);
+        });
+
+        overlay.classList.add('visible');
+
+        // Close on overlay click
+        overlay.onclick = (e) => {
+            if (e.target === overlay) this._close();
+        };
+        // Close on Escape
+        this._escHandler = (e) => { if (e.key === 'Escape') this._close(); };
+        document.addEventListener('keydown', this._escHandler);
+    },
+
+    _close() {
+        this._el().classList.remove('visible');
+        document.removeEventListener('keydown', this._escHandler);
+        if (this._resolve) { this._resolve(false); this._resolve = null; }
+    },
+
+    /** Show a confirmation dialog. Returns a Promise<boolean>. */
+    confirm(opts) {
+        return new Promise(resolve => {
+            this._resolve = resolve;
+            this._show({
+                icon: opts.icon || capModal.icons.warning,
+                title: opts.title || 'Are you sure?',
+                message: opts.message || '',
+                buttons: [
+                    { label: opts.cancelLabel || 'Cancel', className: 'btn-secondary', action: () => resolve(false) },
+                    { label: opts.confirmLabel || 'Confirm', className: opts.confirmClass || 'btn-primary', action: () => resolve(true) },
+                ]
+            });
+        });
+    },
+
+    /** Show an alert/info dialog. Returns a Promise that resolves when dismissed. */
+    alert(opts) {
+        return new Promise(resolve => {
+            this._resolve = resolve;
+            this._show({
+                icon: opts.icon || capModal.icons.error,
+                title: opts.title || 'Error',
+                message: opts.message || '',
+                buttons: [
+                    { label: opts.buttonLabel || 'OK', className: 'btn-primary', action: () => resolve(true) },
+                ]
+            });
+        });
+    },
+
+    icons: {
+        warning: '<svg viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="20" stroke="#E6A817" stroke-width="2.5" fill="#FEF3C7"/><path d="M22 14v10" stroke="#B45309" stroke-width="2.5" stroke-linecap="round"/><circle cx="22" cy="29" r="1.5" fill="#B45309"/></svg>',
+        error: '<svg viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="20" stroke="#dc2626" stroke-width="2.5" fill="#fef2f2"/><path d="M16 16l12 12M28 16L16 28" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round"/></svg>',
+        success: '<svg viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="20" stroke="#16a34a" stroke-width="2.5" fill="#f0fdf4"/><path d="M14 22l5 5 11-11" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        info: '<svg viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="20" stroke="#185FA5" stroke-width="2.5" fill="#EBF4FF"/><circle cx="22" cy="15" r="1.5" fill="#185FA5"/><path d="M22 20v10" stroke="#185FA5" stroke-width="2.5" stroke-linecap="round"/></svg>',
+    }
+};
+
 // Check LLM status on load
 fetch('/api/status')
     .then(r => r.json())

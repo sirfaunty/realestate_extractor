@@ -1168,9 +1168,178 @@ class ExtractionEngine:
                         row['page_number'] = page.page_number
                     all_rows.extend(mapped)
 
-        # If no tables found via pdfplumber, try LLM
+        # Second try: text-based parsing for operating statements / budgets
+        if not all_rows and template.document_type == 'operating_statement':
+            all_rows = self._extract_opstat_from_text(doc)
+            if all_rows:
+                logger.info(f"Text-based operating statement parser found {len(all_rows)} rows")
+
+        # Last resort: LLM
         if not all_rows and self.llm_available:
             all_rows = self._extract_tabular_llm(doc, template)
+
+        return all_rows
+
+    def _extract_opstat_from_text(self, doc: DocumentContent) -> List[Dict]:
+        """
+        Parse operating statement / budget data directly from text.
+
+        Handles property-management exports (Yardi, MRI, etc.) where pdfplumber
+        can't parse the table structure but the text has a clear line-item format:
+
+            -RentalIncome 1,165,707.46 0.00 1,211,422.50 0.00 ...
+            TOTALREVENUE  1,232,534.38 0.00 ...
+        """
+        amount_re = re.compile(r'\(?\d[\d,]*\.\d{2}\)?')
+
+        all_rows = []
+        current_category = 'other'
+
+        # Detect period columns from header lines
+        periods = []
+        lines = doc.full_text.split('\n')
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            # Look for year header like "2023 2024 2025 2025 2026"
+            year_match = re.match(r'^(\d{4}(?:\s+\d{4})+)\s*$', stripped)
+            if year_match:
+                years = re.findall(r'\d{4}', stripped)
+                # Next line should have Actual/Budget/Reforecast labels
+                if i + 1 < len(lines):
+                    label_line = lines[i + 1].strip()
+                    labels = re.findall(r'(Actual|Budget|Reforecast|Forecast|Projected)', label_line, re.IGNORECASE)
+                    if labels and len(labels) == len(years):
+                        periods = [f"{y} {l}" for y, l in zip(years, labels)]
+                break
+
+        # Skip header patterns
+        skip_prefixes = ('database:', 'entity:', 'kraus', 'engelsman', 'accrual',
+                         'actual', 'budget', 'reforecast', 'page:')
+
+        seen_lines = set()  # deduplicate across pages
+
+        for page in doc.pages:
+            page_text = page.text if hasattr(page, 'text') else ''
+            page_lines = page_text.split('\n') if page_text else []
+
+            for line in page_lines:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                lower = stripped.lower()
+                # Skip headers and year rows
+                if any(lower.startswith(p) for p in skip_prefixes):
+                    continue
+                if re.match(r'^\d{4}(\s+\d{4})+\s*$', stripped):
+                    continue
+
+                # Deduplicate
+                if stripped in seen_lines:
+                    continue
+                seen_lines.add(stripped)
+
+                # Find all dollar amounts in the line
+                amounts = amount_re.findall(stripped)
+
+                if not amounts:
+                    # Pure section header — update category
+                    clean = re.sub(r'\s+', '', stripped).lower()
+                    if clean in ('revenue',):
+                        current_category = 'revenue'
+                    elif clean in ('expense', 'expenses'):
+                        current_category = 'expense'
+                    elif 'adjustmentstocash' in clean:
+                        current_category = 'other'
+                    continue
+
+                # Extract name: everything before the first amount
+                first_amt_pos = stripped.index(amounts[0])
+                name_raw = stripped[:first_amt_pos].strip()
+
+                # Clean the name: remove leading dash, add spaces between camelCase
+                name = name_raw.lstrip('-').strip()
+                if not name:
+                    continue
+                name = re.sub(r'([a-z])([A-Z])', r'\1 \2', name)
+                name = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', name)
+                name = name.replace('&', ' & ')
+                name = re.sub(r'\s+', ' ', name).strip()
+
+                # Detect totals/subtotals
+                clean_key = re.sub(r'\s+', '', name_raw).lower()
+                is_total = clean_key.startswith('net')
+                is_subtotal = 'total' in clean_key and not is_total
+
+                # Update category from line context (order matters — check specific before general)
+                if 'netoperatingincome' in clean_key or clean_key == 'noi':
+                    line_cat = 'noi'
+                elif 'fundsfromoperations' in clean_key or clean_key == 'ffo':
+                    line_cat = 'noi'
+                elif clean_key.startswith('netincome') or clean_key == 'netcashflow':
+                    line_cat = 'other'
+                elif 'debtservice' in clean_key or 'mortgage' in clean_key:
+                    line_cat = 'debt_service'
+                elif 'interest' in clean_key:
+                    line_cat = 'debt_service'
+                elif 'depreciation' in clean_key or 'amortization' in clean_key:
+                    line_cat = 'other'
+                elif 'capital' in clean_key or 'improvement' in clean_key:
+                    line_cat = 'capital'
+                elif 'revenue' in clean_key or 'income' in clean_key:
+                    line_cat = 'revenue'
+                elif 'expense' in clean_key or 'operating' in clean_key:
+                    line_cat = 'expense'
+                elif is_total or is_subtotal:
+                    line_cat = current_category
+                else:
+                    line_cat = current_category
+
+                # If this is a section header with amounts, update category
+                if is_subtotal and 'revenue' in clean_key:
+                    current_category = 'revenue'
+                elif clean_key in ('expense', 'expenses') or (is_subtotal and 'expense' in clean_key):
+                    current_category = 'expense'
+
+                # Parse amount value
+                def _parse_amt(s):
+                    neg = s.startswith('(') and s.endswith(')')
+                    s = s.replace('(', '').replace(')', '').replace(',', '')
+                    try:
+                        v = float(s)
+                        return -v if neg else v
+                    except ValueError:
+                        return None
+
+                # Amounts come in pairs: amount, $PSF for each period
+                # Use the LAST period (most recent budget)
+                if periods and len(amounts) >= len(periods) * 2:
+                    amount_val = _parse_amt(amounts[-2])
+                    psf_val = _parse_amt(amounts[-1])
+                    period = periods[-1]
+                elif len(amounts) >= 2:
+                    amount_val = _parse_amt(amounts[-2])
+                    psf_val = _parse_amt(amounts[-1])
+                    period = periods[-1] if periods else None
+                elif len(amounts) == 1:
+                    amount_val = _parse_amt(amounts[0])
+                    psf_val = None
+                    period = periods[-1] if periods else None
+                else:
+                    continue
+
+                row = {
+                    'line_item': name,
+                    'category': line_cat,
+                    'amount': amount_val,
+                    'amount_psf': psf_val if psf_val and psf_val != 0 else None,
+                    'period': period,
+                    'is_total': is_total,
+                    'is_subtotal': is_subtotal,
+                    'page_number': page.page_number,
+                }
+                all_rows.append(row)
 
         return all_rows
 

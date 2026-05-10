@@ -957,6 +957,38 @@ class Database:
         cur = self.conn.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
 
+    def delete_document_extractions(self, doc_id: int) -> Dict:
+        """
+        Delete a document and all its extracted data so it can be reprocessed.
+
+        Returns dict with the original document's filepath, document_type,
+        and property_name so the caller can re-run extraction.
+        """
+        # Grab the document info before deleting
+        doc = self.get_document(doc_id)
+        if not doc:
+            return None
+
+        info = {
+            'filepath': doc['filepath'],
+            'document_type': doc.get('document_type'),
+            'property_name': doc.get('property_name'),
+        }
+
+        # Delete all child data
+        self.conn.execute("DELETE FROM financial_terms WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM clauses WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM gl_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM document_fulltext WHERE document_id = ?", (str(doc_id),))
+
+        # Delete the document record itself
+        self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        self.conn.commit()
+
+        return info
+
     # ─── Full-Text Content ───────────────────────────────────────────
 
     def insert_fulltext(self, document_id: int, page_number: int, content: str):
