@@ -72,10 +72,11 @@
                 </td>
                 <td>
                     {% if u.is_active and u.user_id != current_user.user_id %}
-                    <form method="POST" class="inline-form" onsubmit="return confirm('Deactivate this user?');">
+                    <form method="POST" class="inline-form" id="deactivate-form-{{ u.user_id }}">
                         <input type="hidden" name="action" value="deactivate">
                         <input type="hidden" name="user_id" value="{{ u.user_id }}">
-                        <button type="submit" class="btn btn-sm" style="color: var(--danger); background: none; border: 1px solid var(--border);">
+                        <button type="button" class="btn btn-sm" style="color: var(--danger); background: none; border: 1px solid var(--border);"
+                                onclick="confirmDeactivate('{{ u.user_id }}', '{{ u.display_name }}')">
                             Deactivate
                         </button>
                     </form>
@@ -95,4 +96,21 @@
         Copy a user's key from the table above and share it securely. Keys cannot be recovered — if lost, deactivate the user and create a new one.
     </p>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function confirmDeactivate(userId, displayName) {
+    const confirmed = await capModal.confirm({
+        icon: capModal.icons.warning,
+        title: 'Deactivate user?',
+        message: 'This will prevent ' + displayName + ' from logging in. You can reactivate them later.',
+        confirmLabel: 'Deactivate',
+        confirmClass: 'btn-danger',
+    });
+    if (confirmed) {
+        document.getElementById('deactivate-form-' + userId).submit();
+    }
+}
+</script>
 {% endblock %}

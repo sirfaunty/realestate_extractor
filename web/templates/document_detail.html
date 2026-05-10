@@ -2,15 +2,23 @@
 {% block title %}{{ doc.filename }} — capactive{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>{{ doc.filename }}</h2>
-    <p>
-        <span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span>
-        {% if doc.property_name %} &middot; {{ doc.property_name }}{% endif %}
-        &middot; {{ doc.page_count }} pages
-        &middot; {% if doc.is_scanned %}Scanned (OCR{% if doc.ocr_confidence %}, {{ doc.ocr_confidence|round(1) }}% confidence{% endif %}){% else %}Digital{% endif %}
-        &middot; Processed {{ doc.processed_at[:16] if doc.processed_at else '' }}
-    </p>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+        <h2>{{ doc.filename }}</h2>
+        <p>
+            <span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span>
+            {% if doc.property_name %} &middot; {{ doc.property_name }}{% endif %}
+            &middot; {{ doc.page_count }} pages
+            &middot; {% if doc.is_scanned %}Scanned (OCR{% if doc.ocr_confidence %}, {{ doc.ocr_confidence|round(1) }}% confidence{% endif %}){% else %}Digital{% endif %}
+            &middot; Processed {{ doc.processed_at[:16] if doc.processed_at else '' }}
+        </p>
+    </div>
+    <button class="btn btn-secondary" id="reextract-btn" onclick="reextract()" style="white-space: nowrap; margin-top: 4px;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;">
+            <path d="M2 8a6 6 0 0 1 10.3-4.2L14 2v4h-4l1.7-1.7A4.5 4.5 0 0 0 3.5 8H2zm12 0a6 6 0 0 1-10.3 4.2L2 14v-4h4l-1.7 1.7A4.5 4.5 0 0 0 12.5 8H14z" fill="currentColor"/>
+        </svg>
+        Re-extract
+    </button>
 </div>
 
 <!-- Tabs -->
@@ -292,6 +300,10 @@
 .save-indicator.show {
     opacity: 1;
 }
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
 </style>
 
 <script>
@@ -372,5 +384,44 @@ function showTab(name) {
         });
     });
 })();
+
+async function reextract() {
+    const confirmed = await capModal.confirm({
+        icon: capModal.icons.warning,
+        title: 'Re-extract this document?',
+        message: 'This will clear all current extracted data (including any edits) and reprocess the PDF from scratch.',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Re-extract',
+        confirmClass: 'btn-danger',
+    });
+
+    if (!confirmed) return;
+
+    const btn = document.getElementById('reextract-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="animation:spin 1s linear infinite"><path d="M2 8a6 6 0 0 1 10.3-4.2L14 2v4h-4l1.7-1.7A4.5 4.5 0 0 0 3.5 8H2zm12 0a6 6 0 0 1-10.3 4.2L2 14v-4h4l-1.7 1.7A4.5 4.5 0 0 0 12.5 8H14z" fill="currentColor"/></svg> Processing…</span>';
+
+    try {
+        const resp = await fetch('/api/document/{{ doc.id }}/reextract', {method: 'POST'});
+        const data = await resp.json();
+        if (data.success) {
+            window.location.href = '/job/' + data.job_id;
+        } else {
+            await capModal.alert({
+                title: 'Re-extraction failed',
+                message: data.error || 'An unknown error occurred. Please try again.',
+            });
+            btn.disabled = false;
+            btn.innerHTML = 'Re-extract';
+        }
+    } catch (err) {
+        await capModal.alert({
+            title: 'Connection error',
+            message: 'Could not reach the server. Check that the application is running and try again.',
+        });
+        btn.disabled = false;
+        btn.innerHTML = 'Re-extract';
+    }
+}
 </script>
 {% endblock %}

@@ -1465,6 +1465,78 @@ def api_update_term(term_id):
     return jsonify({'success': True, 'value': user_value, 'numeric': user_numeric})
 
 
+@app.route('/api/document/<int:doc_id>/reextract', methods=['POST'])
+@login_required
+def api_reextract(doc_id):
+    """Delete a document's extracted data and reprocess it."""
+    org_id = session['org_id']
+    user_id = session['user_id']
+    db = get_org_db(org_id)
+    try:
+        info = db.delete_document_extractions(doc_id)
+        if not info:
+            return jsonify({'error': 'Document not found'}), 404
+
+        filepath = info['filepath']
+        if not filepath or not os.path.exists(filepath):
+            return jsonify({'error': 'Original PDF file not found on disk'}), 404
+
+        # Create a job and reprocess in background
+        filename = os.path.basename(filepath)
+        job_id = str(uuid.uuid4())[:8]
+        jobs[job_id] = {
+            'id': job_id,
+            'status': 'processing',
+            'type': 'single',
+            'filename': filename,
+            'total': 1,
+            'progress': 0,
+            'results': [],
+            'error': None,
+            'started': datetime.now().isoformat(),
+            'step': 'ingesting',
+            'step_detail': f'Reading {filename}...',
+            'steps_log': [{'step': 'ingesting', 'detail': f'Reading {filename}...', 'time': datetime.now().isoformat()}],
+        }
+
+        def on_step(step, detail=''):
+            jobs[job_id]['step'] = step
+            jobs[job_id]['step_detail'] = detail
+            jobs[job_id]['steps_log'].append({
+                'step': step, 'detail': detail,
+                'time': datetime.now().isoformat()
+            })
+
+        def process_async():
+            try:
+                db2 = get_org_db(org_id)
+                llm = get_llm()
+                processor = BatchProcessor(db2, llm)
+                processor._on_step = on_step
+                result = processor.process_single(
+                    filepath,
+                    document_type=None,  # let classifier re-detect
+                    property_name=info.get('property_name')
+                )
+                on_step('complete', 'Done')
+                jobs[job_id]['results'] = [_result_to_dict(result)]
+                jobs[job_id]['progress'] = 1
+                jobs[job_id]['status'] = 'completed' if result.success else 'failed'
+                jobs[job_id]['error'] = result.error
+            except Exception as e:
+                jobs[job_id]['status'] = 'failed'
+                jobs[job_id]['error'] = str(e)
+            finally:
+                db2.close()
+
+        thread = threading.Thread(target=process_async, daemon=True)
+        thread.start()
+
+        return jsonify({'success': True, 'job_id': job_id})
+    finally:
+        db.close()
+
+
 @app.route('/api/properties/search')
 @login_required
 def api_property_search():
