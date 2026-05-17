@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Extraction Review — capactive{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
+    <div>
+        <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">Extraction Review</h2>
+        <div style="font-size: 14px; color: var(--text-secondary);">
+            Scan extraction results, spot-check accuracy, and flag issues
+        </div>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <select id="property-filter" onchange="applyFilters()" style="font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: white;">
+            <option value="" {% if not property_id %}selected{% endif %}>All Properties</option>
+            {% for p in properties %}
+            <option value="{{ p.id }}" {% if property_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<!-- Status Filter Tabs -->
+<div style="display: flex; gap: 4px; margin-bottom: 16px;">
+    <a href="{{ url_for('extraction_review', property_id=property_id) }}"
+       class="review-tab {% if not status_filter %}active{% endif %}"
+       style="padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; color: {% if not status_filter %}white{% else %}var(--text-secondary){% endif %}; background: {% if not status_filter %}var(--cap-navy){% else %}var(--cap-cloud){% endif %};">
+        All <span style="opacity: 0.7; margin-left: 4px;">{{ stats.total }}</span>
+    </a>
+    <a href="{{ url_for('extraction_review', property_id=property_id, status='pending') }}"
+       class="review-tab {% if status_filter == 'pending' %}active{% endif %}"
+       style="padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; color: {% if status_filter == 'pending' %}white{% else %}var(--text-secondary){% endif %}; background: {% if status_filter == 'pending' %}var(--cap-primary){% else %}var(--cap-cloud){% endif %};">
+        Pending <span style="opacity: 0.7; margin-left: 4px;">{{ stats.pending }}</span>
+    </a>
+    <a href="{{ url_for('extraction_review', property_id=property_id, status='approved') }}"
+       class="review-tab {% if status_filter == 'approved' %}active{% endif %}"
+       style="padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; color: {% if status_filter == 'approved' %}white{% else %}var(--text-secondary){% endif %}; background: {% if status_filter == 'approved' %}var(--cap-signal){% else %}var(--cap-cloud){% endif %};">
+        Approved <span style="opacity: 0.7; margin-left: 4px;">{{ stats.approved }}</span>
+    </a>
+    <a href="{{ url_for('extraction_review', property_id=property_id, status='flagged') }}"
+       class="review-tab {% if status_filter == 'flagged' %}active{% endif %}"
+       style="padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; color: {% if status_filter == 'flagged' %}white{% else %}var(--text-secondary){% endif %}; background: {% if status_filter == 'flagged' %}var(--danger){% else %}var(--cap-cloud){% endif %};">
+        Flagged <span style="opacity: 0.7; margin-left: 4px;">{{ stats.flagged }}</span>
+    </a>
+</div>
+
+<!-- Bulk Actions -->
+<div id="bulk-bar" style="display: none; padding: 10px 16px; background: var(--cap-cloud); border-radius: 8px; margin-bottom: 12px; align-items: center; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 500;"><span id="selected-count">0</span> selected</span>
+    <button onclick="bulkAction('approved')" class="btn btn-sm" style="background: var(--cap-signal); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Approve All</button>
+    <button onclick="bulkAction('flagged')" class="btn btn-sm" style="background: var(--danger); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Flag All</button>
+    <button onclick="bulkAction('pending')" class="btn btn-sm" style="background: var(--text-muted); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Reset</button>
+    <a href="#" onclick="toggleSelectAll(); return false;" style="font-size: 12px; margin-left: auto; color: var(--cap-primary);" id="select-all-link">Select all</a>
+</div>
+
+{% if not docs %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#9989;</div>
+        <p>{% if status_filter %}No {{ status_filter }} documents found.{% else %}No documents to review. Upload and analyze documents first.{% endif %}</p>
+    </div>
+</div>
+{% else %}
+
+<!-- Review Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="overflow-x: auto;">
+        <table class="data-table" style="margin: 0; border-radius: 0;">
+            <thead>
+                <tr>
+                    <th style="width: 30px; text-align: center;">
+                        <input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)">
+                    </th>
+                    <th>Document</th>
+                    <th>Property</th>
+                    <th>Type</th>
+                    <th style="text-align: center;">Analysis</th>
+                    <th style="text-align: right;" title="Non-subtotal income items">Income</th>
+                    <th style="text-align: right;" title="Non-subtotal expense items">Expenses</th>
+                    <th style="text-align: right;" title="All extracted data items">Data</th>
+                    <th style="text-align: center;">Status</th>
+                    <th style="width: 140px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in docs %}
+                <tr id="row-{{ doc.id }}" class="review-row" data-doc-id="{{ doc.id }}" data-status="{{ doc.extraction_review or 'pending' }}">
+                    <td style="text-align: center;">
+                        <input type="checkbox" class="doc-cb" value="{{ doc.id }}" onchange="updateBulkBar()">
+                    </td>
+                    <td>
+                        <a href="{{ url_for('document_detail', doc_id=doc.id) }}" style="color: var(--cap-navy); font-weight: 500; font-size: 13px;" title="{{ doc.filename }}">
+                            {{ doc.filename[:40] }}{% if doc.filename|length > 40 %}...{% endif %}
+                        </a>
+                        {% if doc.review_notes %}
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" title="{{ doc.review_notes }}">
+                            &#128172; {{ doc.review_notes[:50] }}{% if doc.review_notes|length > 50 %}...{% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td style="font-size: 12px;">
+                        {% if doc.linked_property_name %}
+                        <a href="{{ url_for('property_detail', property_id=doc.property_id) }}" style="color: var(--text-secondary);">{{ doc.linked_property_name }}</a>
+                        {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ doc.document_type }}" style="font-size: 11px;">{{ doc.document_type.replace('_', ' ') }}</span>
+                    </td>
+                    <td style="text-align: center;">
+                        {% if doc.analysis_status == 'analyzed' %}
+                        <span style="color: var(--cap-signal); font-size: 12px;" title="Phase 2 analysis complete">&#10003;</span>
+                        {% else %}
+                        <span style="color: var(--text-muted); font-size: 12px;" title="Ingested only — not yet analyzed">&#9679;</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums; font-size: 12px;">
+                        {% if doc.income_items > 0 %}
+                        <span style="color: var(--cap-signal);" title="{{ doc.income_items }} income items, ${{ '{:,.0f}'.format(doc.income_total) }} total">
+                            {{ doc.income_items }} <span style="color: var(--text-muted);">·</span> ${{ '{:,.0f}'.format(doc.income_total / 1000) }}k
+                        </span>
+                        {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums; font-size: 12px;">
+                        {% if doc.expense_items > 0 %}
+                        <span style="color: var(--danger);" title="{{ doc.expense_items }} expense items, ${{ '{:,.0f}'.format(doc.expense_total) }} total">
+                            {{ doc.expense_items }} <span style="color: var(--text-muted);">·</span> ${{ '{:,.0f}'.format(doc.expense_total / 1000) }}k
+                        </span>
+                        {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums; font-size: 12px;">
+                        {% set total_data = doc.total_opstat_items + doc.rent_roll_entries + doc.financial_terms + doc.clauses + doc.gl_entries %}
+                        {% if total_data > 0 %}
+                        <span title="{{ doc.total_opstat_items }} opstat, {{ doc.rent_roll_entries }} rent roll, {{ doc.financial_terms }} terms, {{ doc.clauses }} clauses">
+                            {{ total_data }}
+                        </span>
+                        {% else %}
+                        <span style="color: var(--warning);" title="No structured data extracted">0 &#9888;</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center;">
+                        <span id="badge-{{ doc.id }}" class="review-badge review-badge-{{ doc.extraction_review or 'pending' }}" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500;">
+                            {{ (doc.extraction_review or 'pending').title() }}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 4px;">
+                            <button onclick="setReview({{ doc.id }}, 'approved')" class="rv-btn rv-approve" title="Approve">&#10003;</button>
+                            <button onclick="setReview({{ doc.id }}, 'flagged')" class="rv-btn rv-flag" title="Flag issue">&#9873;</button>
+                            <button onclick="addNote({{ doc.id }})" class="rv-btn rv-note" title="Add note">&#128172;</button>
+                            <a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="rv-btn rv-view" title="View details">&#8594;</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Legend -->
+<div style="display: flex; gap: 20px; margin-top: 12px; font-size: 12px; color: var(--text-muted);">
+    <span>Income/Expenses: item count · dollar total (in thousands)</span>
+    <span>Data: total structured items across all extraction types</span>
+    <span>&#9888; = no data extracted</span>
+</div>
+
+{% endif %}
+
+<style>
+.rv-btn {
+    width: 28px; height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    color: var(--text-secondary);
+}
+.rv-btn:hover { border-color: var(--cap-primary); }
+.rv-approve:hover { background: var(--cap-signal); color: white; border-color: var(--cap-signal); }
+.rv-flag:hover { background: var(--danger); color: white; border-color: var(--danger); }
+.rv-note:hover { background: var(--cap-cloud); border-color: var(--cap-primary); }
+.rv-view:hover { background: var(--cap-cloud); border-color: var(--cap-primary); }
+
+.review-badge-pending { background: var(--cap-cloud); color: var(--text-muted); }
+.review-badge-approved { background: rgba(16, 185, 129, 0.12); color: var(--cap-signal); }
+.review-badge-flagged { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+
+.review-row[data-status="approved"] { background: rgba(16, 185, 129, 0.03); }
+.review-row[data-status="flagged"] { background: rgba(239, 68, 68, 0.03); }
+
+.review-tab:hover { opacity: 0.85; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+    const propId = document.getElementById('property-filter').value;
+    const url = propId ? '/extraction-review/' + propId : '/extraction-review';
+    window.location.href = url;
+}
+
+function setReview(docId, status, notes) {
+    fetch('/api/extraction-review/' + docId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: status, notes: notes || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            // Update row visually
+            const row = document.getElementById('row-' + docId);
+            const badge = document.getElementById('badge-' + docId);
+            row.dataset.status = status;
+            row.className = 'review-row';
+            badge.className = 'review-badge review-badge-' + status;
+            badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+            // Flash row
+            row.style.transition = 'background 0.3s';
+            row.style.background = status === 'approved' ? 'rgba(16,185,129,0.1)' : status === 'flagged' ? 'rgba(239,68,68,0.1)' : '';
+            setTimeout(() => { row.style.background = ''; }, 800);
+
+            updateStatusCounts(status);
+        }
+    });
+}
+
+function addNote(docId) {
+    const note = prompt('Review note for this document:');
+    if (note === null) return;
+    const status = note ? 'flagged' : 'pending';
+    fetch('/api/extraction-review/' + docId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: status, notes: note})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            // Reload to show note
+            location.reload();
+        }
+    });
+}
+
+function updateBulkBar() {
+    const checked = document.querySelectorAll('.doc-cb:checked');
+    const bar = document.getElementById('bulk-bar');
+    const count = document.getElementById('selected-count');
+    if (checked.length > 0) {
+        bar.style.display = 'flex';
+        count.textContent = checked.length;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function toggleSelectAll(checked) {
+    if (typeof checked === 'undefined') {
+        // Called from link — toggle
+        const cb = document.getElementById('select-all-cb');
+        checked = !cb.checked;
+        cb.checked = checked;
+    }
+    document.querySelectorAll('.doc-cb').forEach(cb => cb.checked = checked);
+    updateBulkBar();
+}
+
+function bulkAction(status) {
+    const docIds = Array.from(document.querySelectorAll('.doc-cb:checked')).map(cb => cb.value);
+    if (!docIds.length) return;
+
+    let notes = '';
+    if (status === 'flagged') {
+        notes = prompt('Flag reason (optional):') || '';
+    }
+
+    fetch('/api/extraction-review/bulk', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({doc_ids: docIds, status: status, notes: notes})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) location.reload();
+    });
+}
+
+function updateStatusCounts(newStatus) {
+    // Quick client-side count update — not exact but responsive
+    const tabs = document.querySelectorAll('.review-tab');
+    // For accuracy, we'd re-fetch, but visual feedback is good enough
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'a') {
+        const checked = document.querySelectorAll('.doc-cb:checked');
+        if (checked.length) bulkAction('approved');
+    }
+    if (e.key === 'f') {
+        const checked = document.querySelectorAll('.doc-cb:checked');
+        if (checked.length) bulkAction('flagged');
+    }
+});
+</script>
+{% endblock %}

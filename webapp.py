@@ -26,6 +26,8 @@ from werkzeug.utils import secure_filename
 
 from .database import Database
 from .batch_processor import BatchProcessor, ProcessingResult
+from .property_analyzer import PropertyAnalyzer
+from .financial_synthesis import FinancialSynthesizer
 from .extractors.llm_client import LocalLLMClient
 from .templates.document_templates import list_templates, TEMPLATES
 from .config import ConfigStore, PLAN_FEATURES
@@ -51,7 +53,11 @@ CONFIG_DB = os.environ.get('CAPACTIVE_CONFIG_DB', 'capactive_config.db')
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 OLLAMA_URL = os.environ.get('CAPACTIVE_OLLAMA_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.environ.get('CAPACTIVE_OLLAMA_MODEL', 'llama3.1:8b')
-ALLOWED_EXTENSIONS = {'pdf'}
+ALLOWED_EXTENSIONS = {'pdf', 'xlsx', 'xls', 'docx', 'doc', 'msg', 'png', 'jpg', 'jpeg', 'md', 'txt', 'csv', 'tsv'}
+ARCHIVE_EXTENSIONS = {'zip'}
+
+# Max upload size: 500 MB (supports ~100 large PDFs in a single batch)
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
 # Dev mode: skip login/setup for local testing
 # Set CAPACTIVE_DEV_MODE=1 to bypass authentication
@@ -62,6 +68,54 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 # Global state for background jobs
 jobs = {}
+
+# ─── Processing Queue ───────────────────────────────────────────────
+# Single worker thread processes jobs sequentially so Ollama isn't
+# hammered by parallel requests.
+
+import queue as _queue
+
+_work_queue = _queue.Queue()
+
+
+def _queue_worker():
+    """Persistent worker thread — pulls jobs from the queue one at a time."""
+    while True:
+        work_item = _work_queue.get()
+        try:
+            job_id = work_item['job_id']
+            jobs[job_id]['status'] = 'processing'
+            jobs[job_id]['step'] = 'ingesting'
+            jobs[job_id]['queue_position'] = 0
+            # Update queue positions for remaining queued jobs
+            _refresh_queue_positions()
+            work_item['fn']()
+        except Exception as e:
+            jobs[work_item['job_id']]['status'] = 'failed'
+            jobs[work_item['job_id']]['error'] = str(e)
+        finally:
+            _work_queue.task_done()
+
+
+def _refresh_queue_positions():
+    """Recalculate queue positions for all queued jobs."""
+    pos = 1
+    for jid, job in jobs.items():
+        if job.get('status') == 'queued':
+            job['queue_position'] = pos
+            pos += 1
+
+
+_worker_thread = threading.Thread(target=_queue_worker, daemon=True)
+_worker_thread.start()
+
+
+def enqueue_job(job_id, process_fn):
+    """Add a job to the processing queue. It will run when its turn comes."""
+    pending_count = _work_queue.qsize()
+    jobs[job_id]['status'] = 'queued' if pending_count > 0 else 'processing'
+    jobs[job_id]['queue_position'] = pending_count + 1 if pending_count > 0 else 0
+    _work_queue.put({'job_id': job_id, 'fn': process_fn})
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -88,6 +142,13 @@ def get_org_db(org_id):
     db.connect()
     return db
 
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    flash('Upload too large. Maximum total upload size is 500 MB. '
+          'Try splitting into smaller batches.', 'error')
+    return redirect(request.url or url_for('batch'))
+
+
 def get_permission_store():
     store = PermissionStore(CONFIG_DB)
     store.connect()
@@ -98,6 +159,50 @@ def get_llm():
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def is_archive(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ARCHIVE_EXTENSIONS
+
+def extract_zip(zip_path, dest_dir):
+    """Extract a zip file, return list of (filepath, ext) for all files found.
+    Skips __MACOSX and hidden files. Flattens nested folders."""
+    import zipfile
+    extracted = []
+    skipped = []
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        for member in zf.namelist():
+            # Skip directories, macOS resource forks, hidden files
+            if member.endswith('/'):
+                continue
+            basename = os.path.basename(member)
+            if not basename or basename.startswith('.') or '__MACOSX' in member:
+                continue
+
+            ext = basename.rsplit('.', 1)[1].lower() if '.' in basename else ''
+
+            # Extract to flat dest_dir with safe name
+            safe_name = secure_filename(basename)
+            if not safe_name:
+                continue
+
+            # Handle duplicate filenames
+            dest_path = os.path.join(dest_dir, safe_name)
+            counter = 1
+            while os.path.exists(dest_path):
+                name_part, ext_part = os.path.splitext(safe_name)
+                dest_path = os.path.join(dest_dir, f"{name_part}_{counter}{ext_part}")
+                counter += 1
+
+            # Extract the single file
+            with zf.open(member) as src, open(dest_path, 'wb') as dst:
+                dst.write(src.read())
+
+            if ext in ALLOWED_EXTENSIONS:
+                extracted.append((dest_path, ext))
+            else:
+                skipped.append((basename, ext))
+
+    return extracted, skipped
 
 def is_setup_complete():
     """Check if initial setup has been completed."""
@@ -464,24 +569,11 @@ def upload():
             store.close()
             tracker.close()
 
-        # Validate file
-        if 'file' not in request.files:
+        # Accept one or more files (PDFs or ZIPs)
+        uploaded_files = request.files.getlist('files')
+        if not uploaded_files or not any(f.filename for f in uploaded_files):
             flash('No file selected.', 'error')
             return redirect(request.url)
-
-        file = request.files['file']
-        if file.filename == '':
-            flash('No file selected.', 'error')
-            return redirect(request.url)
-
-        if not allowed_file(file.filename):
-            flash('Only PDF files are supported.', 'error')
-            return redirect(request.url)
-
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
 
         doc_type = request.form.get('doc_type') or None
         property_name = request.form.get('property_name') or None
@@ -498,19 +590,61 @@ def upload():
             finally:
                 store.close()
 
+        # Save uploaded files — handle ZIPs and PDFs
+        saved = []
+        all_skipped = []
+        for f in uploaded_files:
+            if not f.filename:
+                continue
+            filename = secure_filename(f.filename)
+
+            if is_archive(f.filename):
+                # Save zip to temp location, then extract PDFs
+                zip_path = os.path.join(UPLOAD_FOLDER, filename)
+                f.save(zip_path)
+                zip_dest = os.path.join(UPLOAD_FOLDER, f'zip_{str(uuid.uuid4())[:8]}')
+                os.makedirs(zip_dest, exist_ok=True)
+                try:
+                    extracted, skipped = extract_zip(zip_path, zip_dest)
+                    for fpath, ext in extracted:
+                        saved.append((os.path.basename(fpath), fpath))
+                    all_skipped.extend(skipped)
+                except Exception as e:
+                    flash(f'Failed to extract {filename}: {e}', 'error')
+                    continue
+            elif allowed_file(f.filename):
+                filepath = os.path.join(UPLOAD_FOLDER, filename)
+                f.save(filepath)
+                saved.append((filename, filepath))
+
+        if not saved:
+            if all_skipped:
+                skip_types = set(ext for _, ext in all_skipped)
+                flash(f'No supported files found. Skipped {len(all_skipped)} file(s) of type: {", ".join(skip_types)}.', 'error')
+            else:
+                flash('No supported files found. Upload documents (PDF, XLSX, DOCX, MSG, etc.) or ZIP archives.', 'error')
+            return redirect(request.url)
+
+        if all_skipped:
+            skip_types = set(ext for _, ext in all_skipped)
+            flash(f'Found {len(saved)} documents. Skipped {len(all_skipped)} unsupported file(s) ({", ".join(skip_types)}).', 'info')
+
+        file_count = len(saved)
+        first_filename = saved[0][0]
+
         # Process in background
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
             'status': 'processing',
-            'type': 'single',
-            'filename': filename,
+            'type': 'single' if file_count == 1 else 'batch',
+            'filename': first_filename if file_count == 1 else f'{file_count} documents',
             'progress': 0,
-            'total': 1,
+            'total': file_count,
             'results': [],
             'started': datetime.now().isoformat(),
             'step': 'ingesting',
-            'step_detail': f'Reading {filename}...',
-            'steps_log': [{'step': 'ingesting', 'detail': f'Reading {filename}...', 'time': datetime.now().isoformat()}],
+            'step_detail': f'Reading {first_filename}...',
+            'steps_log': [{'step': 'ingesting', 'detail': f'Reading {first_filename}...', 'time': datetime.now().isoformat()}],
         }
 
         def on_step(step, detail=''):
@@ -522,42 +656,63 @@ def upload():
             })
 
         def process_async():
+            db = None
             try:
                 db = get_org_db(org_id)
                 llm = get_llm()
                 processor = BatchProcessor(db, llm)
                 processor._on_step = on_step
-                result = processor.process_single(filepath, document_type=doc_type,
-                                                   property_name=property_name)
-                on_step('complete', 'Done')
-                jobs[job_id]['results'] = [_result_to_dict(result)]
-                jobs[job_id]['progress'] = 1
-                jobs[job_id]['status'] = 'completed' if result.success else 'failed'
-                jobs[job_id]['error'] = result.error
 
-                # Log usage
-                t = get_usage_tracker()
-                try:
-                    t.log_document_processed(
-                        org_id=org_id, user_id=user_id,
-                        filename=filename,
-                        document_type=result.document_type or 'unknown',
-                        page_count=0, processing_time=result.processing_time,
-                        terms_count=result.financial_terms_count,
-                        clauses_count=result.clauses_count,
-                        tabular_rows=result.tabular_rows_count,
-                        success=result.success, error=result.error
-                    )
-                finally:
-                    t.close()
+                failed_count = 0
+                for i, (fname, fpath) in enumerate(saved):
+                    on_step('ingesting', f'Reading {fname}... ({i+1}/{file_count})')
+                    try:
+                        result = processor.process_single(
+                            fpath, document_type=doc_type,
+                            property_name=property_name)
+                    except Exception as doc_err:
+                        result = ProcessingResult(
+                            filename=fname, success=False,
+                            error=str(doc_err),
+                            document_type=doc_type or 'unknown',
+                            page_count=0, processing_time=0,
+                            tables_stored=0
+                        )
+                        failed_count += 1
+
+                    jobs[job_id]['progress'] = i + 1
+                    jobs[job_id]['results'].append(_result_to_dict(result))
+
+                    # Log usage
+                    t = get_usage_tracker()
+                    try:
+                        t.log_document_processed(
+                            org_id=org_id, user_id=user_id,
+                            filename=fname,
+                            document_type=result.document_type or 'unknown',
+                            page_count=result.page_count,
+                            processing_time=result.processing_time,
+                            terms_count=0,
+                            clauses_count=0,
+                            tabular_rows=result.tables_stored,
+                            success=result.success, error=result.error
+                        )
+                    finally:
+                        t.close()
+
+                on_step('complete', 'Ingested' if file_count == 1 else f'All {file_count} files ingested')
+                jobs[job_id]['status'] = 'completed'
+                jobs[job_id]['failed_count'] = failed_count
+                if file_count == 1 and jobs[job_id]['results']:
+                    jobs[job_id]['error'] = jobs[job_id]['results'][0].get('error')
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
             finally:
-                db.close()
+                if db:
+                    db.close()
 
-        thread = threading.Thread(target=process_async, daemon=True)
-        thread.start()
+        enqueue_job(job_id, process_async)
 
         return redirect(url_for('job_status', job_id=job_id))
 
@@ -575,15 +730,51 @@ def batch():
     if request.method == 'POST':
         uploaded_files = request.files.getlist('files')
 
-        # Filter to PDF files only
-        pdf_files = [f for f in uploaded_files
-                     if f.filename and f.filename.lower().endswith('.pdf')]
+        # Save all uploaded files to a batch subfolder
+        batch_id = str(uuid.uuid4())[:8]
+        batch_dir = os.path.join(UPLOAD_FOLDER, f'batch_{batch_id}')
+        os.makedirs(batch_dir, exist_ok=True)
 
-        if not pdf_files:
-            flash('No PDF files found in the selected folder.', 'error')
+        saved_paths = []
+        all_skipped = []
+
+        for f in uploaded_files:
+            if not f.filename:
+                continue
+            basename = os.path.basename(f.filename)
+            filename = secure_filename(basename)
+            if not filename:
+                continue
+
+            if is_archive(basename):
+                # Save zip, extract PDFs from it
+                zip_path = os.path.join(batch_dir, filename)
+                f.save(zip_path)
+                try:
+                    extracted, skipped = extract_zip(zip_path, batch_dir)
+                    for fpath, ext in extracted:
+                        saved_paths.append(fpath)
+                    all_skipped.extend(skipped)
+                except Exception as e:
+                    flash(f'Failed to extract {filename}: {e}', 'error')
+            elif allowed_file(basename):
+                filepath = os.path.join(batch_dir, filename)
+                f.save(filepath)
+                saved_paths.append(filepath)
+
+        if not saved_paths:
+            if all_skipped:
+                skip_types = set(ext for _, ext in all_skipped)
+                flash(f'No supported files found. Skipped {len(all_skipped)} file(s) of type: {", ".join(skip_types)}.', 'error')
+            else:
+                flash('No supported files found in the selected folder.', 'error')
             return redirect(request.url)
 
-        pdf_count = len(pdf_files)
+        if all_skipped:
+            skip_types = set(ext for _, ext in all_skipped)
+            flash(f'Found {len(saved_paths)} documents. Skipped {len(all_skipped)} unsupported file(s) ({", ".join(skip_types)}).', 'info')
+
+        pdf_count = len(saved_paths)
 
         # Check volume limit
         store = get_config_store()
@@ -602,18 +793,6 @@ def batch():
         finally:
             store.close()
             tracker.close()
-
-        # Save all uploaded PDFs to a batch subfolder
-        batch_id = str(uuid.uuid4())[:8]
-        batch_dir = os.path.join(UPLOAD_FOLDER, f'batch_{batch_id}')
-        os.makedirs(batch_dir, exist_ok=True)
-
-        saved_paths = []
-        for f in pdf_files:
-            filename = secure_filename(os.path.basename(f.filename))
-            filepath = os.path.join(batch_dir, filename)
-            f.save(filepath)
-            saved_paths.append(filepath)
 
         doc_type = request.form.get('doc_type') or None
         property_name = request.form.get('property_name') or None
@@ -641,18 +820,34 @@ def batch():
             })
 
         def process_async():
+            db = None
             try:
                 db = get_org_db(org_id)
                 llm = get_llm()
                 processor = BatchProcessor(db, llm)
                 processor._on_step = on_step
 
+                failed_count = 0
                 for i, filepath in enumerate(saved_paths):
-                    result = processor.process_single(
-                        filepath,
-                        document_type=doc_type,
-                        property_name=property_name
-                    )
+                    fname = os.path.basename(filepath)
+                    on_step('ingesting', f'Processing {fname}... ({i+1}/{pdf_count})')
+                    try:
+                        result = processor.process_single(
+                            filepath,
+                            document_type=doc_type,
+                            property_name=property_name
+                        )
+                    except Exception as doc_err:
+                        # Single document failure — log and continue
+                        result = ProcessingResult(
+                            filename=fname, success=False,
+                            error=str(doc_err),
+                            document_type=doc_type or 'unknown',
+                            page_count=0, processing_time=0,
+                            tables_stored=0
+                        )
+                        failed_count += 1
+
                     jobs[job_id]['progress'] = i + 1
                     jobs[job_id]['results'].append(_result_to_dict(result))
 
@@ -663,25 +858,33 @@ def batch():
                             org_id=org_id, user_id=user_id,
                             filename=result.filename,
                             document_type=result.document_type or 'unknown',
-                            page_count=0, processing_time=result.processing_time,
-                            terms_count=result.financial_terms_count,
-                            clauses_count=result.clauses_count,
-                            tabular_rows=result.tabular_rows_count,
+                            page_count=result.page_count,
+                            processing_time=result.processing_time,
+                            terms_count=0,
+                            clauses_count=0,
+                            tabular_rows=result.tables_stored,
                             success=result.success, error=result.error
                         )
                     finally:
                         t.close()
 
-                on_step('complete', 'All files processed')
+                if failed_count > 0:
+                    on_step('complete',
+                            f'{pdf_count - failed_count} of {pdf_count} files processed '
+                            f'({failed_count} failed)')
+                else:
+                    on_step('complete',
+                            'All files processed' if pdf_count > 1 else 'File processed')
                 jobs[job_id]['status'] = 'completed'
+                jobs[job_id]['failed_count'] = failed_count
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
             finally:
-                db.close()
+                if db:
+                    db.close()
 
-        thread = threading.Thread(target=process_async, daemon=True)
-        thread.start()
+        enqueue_job(job_id, process_async)
 
         return redirect(url_for('job_status', job_id=job_id))
 
@@ -1253,6 +1456,96 @@ def portfolios():
                            unlinked_properties=unlinked)
 
 
+@app.route('/portfolio/comparison')
+@app.route('/portfolio/<int:portfolio_id>/comparison')
+@login_required
+def portfolio_comparison(portfolio_id=None):
+    """Cross-property financial comparison view."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        if portfolio_id:
+            portfolio = db.get_portfolio(portfolio_id)
+            if not portfolio:
+                flash('Portfolio not found.', 'error')
+                return redirect(url_for('portfolios'))
+            prop_list = db.list_properties(portfolio_id=portfolio_id)
+            view_title = portfolio['name']
+        else:
+            portfolio = None
+            prop_list = db.list_properties()
+            view_title = 'All Properties'
+
+        # Run synthesis for each property that has operating data
+        synthesizer = FinancialSynthesizer(db)
+        comparisons = []
+        all_periods = set()
+
+        for prop in prop_list:
+            count = db.conn.execute("""
+                SELECT COUNT(*) FROM operating_statement_items os
+                JOIN documents d ON os.document_id = d.id
+                WHERE d.property_id = ?
+            """, (prop['id'],)).fetchone()[0]
+            if count == 0:
+                continue
+            synth = synthesizer.synthesize(prop['id'])
+            if synth and synth.get('periods'):
+                comparisons.append({
+                    'property': prop,
+                    'synthesis': synth,
+                })
+                all_periods.update(synth['periods'])
+
+        # Sort periods chronologically
+        def period_sort_key(p):
+            year = ''.join(c for c in p if c.isdigit())[:4]
+            suffix = p[4:] if len(p) > 4 else ''
+            suffix_order = {'A': 0, 'F': 1, 'P': 2, 'B': 3}
+            return (year, suffix_order.get(suffix, 9))
+
+        sorted_periods = sorted(all_periods, key=period_sort_key)
+        portfolio_list = db.list_portfolios()
+    finally:
+        db.close()
+
+    return render_template('portfolio_comparison.html',
+                           portfolio=portfolio,
+                           view_title=view_title,
+                           comparisons=comparisons,
+                           periods=sorted_periods,
+                           portfolios=portfolio_list)
+
+
+@app.route('/api/portfolio/comparison')
+@app.route('/api/portfolio/<int:portfolio_id>/comparison')
+@login_required
+def api_portfolio_comparison(portfolio_id=None):
+    """JSON API for cross-property financial comparison."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        if portfolio_id:
+            prop_list = db.list_properties(portfolio_id=portfolio_id)
+        else:
+            prop_list = db.list_properties()
+
+        synthesizer = FinancialSynthesizer(db)
+        results = {}
+        for prop in prop_list:
+            count = db.conn.execute("""
+                SELECT COUNT(*) FROM operating_statement_items os
+                JOIN documents d ON os.document_id = d.id
+                WHERE d.property_id = ?
+            """, (prop['id'],)).fetchone()[0]
+            if count == 0:
+                continue
+            results[prop['name']] = synthesizer.synthesize(prop['id'])
+    finally:
+        db.close()
+    return jsonify(results)
+
+
 @app.route('/portfolios/create', methods=['POST'])
 @login_required
 @permission_required('property.operations', 'edit')
@@ -1343,6 +1636,19 @@ def property_detail(property_id):
         operations = db.get_property_operations_summary(property_id)
         debt = db.get_property_debt_summary(property_id)
         valuation = db.get_property_valuation_summary(property_id)
+
+        # Analysis status
+        latest_analysis = db.get_latest_analysis(property_id)
+
+        # Count docs by analysis status
+        ingested_count = sum(1 for d in documents
+                             if d.get('analysis_status', 'ingested') == 'ingested')
+        analyzed_count = sum(1 for d in documents
+                             if d.get('analysis_status') == 'analyzed')
+
+        # Financial synthesis (reconciled multi-source view)
+        synthesizer = FinancialSynthesizer(db)
+        synthesis = synthesizer.synthesize(property_id)
     finally:
         db.close()
 
@@ -1350,7 +1656,11 @@ def property_detail(property_id):
                            prop=prop, buildings=buildings, units=units,
                            documents=documents,
                            operations=operations, debt=debt,
-                           valuation=valuation)
+                           valuation=valuation,
+                           latest_analysis=latest_analysis,
+                           ingested_count=ingested_count,
+                           analyzed_count=analyzed_count,
+                           synthesis=synthesis)
 
 
 @app.route('/property/<int:property_id>/building/create', methods=['POST'])
@@ -1425,7 +1735,117 @@ def link_document(property_id):
     return redirect(url_for('property_detail', property_id=property_id))
 
 
+# ─── Extraction Review ──────────────────────────────────────────────
+
+@app.route('/extraction-review')
+@app.route('/extraction-review/<int:property_id>')
+@login_required
+def extraction_review(property_id=None):
+    """Batch review UI for scanning extraction results across documents."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        # Get filter params
+        status_filter = request.args.get('status')  # pending, approved, flagged
+
+        # Get review queue
+        docs = db.get_extraction_review_queue(
+            property_id=property_id,
+            status=status_filter
+        )
+
+        # Get review stats
+        stats = db.get_extraction_review_stats(property_id=property_id)
+
+        # Get property list for filter dropdown
+        all_props = db.list_properties()
+
+        # Current property info
+        prop = db.get_property(property_id) if property_id else None
+    finally:
+        db.close()
+
+    return render_template('extraction_review.html',
+                           docs=docs,
+                           stats=stats,
+                           properties=all_props,
+                           current_property=prop,
+                           property_id=property_id,
+                           status_filter=status_filter)
+
+
+@app.route('/api/extraction-review/<int:doc_id>', methods=['POST'])
+@login_required
+def api_set_extraction_review(doc_id):
+    """Set extraction review status for a document."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        data = request.get_json()
+        status = data.get('status')  # approved, flagged, pending
+        notes = data.get('notes', '')
+
+        if status not in ('approved', 'flagged', 'pending'):
+            return jsonify({'error': 'Invalid status'}), 400
+
+        db.set_extraction_review(doc_id, status, notes or None)
+
+        return jsonify({'ok': True, 'status': status})
+    finally:
+        db.close()
+
+
+@app.route('/api/extraction-review/bulk', methods=['POST'])
+@login_required
+def api_bulk_extraction_review():
+    """Set extraction review status for multiple documents."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        data = request.get_json()
+        doc_ids = data.get('doc_ids', [])
+        status = data.get('status')
+        notes = data.get('notes', '')
+
+        if status not in ('approved', 'flagged', 'pending'):
+            return jsonify({'error': 'Invalid status'}), 400
+
+        for doc_id in doc_ids:
+            db.set_extraction_review(int(doc_id), status, notes or None)
+
+        return jsonify({'ok': True, 'count': len(doc_ids)})
+    finally:
+        db.close()
+
+
 # ─── API Routes ──────────────────────────────────────────────────────
+
+@app.route('/api/jobs/active')
+@login_required
+def api_active_jobs():
+    """Return list of currently processing or queued jobs."""
+    active = []
+    # Recalculate queue positions for queued jobs
+    queue_pos = 1
+    for jid, job in jobs.items():
+        if job.get('status') in ('processing', 'queued'):
+            if job['status'] == 'queued':
+                job['queue_position'] = queue_pos
+                queue_pos += 1
+            active.append({
+                'id': jid,
+                'type': job.get('type', 'single'),
+                'filename': job.get('filename', ''),
+                'status': job['status'],
+                'progress': job.get('progress', 0),
+                'total': job.get('total', 1),
+                'step': job.get('step', ''),
+                'step_detail': job.get('step_detail', ''),
+                'started': job.get('started', ''),
+                'queue_position': job.get('queue_position', 0),
+            })
+    return jsonify(active)
+
 
 @app.route('/api/job/<job_id>')
 def api_job_status(job_id):
@@ -1518,7 +1938,7 @@ def api_reextract(doc_id):
                     document_type=None,  # let classifier re-detect
                     property_name=info.get('property_name')
                 )
-                on_step('complete', 'Done')
+                on_step('complete', 'Re-ingested')
                 jobs[job_id]['results'] = [_result_to_dict(result)]
                 jobs[job_id]['progress'] = 1
                 jobs[job_id]['status'] = 'completed' if result.success else 'failed'
@@ -1529,12 +1949,137 @@ def api_reextract(doc_id):
             finally:
                 db2.close()
 
-        thread = threading.Thread(target=process_async, daemon=True)
-        thread.start()
+        enqueue_job(job_id, process_async)
 
         return jsonify({'success': True, 'job_id': job_id})
     finally:
         db.close()
+
+
+@app.route('/api/property/<int:property_id>/analyze', methods=['POST'])
+@login_required
+def api_analyze_property(property_id):
+    """Run Phase 2 analysis on all ingested documents for a property."""
+    org_id = session['org_id']
+
+    # Verify property exists and has documents
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            return jsonify({'error': 'Property not found'}), 404
+        docs = db.get_property_documents(property_id)
+        if not docs:
+            return jsonify({'error': 'No documents linked to this property'}), 400
+    finally:
+        db.close()
+
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {
+        'id': job_id,
+        'status': 'processing',
+        'type': 'analysis',
+        'filename': f'Analyzing {prop["name"]}',
+        'total': len(docs),
+        'progress': 0,
+        'results': [],
+        'error': None,
+        'started': datetime.now().isoformat(),
+        'step': 'analyzing',
+        'step_detail': f'Analyzing {len(docs)} documents...',
+        'steps_log': [{'step': 'analyzing', 'detail': f'Starting analysis for {prop["name"]}...', 'time': datetime.now().isoformat()}],
+    }
+
+    def on_step(step, detail=''):
+        jobs[job_id]['step'] = step
+        jobs[job_id]['step_detail'] = detail
+        jobs[job_id]['steps_log'].append({
+            'step': step, 'detail': detail,
+            'time': datetime.now().isoformat()
+        })
+
+    def process_async():
+        try:
+            db2 = get_org_db(org_id)
+            llm = get_llm()
+            analyzer = PropertyAnalyzer(db2, llm)
+            analyzer._on_step = on_step
+            summary = analyzer.analyze_property(property_id)
+
+            jobs[job_id]['results'] = [summary]
+            jobs[job_id]['progress'] = summary.get('doc_count', 0)
+
+            if summary.get('error'):
+                on_step('failed', summary['error'])
+                jobs[job_id]['status'] = 'failed'
+                jobs[job_id]['error'] = summary['error']
+            else:
+                on_step('complete', f'Analysis complete — {summary.get("doc_count", 0)} documents processed')
+                jobs[job_id]['status'] = 'completed'
+        except Exception as e:
+            jobs[job_id]['status'] = 'failed'
+            jobs[job_id]['error'] = str(e)
+        finally:
+            db2.close()
+
+    enqueue_job(job_id, process_async)
+
+    return jsonify({'success': True, 'job_id': job_id, 'doc_count': len(docs)})
+
+
+@app.route('/api/property/<int:property_id>/analysis')
+@login_required
+def api_property_analysis(property_id):
+    """Get the latest analysis results for a property."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        analysis = db.get_latest_analysis(property_id)
+        if not analysis:
+            return jsonify({'status': 'none', 'message': 'No analysis has been run yet'})
+        return jsonify(analysis)
+    finally:
+        db.close()
+
+
+@app.route('/api/property/<int:property_id>/synthesis')
+@login_required
+def api_property_synthesis(property_id):
+    """Get a reconciled financial synthesis for a property."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        synthesizer = FinancialSynthesizer(db)
+        result = synthesizer.synthesize(property_id)
+        return jsonify(result)
+    finally:
+        db.close()
+
+
+@app.route('/document/<int:doc_id>/pdf')
+@login_required
+def document_pdf(doc_id):
+    """Serve the original PDF file for viewing/download."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        doc = db.get_document(doc_id)
+        if not doc:
+            flash('Document not found.', 'error')
+            return redirect(url_for('documents'))
+        filepath = doc.get('filepath', '')
+        if not filepath or not os.path.exists(filepath):
+            flash('Original PDF file not found on disk.', 'error')
+            return redirect(url_for('document_detail', doc_id=doc_id))
+    finally:
+        db.close()
+
+    return send_file(
+        filepath,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=doc['filename']
+    )
 
 
 @app.route('/api/properties/search')
@@ -1551,6 +2096,36 @@ def api_property_search():
     finally:
         db.close()
     return jsonify(names)
+
+
+@app.route('/api/admin/auto-link-documents', methods=['POST'])
+@login_required
+def api_auto_link_documents():
+    """Auto-link unlinked documents to matching properties by name."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        count = db.auto_link_documents_by_name()
+    finally:
+        db.close()
+    return jsonify({'linked': count})
+
+
+@app.route('/api/admin/rename-property/<int:property_id>', methods=['POST'])
+@login_required
+def api_rename_property(property_id):
+    """Rename a property and re-link documents."""
+    new_name = request.json.get('name') if request.is_json else request.form.get('name')
+    if not new_name:
+        return jsonify({'error': 'name required'}), 400
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        db.update_property(property_id, name=new_name)
+        linked = db.auto_link_documents_by_name()
+    finally:
+        db.close()
+    return jsonify({'renamed': True, 'new_name': new_name, 'documents_linked': linked})
 
 
 @app.route('/api/export/<table>')
@@ -1595,9 +2170,8 @@ def _result_to_dict(result: ProcessingResult) -> dict:
         'success': result.success,
         'document_type': result.document_type,
         'document_id': result.document_id,
-        'financial_terms': result.financial_terms_count,
-        'clauses': result.clauses_count,
-        'tabular_rows': result.tabular_rows_count,
+        'page_count': result.page_count,
+        'tables_stored': result.tables_stored,
         'error': result.error,
         'time': round(result.processing_time, 1),
     }

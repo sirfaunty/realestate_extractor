@@ -1,0 +1,170 @@
+{
+  "Chamberlain": {
+    "Studio": {
+      "count": 6,
+      "avg_sf": 509.0,
+      "in_place_rent": 1260.0,
+      "market_rent": 1295.0
+    },
+    "Alcove": {
+      "count": 99,
+      "avg_sf": 525.5454545454545,
+      "in_place_rent": 1329.3488372093022,
+      "market_rent": 1335.7070707070707
+    },
+    "1BR": {
+      "count": 62,
+      "avg_sf": 688.6774193548387,
+      "in_place_rent": 1552.450980392157,
+      "market_rent": 1557.016129032258
+    },
+    "2BR": {
+      "count": 86,
+      "avg_sf": 1009.5232558139535,
+      "in_place_rent": 1993.7837837837837,
+      "market_rent": 1997.3255813953488
+    },
+    "3BR": {
+      "count": 3,
+      "avg_sf": 1314.0,
+      "in_place_rent": 2555.0,
+      "market_rent": 2541.6666666666665
+    },
+    "Affordable": {
+      "count": 77,
+      "avg_sf": 653.0909090909091,
+      "in_place_rent": 1014.3125,
+      "market_rent": 1146.0389610389611
+    }
+  },
+  "HQ": {
+    "Studio": {
+      "count": 11,
+      "avg_sf": 465.09090909090907,
+      "in_place_rent": 1318.2727272727273,
+      "market_rent": 1337.2727272727273
+    },
+    "Alcove": {
+      "count": 115,
+      "avg_sf": 557.3304347826087,
+      "in_place_rent": 1499.7029702970297,
+      "market_rent": 1474.0
+    },
+    "1BR": {
+      "count": 100,
+      "avg_sf": 677.35,
+      "in_place_rent": 1805.978494623656,
+      "market_rent": 1717.45
+    },
+    "2BR": {
+      "count": 67,
+      "avg_sf": 1064.089552238806,
+      "in_place_rent": 2539.6666666666665,
+      "market_rent": 2427.3880597014927
+    },
+    "3BR": {
+      "count": 15,
+      "avg_sf": 1422.0,
+      "in_place_rent": 3361.25,
+      "market_rent": 3149.6666666666665
+    },
+    "Penthouse": {
+      "count": 13,
+      "avg_sf": 1502.923076923077,
+      "in_place_rent": 3711.5833333333335,
+      "market_rent": 3469.230769230769
+    }
+  },
+  "Moda": {
+    "Studio": {
+      "count": 48,
+      "avg_sf": 375.6041666666667,
+      "in_place_rent": 1288.974358974359,
+      "market_rent": 1318.6458333333333
+    },
+    "Alcove": {
+      "count": 75,
+      "avg_sf": 490.88,
+      "in_place_rent": 1504.8484848484848,
+      "market_rent": 1545.0
+    },
+    "1BR": {
+      "count": 76,
+      "avg_sf": 668.3552631578947,
+      "in_place_rent": 1772.5079365079366,
+      "market_rent": 1831.25
+    },
+    "2BR": {
+      "count": 34,
+      "avg_sf": 956.8235294117648,
+      "in_place_rent": 2376.2580645161293,
+      "market_rent": 2463.676470588235
+    }
+  },
+  "Five 90 Park": {
+    "Studio": {
+      "count": 83,
+      "avg_sf": 402.8192771084337,
+      "in_place_rent": 1222.9859154929577,
+      "market_rent": 1199.6385542168675
+    },
+    "1BR": {
+      "count": 10,
+      "avg_sf": 568.5,
+      "in_place_rent": 1552.6,
+      "market_rent": 1588.5
+    }
+  },
+  "Larking": {
+    "Studio": {
+      "count": 99,
+      "avg_sf": 453.07070707070704,
+      "in_place_rent": 1250.2,
+      "market_rent": 1232.0707070707072
+    },
+    "Alcove": {
+      "count": 121,
+      "avg_sf": 564.2644628099174,
+      "in_place_rent": 1491.8392857142858,
+      "market_rent": 1522.2314049586778
+    },
+    "1BR": {
+      "count": 69,
+      "avg_sf": 679.1159420289855,
+      "in_place_rent": 1802.1694915254238,
+      "market_rent": 1755.7971014492753
+    },
+    "2BR": {
+      "count": 57,
+      "avg_sf": 1109.298245614035,
+      "in_place_rent": 2521.8205128205127,
+      "market_rent": 2622.719298245614
+    },
+    "Penthouse": {
+      "count": 7,
+      "avg_sf": 1985.2857142857142,
+      "in_place_rent": 5625.0,
+      "market_rent": 5541.428571428572
+    }
+  },
+  "430 Oak Grove": {
+    "Studio": {
+      "count": 15,
+      "avg_sf": 480,
+      "in_place_rent": 1450,
+      "market_rent": 1480
+    },
+    "1BR": {
+      "count": 43,
+      "avg_sf": 720,
+      "in_place_rent": 1850,
+      "market_rent": 1890
+    },
+    "2BR": {
+      "count": 17,
+      "avg_sf": 1090,
+      "in_place_rent": 2625,
+      "market_rent": 2680
+    }
+  }
+}

@@ -41,6 +41,7 @@
             <span><strong>{{ pf.total_units }}</strong> units</span>
         </div>
         <a href="{{ url_for('properties') }}?portfolio={{ pf.id }}" class="btn btn-secondary btn-sm">View Properties</a>
+        <a href="{{ url_for('portfolio_comparison', portfolio_id=pf.id) }}" class="btn btn-secondary btn-sm" style="margin-left: 6px;">Financial Comparison</a>
     </div>
     {% endfor %}
 </div>

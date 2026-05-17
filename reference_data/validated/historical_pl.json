@@ -1,0 +1,138 @@
+{
+  "Chamberlain": {
+    "2023A": {
+      "rental_income": 4976028.42,
+      "other_income": 1267252.18,
+      "utility_income": 143193.09,
+      "total_income": 6386473.69,
+      "total_opex": 2294145.38,
+      "noi": 4092328.31
+    },
+    "2024A": {
+      "rental_income": 4686782.54,
+      "other_income": 469189.49,
+      "utility_income": 139658.99,
+      "total_income": 5295631.02,
+      "total_opex": 2893529.01,
+      "noi": 2402102.01
+    },
+    "2025A": {
+      "rental_income": 4926205.06,
+      "other_income": 354378.37,
+      "utility_income": 162643.79,
+      "total_income": 5443227.22,
+      "total_opex": 2864780.74,
+      "noi": 2578446.48
+    },
+    "2026B": {
+      "rental_income": 5182752.25,
+      "other_income": 372142.11,
+      "utility_income": 158895.2,
+      "total_income": 5713789.56,
+      "total_opex": 2962547.5,
+      "noi": 2751242.06
+    }
+  },
+  "HQ": {
+    "2023A": {
+      "rental_income": 5602331.21,
+      "other_income": 900835.36,
+      "utility_income": 137910.32,
+      "total_income": 6641076.89,
+      "total_opex": 3413983.85,
+      "noi": 3227093.04
+    },
+    "2024A": {
+      "rental_income": 6022760.54,
+      "other_income": 861490.35,
+      "utility_income": 148574.09,
+      "total_income": 7032824.98,
+      "total_opex": 3278870.52,
+      "noi": 3753954.46
+    },
+    "2025A": {
+      "rental_income": 5897979.01,
+      "other_income": 838774.27,
+      "utility_income": 240368.69,
+      "total_income": 6977121.97,
+      "total_opex": 3532447.89,
+      "noi": 3444674.08
+    },
+    "2026B": {
+      "rental_income": 6151153.16,
+      "other_income": 860794.0,
+      "utility_income": 200606.81,
+      "total_income": 7212553.97,
+      "total_opex": 3477625.34,
+      "noi": 3734928.63
+    }
+  },
+  "Five 90 Park": {
+    "2023A": {
+      "rental_income": 1054292.48,
+      "other_income": 143267.83,
+      "utility_income": 34974.07,
+      "total_income": 1232534.38,
+      "total_opex": 1032402.83,
+      "noi": 200131.55
+    },
+    "2024A": {
+      "rental_income": 1136725.67,
+      "other_income": 120576.04,
+      "utility_income": 38111.97,
+      "total_income": 1295413.68,
+      "total_opex": 514840.18,
+      "noi": 780573.5
+    },
+    "2025A": {
+      "rental_income": 1186131.61,
+      "other_income": 111525.8,
+      "utility_income": 45167.88,
+      "total_income": 1342825.29,
+      "total_opex": 966773.07,
+      "noi": 376052.22
+    },
+    "2026B": {
+      "rental_income": 1201225.96,
+      "other_income": 144633.32,
+      "utility_income": 38365.0,
+      "total_income": 1384224.28,
+      "total_opex": 1005074.68,
+      "noi": 379149.6
+    }
+  },
+  "Moda": {
+    "2023A": {
+      "rental_income": 2146162.88,
+      "other_income": 218266.34,
+      "utility_income": 48382.37,
+      "total_income": 2412811.59,
+      "total_opex": 2222466.31,
+      "noi": 190345.28
+    },
+    "2024A": {
+      "rental_income": 3679939.48,
+      "other_income": 287156.49,
+      "utility_income": 94902.08,
+      "total_income": 4061998.05,
+      "total_opex": 2071754.19,
+      "noi": 1990243.86
+    },
+    "2025A": {
+      "rental_income": 3546247.81,
+      "other_income": 518229.95,
+      "utility_income": 105931.94,
+      "total_income": 4170409.7,
+      "total_opex": 1848696.28,
+      "noi": 2321713.42
+    },
+    "2026B": {
+      "rental_income": 3876550.26,
+      "other_income": 405674.0,
+      "utility_income": 103597.0,
+      "total_income": 4385821.26,
+      "total_opex": 1972267.15,
+      "noi": 2413554.11
+    }
+  }
+}

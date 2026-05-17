@@ -19,7 +19,13 @@
         <span class="badge badge-{% if prop.status == 'active' %}success{% elif prop.status == 'disposed' %}error{% else %}processing{% endif %}" style="margin-left: 4px;">
             {{ prop.status.replace('_', ' ').title() }}
         </span>
-        <div style="margin-top: 8px;">
+        <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end;">
+            {% if documents %}
+            <button id="analyze-btn" onclick="runAnalysis()" class="btn btn-sm btn-primary" title="Run structured extraction on all linked documents">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M14 8H10L8.5 11L5.5 5L4 8H2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Analyze
+            </button>
+            {% endif %}
             <a href="{{ url_for('export_property', property_id=prop.id) }}" class="btn btn-sm btn-secondary" title="Export all property data as Excel">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3M8 2v8M8 10l3-3M8 10l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Export
@@ -49,6 +55,48 @@
     <div class="stat-card">
         <div class="stat-value">{{ valuation.cap_rate or '—' }}{% if valuation.cap_rate %}%{% endif %}</div>
         <div class="stat-label">Cap Rate</div>
+    </div>
+</div>
+
+<!-- Analysis Status -->
+<div id="analysis-status" class="card" style="margin-bottom: 20px; {% if not latest_analysis %}display: none;{% endif %}">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Analysis</span>
+        <span id="analysis-badge" class="badge badge-{% if latest_analysis and latest_analysis.status == 'completed' %}success{% elif latest_analysis and latest_analysis.status == 'running' %}processing{% else %}error{% endif %}" style="font-size: 11px;">
+            {% if latest_analysis %}{{ latest_analysis.status }}{% endif %}
+        </span>
+    </div>
+    <div id="analysis-detail" style="padding: 4px 0; font-size: 13px; color: var(--text-secondary);">
+        {% if latest_analysis %}
+            {% if latest_analysis.status == 'completed' %}
+                {% set s = latest_analysis.summary_json %}
+                Ran {{ latest_analysis.completed_at[:16] if latest_analysis.completed_at else '' }}
+                — {{ s.doc_count if s else '?' }} docs,
+                {{ s.rent_roll_entries if s else 0 }} rent roll entries,
+                {{ s.operating_items if s else 0 }} opstat items,
+                {{ s.financial_terms if s else 0 }} terms,
+                {{ s.clauses if s else 0 }} clauses
+                ({{ s.time if s else '?' }}s)
+            {% elif latest_analysis.status == 'failed' %}
+                Failed: {{ latest_analysis.error or 'Unknown error' }}
+            {% else %}
+                Analysis is running...
+            {% endif %}
+        {% endif %}
+    </div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+        {{ documents|length }} documents linked — {{ analyzed_count }} analyzed, {{ ingested_count }} pending
+    </div>
+</div>
+
+<!-- Analysis Progress (hidden until triggered) -->
+<div id="analysis-progress" class="card" style="margin-bottom: 20px; display: none;">
+    <div class="card-header">Analyzing...</div>
+    <div style="padding: 4px 0;">
+        <div style="background: var(--bg-surface); border-radius: 6px; height: 8px; overflow: hidden;">
+            <div id="analysis-progress-bar" style="height: 100%; background: var(--cap-signal); width: 0%; transition: width 0.3s;"></div>
+        </div>
+        <div id="analysis-progress-text" style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Starting...</div>
     </div>
 </div>
 
@@ -272,7 +320,231 @@
 <!-- ═══ BUCKET 3: VALUATION / NOI ═══ -->
 <div id="bucket-valuation" class="tab-content">
 
-    <!-- NOI Summary -->
+    <!-- ── Financial Synthesis: NOI Timeline ── -->
+    {% if synthesis and synthesis.noi_timeline %}
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>NOI Timeline — Reconciled</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">
+                {{ synthesis.document_sources|length }} source doc{{ 's' if synthesis.document_sources|length != 1 }} · {{ synthesis.periods|length }} period{{ 's' if synthesis.periods|length != 1 }}
+                {% if synthesis.secondary_periods %}
+                · <a href="#" onclick="document.querySelectorAll('.hidden-period').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none'); return false;" style="color: var(--cap-primary); cursor: pointer;">{{ synthesis.secondary_periods|length }} hidden</a>
+                {% endif %}
+            </span>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="data-table" style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th>Period</th>
+                        <th style="text-align: right;">Income</th>
+                        <th style="text-align: right;">Expenses</th>
+                        <th style="text-align: right; font-weight: 700;">Calculated NOI</th>
+                        <th style="text-align: right;">Reported NOI</th>
+                        <th>Primary Source</th>
+                        <th style="text-align: center;">Sources</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in synthesis.noi_timeline %}
+                    {% set ps = synthesis.period_summaries[t.period] %}
+                    <tr style="{% if t.has_discrepancies %}background: rgba(255, 193, 7, 0.06);{% endif %}">
+                        <td style="font-weight: 500; white-space: nowrap;">
+                            {{ t.period }}
+                            {% if t.has_discrepancies %}
+                            <span title="Discrepancies detected — see details below" style="color: var(--warning); cursor: help;">&#9888;</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right; color: var(--cap-signal);">${{ '{:,.0f}'.format(ps.total_income) }}</td>
+                        <td style="text-align: right; color: var(--danger);">${{ '{:,.0f}'.format(ps.total_expenses) }}</td>
+                        <td style="text-align: right; font-weight: 600;">${{ '{:,.0f}'.format(t.calculated_noi) }}</td>
+                        <td style="text-align: right; font-size: 12px;">
+                            {% if t.reported_noi %}
+                            ${{ '{:,.0f}'.format(t.reported_noi) }}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="font-size: 12px;">
+                            {% if t.primary_source %}
+                            <a href="{{ url_for('document_detail', doc_id=t.primary_source.doc_id) }}" style="color: var(--cap-navy);" title="{{ t.primary_source.filename }}">
+                                {{ t.primary_source.filename[:30] }}{% if t.primary_source.filename|length > 30 %}...{% endif %}
+                            </a>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="text-align: center; font-size: 12px;">{{ t.source_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Synthesis Notes / Discrepancies -->
+    {% set all_discrepancies = [] %}
+    {% for period in synthesis.periods %}
+        {% for d in synthesis.period_summaries[period].discrepancies %}
+            {% if all_discrepancies.append(d) %}{% endif %}
+        {% endfor %}
+    {% endfor %}
+    {% if all_discrepancies or synthesis.synthesis_notes %}
+    <div class="card">
+        <div class="card-header">Synthesis Notes</div>
+        <div style="font-size: 13px; color: var(--text-secondary);">
+            {% for note in synthesis.synthesis_notes %}
+            <div style="padding: 6px 0; {% if not loop.last %}border-bottom: 1px solid var(--border-subtle);{% endif %}">
+                {{ note }}
+            </div>
+            {% endfor %}
+            {% if all_discrepancies %}
+            <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border);">
+                <div style="font-weight: 500; color: var(--warning); margin-bottom: 6px;">
+                    &#9888; Discrepancies ({{ all_discrepancies|length }})
+                </div>
+                {% for d in all_discrepancies %}
+                <div style="padding: 4px 0 4px 12px; border-left: 2px solid var(--warning); margin-bottom: 6px; font-size: 12px;">
+                    {{ d }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Source Documents -->
+    {% if synthesis.document_sources %}
+    <div class="card">
+        <div class="card-header">Financial Data Sources</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th style="text-align: center;">Authority</th>
+                    <th style="text-align: right;">Items</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for src in synthesis.document_sources %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('document_detail', doc_id=src.doc_id) }}" style="color: var(--cap-navy);">
+                            {{ src.filename }}
+                        </a>
+                    </td>
+                    <td style="font-size: 12px;">{{ src.doc_type.replace('_', ' ').title() }}</td>
+                    <td style="text-align: center;">
+                        {% for i in range(src.authority) %}<span style="color: var(--cap-signal);">&#9733;</span>{% endfor %}{% for i in range(5 - src.authority) %}<span style="color: var(--border);">&#9733;</span>{% endfor %}
+                    </td>
+                    <td style="text-align: right;">{{ src.item_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Period Detail: expand to see individual line items -->
+    {% for period in synthesis.periods %}
+    {% set ps = synthesis.period_summaries[period] %}
+    <div class="card">
+        <div class="card-header" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+             onclick="this.parentElement.querySelector('.period-detail').style.display = this.parentElement.querySelector('.period-detail').style.display === 'none' ? 'block' : 'none'; this.querySelector('.chevron').textContent = this.parentElement.querySelector('.period-detail').style.display === 'none' ? '&#9654;' : '&#9660;';">
+            <span>
+                <span class="chevron" style="font-size: 10px; margin-right: 6px;">&#9654;</span>
+                {{ period }} Detail
+            </span>
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">
+                NOI: ${{ '{:,.0f}'.format(ps.calculated_noi) }}
+                {% if ps.reported_noi|length > 1 %}
+                <span style="color: var(--warning);" title="Multiple NOI values reported">&#9888; {{ ps.reported_noi|length }} reported values</span>
+                {% endif %}
+            </span>
+        </div>
+        <div class="period-detail" style="display: none;">
+            {% if ps.income_items %}
+            <div style="font-size: 12px; font-weight: 600; color: var(--cap-signal); padding: 8px 0 4px; border-bottom: 1px solid var(--border-subtle);">Income</div>
+            <table class="data-table" style="margin-bottom: 12px;">
+                <thead><tr><th>Line Item</th><th style="text-align: right;">Amount</th><th style="font-size: 11px;">Source</th></tr></thead>
+                <tbody>
+                    {% for item in ps.income_items %}
+                    <tr>
+                        <td>{{ item.line_item }}</td>
+                        <td style="text-align: right;">${{ '{:,.0f}'.format(item.amount) if item.amount else '—' }}</td>
+                        <td style="font-size: 11px; color: var(--text-muted);">
+                            <a href="{{ url_for('document_detail', doc_id=item.source.doc_id) }}" style="color: var(--text-muted);"
+                               title="{{ item.source.filename }}{% if item.source.page %}, p.{{ item.source.page }}{% endif %}">
+                                {{ item.source.filename[:25] }}{% if item.source.page %} p.{{ item.source.page }}{% endif %}
+                            </a>
+                            {% if item.alternate_values %}
+                            <span style="color: var(--warning);" title="Also reported as {% for alt in item.alternate_values %}${{ '{:,.0f}'.format(alt.amount) }} ({{ alt.source.filename }}){% if not loop.last %}, {% endif %}{% endfor %}">
+                                &#9888;
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                        <td>Total Income</td>
+                        <td style="text-align: right;">${{ '{:,.0f}'.format(ps.total_income) }}</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if ps.expense_items %}
+            <div style="font-size: 12px; font-weight: 600; color: var(--danger); padding: 8px 0 4px; border-bottom: 1px solid var(--border-subtle);">Expenses</div>
+            <table class="data-table" style="margin-bottom: 12px;">
+                <thead><tr><th>Line Item</th><th style="text-align: right;">Amount</th><th style="font-size: 11px;">Source</th></tr></thead>
+                <tbody>
+                    {% for item in ps.expense_items %}
+                    <tr>
+                        <td>{{ item.line_item }}</td>
+                        <td style="text-align: right;">${{ '{:,.0f}'.format(item.amount) if item.amount else '—' }}</td>
+                        <td style="font-size: 11px; color: var(--text-muted);">
+                            <a href="{{ url_for('document_detail', doc_id=item.source.doc_id) }}" style="color: var(--text-muted);"
+                               title="{{ item.source.filename }}{% if item.source.page %}, p.{{ item.source.page }}{% endif %}">
+                                {{ item.source.filename[:25] }}{% if item.source.page %} p.{{ item.source.page }}{% endif %}
+                            </a>
+                            {% if item.alternate_values %}
+                            <span style="color: var(--warning);" title="Also reported as {% for alt in item.alternate_values %}${{ '{:,.0f}'.format(alt.amount) }} ({{ alt.source.filename }}){% if not loop.last %}, {% endif %}{% endfor %}">
+                                &#9888;
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                        <td>Total Expenses</td>
+                        <td style="text-align: right;">${{ '{:,.0f}'.format(ps.total_expenses) }}</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if ps.reported_noi %}
+            <div style="font-size: 12px; font-weight: 600; padding: 8px 0 4px; border-bottom: 1px solid var(--border-subtle);">Reported NOI Values</div>
+            <div style="font-size: 13px; padding: 4px 0;">
+                {% for rnoi in ps.reported_noi %}
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>
+                        {{ rnoi.line_item }} —
+                        <a href="{{ url_for('document_detail', doc_id=rnoi.source.doc_id) }}" style="color: var(--text-muted); font-size: 11px;">
+                            {{ rnoi.source.filename }}{% if rnoi.source.page %} p.{{ rnoi.source.page }}{% endif %}
+                        </a>
+                    </span>
+                    <strong>${{ '{:,.0f}'.format(rnoi.amount) }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <!-- Fallback: legacy summary view when no synthesis data -->
     <div class="card">
         <div class="card-header">Net Operating Income</div>
         <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
@@ -297,49 +569,6 @@
                 <div class="stat-label">DSCR</div>
             </div>
         </div>
-    </div>
-
-    <!-- Revenue -->
-    {% if valuation.revenue_items %}
-    <div class="card">
-        <div class="card-header">Revenue</div>
-        <table class="data-table">
-            <thead>
-                <tr><th>Line Item</th><th>Period</th><th style="text-align: right;">Amount</th><th style="text-align: right;">Per SF</th></tr>
-            </thead>
-            <tbody>
-                {% for r in valuation.revenue_items %}
-                <tr style="{% if r.is_total %}font-weight: 600; border-top: 2px solid var(--border);{% endif %}">
-                    <td>{{ r.line_item }}</td>
-                    <td style="font-size: 12px;">{{ r.period or '—' }}</td>
-                    <td style="text-align: right;">${{ '{:,.0f}'.format(r.amount) if r.amount else '—' }}</td>
-                    <td style="text-align: right; font-size: 12px;">{{ '${:,.2f}'.format(r.amount_psf) if r.amount_psf else '—' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    <!-- Expenses -->
-    {% if valuation.expense_items %}
-    <div class="card">
-        <div class="card-header">Expenses</div>
-        <table class="data-table">
-            <thead>
-                <tr><th>Line Item</th><th>Category</th><th>Period</th><th style="text-align: right;">Amount</th></tr>
-            </thead>
-            <tbody>
-                {% for e in valuation.expense_items %}
-                <tr style="{% if e.is_total %}font-weight: 600; border-top: 2px solid var(--border);{% endif %}">
-                    <td>{{ e.line_item }}</td>
-                    <td style="font-size: 12px; color: var(--text-muted);">{{ e.subcategory or '' }}</td>
-                    <td style="font-size: 12px;">{{ e.period or '—' }}</td>
-                    <td style="text-align: right;">${{ '{:,.0f}'.format(e.amount) if e.amount else '—' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
     {% endif %}
 
@@ -370,10 +599,10 @@
     </div>
     {% endif %}
 
-    {% if not valuation.revenue_items and not valuation.expense_items %}
+    {% if not synthesis.noi_timeline and not valuation.revenue_items and not valuation.expense_items %}
     <div class="card">
         <div class="empty-state">
-            <p>No valuation data yet. Link operating statements to this property to calculate NOI, cap rate, and DSCR.</p>
+            <p>No valuation data yet. Run analysis on linked operating statements to calculate NOI, cap rate, and DSCR.</p>
         </div>
     </div>
     {% endif %}
@@ -525,19 +754,26 @@
 
     {% if documents %}
     <div class="card">
-        <div class="card-header">Linked Documents</div>
+        <div class="card-header">Linked Documents ({{ documents|length }})</div>
         <table class="data-table">
             <thead>
-                <tr><th>Filename</th><th>Type</th><th>Processed</th><th>Pages</th><th></th></tr>
+                <tr><th>Filename</th><th>Type</th><th>Pages</th><th>Status</th><th>Ingested</th></tr>
             </thead>
             <tbody>
                 {% for d in documents %}
                 <tr>
-                    <td><a href="{{ url_for('document_detail', doc_id=d.id) }}">{{ d.filename }}</a></td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ d.filename }}">
+                        <a href="{{ url_for('document_detail', doc_id=d.id) }}">{{ d.filename }}</a>
+                    </td>
                     <td><span class="badge badge-{{ d.document_type }}">{{ d.document_type.replace('_', ' ') }}</span></td>
-                    <td style="font-size: 12px;">{{ d.processed_at[:10] if d.processed_at else '' }}</td>
                     <td>{{ d.page_count or '—' }}</td>
-                    <td style="font-size: 12px; color: var(--text-muted);">ID: {{ d.id }}</td>
+                    <td>
+                        {% set astatus = d.analysis_status if d.analysis_status else 'ingested' %}
+                        <span class="badge badge-{% if astatus == 'analyzed' %}success{% else %}processing{% endif %}" style="font-size: 11px;">
+                            {{ astatus }}
+                        </span>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ d.processed_at[:10] if d.processed_at else '' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -557,13 +793,59 @@
 {% block scripts %}
 <script>
 function showBucket(name) {
-    // Hide all buckets
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-
-    // Show selected
     document.getElementById('bucket-' + name).classList.add('active');
     event.target.classList.add('active');
+}
+
+function runAnalysis() {
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:4px;"></span> Analyzing...';
+
+    document.getElementById('analysis-progress').style.display = 'block';
+
+    fetch('/api/property/{{ prop.id }}/analyze', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                btn.disabled = false;
+                btn.textContent = 'Analyze';
+                document.getElementById('analysis-progress').style.display = 'none';
+                alert('Error: ' + data.error);
+                return;
+            }
+            pollAnalysis(data.job_id);
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = 'Analyze';
+            document.getElementById('analysis-progress').style.display = 'none';
+            alert('Request failed: ' + err);
+        });
+}
+
+function pollAnalysis(jobId) {
+    const poll = setInterval(() => {
+        fetch('/api/job/' + jobId)
+            .then(r => r.json())
+            .then(job => {
+                const bar = document.getElementById('analysis-progress-bar');
+                const text = document.getElementById('analysis-progress-text');
+                const total = job.total || 1;
+                const pct = Math.round((job.progress || 0) / total * 100);
+                bar.style.width = pct + '%';
+                text.textContent = job.step_detail || job.step || 'Processing...';
+
+                if (job.status === 'completed' || job.status === 'failed') {
+                    clearInterval(poll);
+                    // Reload the page to show fresh results
+                    setTimeout(() => location.reload(), 500);
+                }
+            })
+            .catch(() => {});
+    }, 1500);
 }
 </script>
 {% endblock %}

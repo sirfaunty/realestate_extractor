@@ -1,0 +1,37 @@
+{
+  "2021A": {
+    "3p": 89,
+    "ka": 60,
+    "note": "Cushman partial-year (delivered Q4 2021)"
+  },
+  "2022A": {
+    "3p": -404,
+    "ka": -1624,
+    "note": "Cushman -$404K vs KA -$1,624K \u2014 KA includes ~$1.2M extra costs (likely D&A, leasing fees, lease-up amortization)"
+  },
+  "2023A": {
+    "3p": 882,
+    "ka": 882,
+    "note": "Reconciles cleanly"
+  },
+  "2024A": {
+    "3p": null,
+    "ka": 3594,
+    "note": "Cushman Dec 2024 PDF truncated; budget file Historical Comp blank for Larking 2024"
+  },
+  "2025A_Resi": {
+    "3p": 4113,
+    "ka": null,
+    "note": "LRK T-12 2025 residential-only (res59311)"
+  },
+  "2025A_Combined": {
+    "3p": 4340,
+    "ka": 4230,
+    "note": "Cushman Dec 2025 incl. retail $4,340K vs KA Roll-up $4,230K \u2014 +$110K KA includes more reconciling items"
+  },
+  "2026B": {
+    "3p": 4663,
+    "ka": 4582,
+    "note": "VG budget $4,663K vs KA Fund Summary $4,582K (KA reflects pre-bulk-internet, +$95K not yet in)"
+  }
+}

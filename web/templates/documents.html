@@ -2,6 +2,45 @@
 {% block title %}Documents — capactive{% endblock %}
 
 {% block content %}
+<style>
+    .doc-table { table-layout: fixed; }
+    .doc-table th:nth-child(1) { width: 38%; }
+    .doc-table th:nth-child(2) { width: 12%; }
+    .doc-table th:nth-child(3) { width: 18%; }
+    .doc-table th:nth-child(4) { width: 6%; }
+    .doc-table th:nth-child(5) { width: 7%; }
+    .doc-table th:nth-child(6) { width: 13%; }
+    .doc-table th:nth-child(7) { width: 6%; }
+    .doc-table .filename-cell {
+        max-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .doc-table .filename-cell a {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .doc-table .filename-cell:hover {
+        overflow: visible;
+        position: relative;
+    }
+    .doc-table .filename-cell:hover a {
+        overflow: visible;
+        position: relative;
+        z-index: 1;
+        background: var(--cap-cloud);
+        padding-right: 12px;
+        border-radius: 4px;
+    }
+    .doc-table .prop-cell {
+        max-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+</style>
 <div class="page-header" style="display: flex; justify-content: space-between; align-items: start;">
     <div>
         <h2>Documents</h2>
@@ -33,7 +72,7 @@
 
 <div class="card">
     {% if documents %}
-    <table class="data-table">
+    <table class="data-table doc-table">
         <thead>
             <tr>
                 <th>Filename</th>
@@ -48,13 +87,18 @@
         <tbody>
             {% for doc in documents %}
             <tr>
-                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a></td>
+                <td class="filename-cell" title="{{ doc.filename }}"><a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a></td>
                 <td><span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span></td>
-                <td>{{ doc.property_name or '—' }}</td>
+                <td class="prop-cell" title="{{ doc.property_name or '' }}">{{ doc.property_name or '—' }}</td>
                 <td>{{ doc.page_count or '—' }}</td>
                 <td>{% if doc.is_scanned %}OCR{% else %}Digital{% endif %}</td>
                 <td>{{ doc.processed_at[:16] if doc.processed_at else '—' }}</td>
-                <td><a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+                <td style="white-space: nowrap;">
+                    <a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a>
+                    <a href="{{ url_for('document_pdf', doc_id=doc.id) }}" target="_blank" class="btn btn-sm btn-secondary" title="Open original PDF" style="margin-left: 2px; padding: 4px 6px;">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 2h5l5 5v7a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.2"/><path d="M9 2v5h5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    </a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

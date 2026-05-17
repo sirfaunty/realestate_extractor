@@ -4,6 +4,10 @@ PDF Ingestion Pipeline for Real Estate Document Extractor.
 Handles both digital (text-based) PDFs and scanned PDFs requiring OCR.
 Auto-detects document type and routes through the appropriate pipeline.
 All processing is fully local — no data leaves the device.
+
+Uses PyMuPDF (fitz) for fast page-count checks and as a fallback for
+corrupted PDFs that pdfplumber can't open. pdfplumber remains primary
+for table extraction on well-formed PDFs.
 """
 
 import os
@@ -14,6 +18,12 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+# PDFs above this threshold bypass pdfplumber entirely (it chokes on
+# corrupted files with inflated page counts like 44k+ phantom pages).
+PDFPLUMBER_PAGE_LIMIT = 2000
+MAX_PAGES = 500             # absolute cap on pages we'll process
+MAX_CONSECUTIVE_EMPTY = 10  # stop after this many empty pages in a row
 
 
 @dataclass
@@ -61,24 +71,56 @@ def compute_file_hash(filepath: str) -> str:
     return sha256.hexdigest()
 
 
+def _fast_page_count(filepath: str) -> int:
+    """
+    Get page count using PyMuPDF — instant even on corrupted PDFs.
+    Returns 0 if PyMuPDF isn't available or the file can't be read.
+    """
+    try:
+        import fitz
+        doc = fitz.open(filepath)
+        count = doc.page_count
+        doc.close()
+        return count
+    except Exception as e:
+        logger.warning(f"PyMuPDF page count failed: {e}")
+        return 0
+
+
 def is_scanned_pdf(filepath: str, sample_pages: int = 3) -> bool:
     """
     Detect whether a PDF is scanned (image-based) or digital (text-based).
     Checks the first few pages for extractable text. If text is minimal,
     it's likely a scanned document.
+
+    Uses PyMuPDF for fast text sampling (avoids pdfplumber timeout on
+    corrupted files).
     """
     try:
-        import pdfplumber
-        with pdfplumber.open(filepath) as pdf:
-            pages_to_check = min(sample_pages, len(pdf.pages))
-            total_chars = 0
-            for i in range(pages_to_check):
-                text = pdf.pages[i].extract_text() or ""
-                total_chars += len(text.strip())
-
-            # If average chars per page is very low, likely scanned
-            avg_chars = total_chars / max(pages_to_check, 1)
-            return avg_chars < 50  # threshold: less than 50 chars/page = scanned
+        import fitz
+        doc = fitz.open(filepath)
+        pages_to_check = min(sample_pages, doc.page_count)
+        total_chars = 0
+        for i in range(pages_to_check):
+            text = doc[i].get_text() or ""
+            total_chars += len(text.strip())
+        doc.close()
+        avg_chars = total_chars / max(pages_to_check, 1)
+        return avg_chars < 50
+    except ImportError:
+        # Fall back to pdfplumber if PyMuPDF not available
+        try:
+            import pdfplumber
+            with pdfplumber.open(filepath, pages=list(range(sample_pages))) as pdf:
+                total_chars = 0
+                for page in pdf.pages:
+                    text = page.extract_text() or ""
+                    total_chars += len(text.strip())
+                avg_chars = total_chars / max(len(pdf.pages), 1)
+                return avg_chars < 50
+        except Exception as e:
+            logger.warning(f"Error detecting PDF type: {e}")
+            return False
     except Exception as e:
         logger.warning(f"Error detecting PDF type: {e}")
         return False
@@ -152,10 +194,14 @@ def preprocess_image_for_ocr(image):
 
 def extract_text_digital(filepath: str) -> DocumentContent:
     """
-    Extract text and tables from a digital (text-based) PDF using pdfplumber.
-    """
-    import pdfplumber
+    Extract text and tables from a digital (text-based) PDF.
 
+    Strategy:
+    - If the PDF has a reasonable page count (< PDFPLUMBER_PAGE_LIMIT),
+      use pdfplumber for rich table + text extraction.
+    - If the PDF has an inflated page count (corrupted metadata),
+      fall back to PyMuPDF which handles these instantly.
+    """
     doc = DocumentContent(
         filepath=filepath,
         filename=os.path.basename(filepath),
@@ -163,12 +209,48 @@ def extract_text_digital(filepath: str) -> DocumentContent:
         is_scanned=False
     )
 
-    with pdfplumber.open(filepath) as pdf:
-        doc.page_count = len(pdf.pages)
+    # Quick page count check via PyMuPDF
+    raw_page_count = _fast_page_count(filepath)
 
-        for i, page in enumerate(pdf.pages):
+    if raw_page_count > PDFPLUMBER_PAGE_LIMIT:
+        logger.warning(
+            f"PDF reports {raw_page_count} pages — too large for pdfplumber, "
+            f"using PyMuPDF fallback ({os.path.basename(filepath)})"
+        )
+        return _extract_with_pymupdf(filepath, doc)
+
+    # Normal path: use pdfplumber for text + table extraction
+    return _extract_with_pdfplumber(filepath, doc)
+
+
+def _extract_with_pdfplumber(filepath: str, doc: DocumentContent) -> DocumentContent:
+    """Extract using pdfplumber (best for tables, but can't handle huge PDFs)."""
+    import pdfplumber
+
+    with pdfplumber.open(filepath) as pdf:
+        total_pages = len(pdf.pages)
+        pages_to_process = min(total_pages, MAX_PAGES)
+
+        consecutive_empty = 0
+
+        for i in range(pages_to_process):
+            page = pdf.pages[i]
+
             # Extract text
             text = page.extract_text() or ""
+
+            # Skip empty pages and detect padding
+            if not text.strip():
+                consecutive_empty += 1
+                if consecutive_empty >= MAX_CONSECUTIVE_EMPTY:
+                    logger.info(
+                        f"Stopping after {i+1} pages — "
+                        f"{MAX_CONSECUTIVE_EMPTY} consecutive empty pages detected"
+                    )
+                    break
+                continue
+            else:
+                consecutive_empty = 0
 
             # Extract tables
             tables = []
@@ -176,7 +258,6 @@ def extract_text_digital(filepath: str) -> DocumentContent:
                 page_tables = page.extract_tables()
                 if page_tables:
                     for table in page_tables:
-                        # Clean up table cells
                         cleaned = []
                         for row in table:
                             cleaned_row = [
@@ -193,6 +274,53 @@ def extract_text_digital(filepath: str) -> DocumentContent:
                 tables=tables,
                 is_scanned=False
             ))
+
+        doc.page_count = len(doc.pages)
+
+    return doc
+
+
+def _extract_with_pymupdf(filepath: str, doc: DocumentContent) -> DocumentContent:
+    """
+    Fallback extractor using PyMuPDF (fitz). Handles corrupted PDFs with
+    inflated page counts that cause pdfplumber to hang. PyMuPDF opens
+    these files instantly.
+
+    Note: PyMuPDF doesn't do structured table extraction, so the
+    extraction engine's text-based parsers will handle tabular data.
+    """
+    import fitz
+
+    pdf = fitz.open(filepath)
+    consecutive_empty = 0
+
+    pages_to_process = min(pdf.page_count, MAX_PAGES)
+
+    for i in range(pages_to_process):
+        page = pdf[i]
+        text = page.get_text() or ""
+
+        if not text.strip():
+            consecutive_empty += 1
+            if consecutive_empty >= MAX_CONSECUTIVE_EMPTY:
+                logger.info(
+                    f"Stopping after {i+1} pages — "
+                    f"{MAX_CONSECUTIVE_EMPTY} consecutive empty pages detected"
+                )
+                break
+            continue
+        else:
+            consecutive_empty = 0
+
+        doc.pages.append(PageContent(
+            page_number=i + 1,
+            text=text,
+            tables=[],  # PyMuPDF doesn't extract tables; text parsers handle this
+            is_scanned=False
+        ))
+
+    pdf.close()
+    doc.page_count = len(doc.pages)
 
     return doc
 

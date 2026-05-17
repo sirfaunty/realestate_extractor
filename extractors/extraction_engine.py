@@ -27,14 +27,20 @@ logger = logging.getLogger(__name__)
 class ExtractionEngine:
     """Main extraction engine that routes documents through the appropriate pipeline."""
 
+    LLM_CHECK_TTL = 60  # re-check LLM availability every 60 seconds
+
     def __init__(self, llm_client: Optional[LocalLLMClient] = None):
         self.llm = llm_client or LocalLLMClient()
         self._llm_available = None
+        self._llm_checked_at = 0  # epoch timestamp of last check
 
     @property
     def llm_available(self) -> bool:
-        if self._llm_available is None:
+        import time
+        now = time.time()
+        if self._llm_available is None or (now - self._llm_checked_at) > self.LLM_CHECK_TTL:
             self._llm_available = self.llm.is_available()
+            self._llm_checked_at = now
             if not self._llm_available:
                 logger.warning(
                     "Local LLM not available. Falling back to rule-based extraction. "
@@ -1174,6 +1180,12 @@ class ExtractionEngine:
             if all_rows:
                 logger.info(f"Text-based operating statement parser found {len(all_rows)} rows")
 
+        # Second try (rent rolls): text-based parsing for flowing-text rent rolls
+        if not all_rows and template.document_type == 'rent_roll':
+            all_rows = self._extract_rent_roll_from_text(doc)
+            if all_rows:
+                logger.info(f"Text-based rent roll parser found {len(all_rows)} rows")
+
         # Last resort: LLM
         if not all_rows and self.llm_available:
             all_rows = self._extract_tabular_llm(doc, template)
@@ -1343,6 +1355,519 @@ class ExtractionEngine:
 
         return all_rows
 
+    def _extract_rent_roll_from_text(self, doc: DocumentContent) -> List[Dict]:
+        """
+        Parse rent roll data directly from text when pdfplumber can't
+        find structured tables.
+
+        Supports two common property-management formats:
+
+        Format A — Fixed-length records (e.g., senior living / simple rent rolls):
+            100 One BR - 724   ← unit + type + sqft
+            Holmgren, Odel M.  ← tenant
+            0                  ← sec deposit
+            2,290.00           ← rent
+            0                  ← other
+
+        Format B — "Total"-delimited records (e.g., Yardi rent rolls):
+            6720-01            ← unit number
+            CP-A               ← unit type
+            650.00 t0002067    ← sqft + tenant ID
+            Ahmad Doleh        ← tenant name
+            859.00 rent        ← market rent + charge code
+            915.00             ← actual rent
+            500.00             ← deposit
+            0.00 07/30/2019    ← other deposit + move-in
+            08/29/2019         ← lease expiration
+            0.00               ← balance
+            Total              ← record delimiter
+            915.00             ← total rent
+        """
+        # Combine all page text, skipping repeated headers
+        all_lines = []
+        header_keywords = {'unit', 'resident', 'tenant', 'rent', 'sec dep',
+                           'unit type', 'second', 'deposit', 'name', 'market',
+                           'charge', 'balance', 'sq ft', 'expiration', 'move'}
+        page_meta_re = re.compile(
+            r'(rent roll|page \d|as of|month year|current/notice|notice/vacant)',
+            re.IGNORECASE
+        )
+
+        page_numbers = {}  # line_index -> page_number
+
+        for page in doc.pages:
+            text = page.text if hasattr(page, 'text') else ''
+            if not text:
+                continue
+
+            lines = [l.strip() for l in text.split('\n') if l.strip()]
+
+            # Skip header block at start of each page
+            data_start = 0
+            for i, line in enumerate(lines):
+                lower = line.lower()
+                if any(kw in lower for kw in header_keywords):
+                    data_start = i + 1
+                else:
+                    break
+
+            for line in lines[data_start:]:
+                # Skip page metadata lines
+                if page_meta_re.search(line):
+                    continue
+                idx = len(all_lines)
+                page_numbers[idx] = page.page_number
+                all_lines.append(line)
+
+        if not all_lines:
+            return []
+
+        # Detect format: look for "Total" delimiters
+        has_totals = any(l.lower() == 'total' for l in all_lines)
+
+        # Detect unit number patterns
+        # Format A: "100 One BR - 724" (digits + space + descriptive text)
+        unit_re_a = re.compile(r'^(\d+)\s+(.+)$')
+        # Format B: "6720-01" or "B125" (standalone unit IDs with a
+        #           unit-type line like "CP-A", "1BR-B" on the next line)
+        unit_re_b = re.compile(r'^([A-Z]?\d{3,}-\d{2,}|[A-Z]\d{2,})$')
+        # Format C: plain integer unit (101, 102) followed by an alphanumeric
+        #           type code (4302b12p) then "sqft tenantID" line
+        unit_re_c = re.compile(r'^(\d{1,4})$')
+        # Unit type patterns
+        unit_type_re_b = re.compile(
+            r'^[A-Z0-9]+-[A-Z0-9]+$|^(CP|BR|Studio|Alcove|SRO)',
+            re.IGNORECASE
+        )
+        unit_type_re_c = re.compile(r'^[a-zA-Z0-9]{4,}$')  # e.g. "4302b12p"
+        sqft_tenant_re = re.compile(r'^[\d,.]+\s+\S+')  # e.g. "1,070.00 t0001450"
+
+        # Count format matches
+        format_b_matches = 0
+        for i, l in enumerate(all_lines):
+            if unit_re_b.match(l) and i + 1 < len(all_lines) and unit_type_re_b.match(all_lines[i + 1]):
+                format_b_matches += 1
+
+        format_c_matches = 0
+        for i, l in enumerate(all_lines):
+            if unit_re_c.match(l) and i + 2 < len(all_lines):
+                next_l = all_lines[i + 1]
+                next_next = all_lines[i + 2]
+                if (unit_type_re_c.match(next_l)
+                        and not any(kw in next_l.lower() for kw in header_keywords)
+                        and sqft_tenant_re.match(next_next)):
+                    format_c_matches += 1
+
+        format_a_matches = sum(1 for l in all_lines if unit_re_a.match(l))
+
+        if has_totals and format_b_matches > 2:
+            return self._parse_rent_roll_format_b(all_lines, page_numbers)
+        elif format_c_matches > 2:
+            return self._parse_rent_roll_format_c(all_lines, page_numbers)
+        elif format_a_matches > 2:
+            return self._parse_rent_roll_format_a(all_lines, page_numbers)
+        else:
+            if has_totals:
+                return self._parse_rent_roll_format_b(all_lines, page_numbers)
+            return []
+
+    def _parse_rent_roll_format_a(self, lines: List[str],
+                                   page_numbers: Dict[int, int]) -> List[Dict]:
+        """
+        Parse fixed-length rent roll records (e.g., Arbors-style).
+        Records: unit+type, name, sec_dep, rent, other.
+        """
+        all_rows = []
+        unit_re = re.compile(r'^(\d+)\s+(.+)$')
+        amount_re = re.compile(r'^[\d,]+\.?\d*$')
+
+        # Find record start positions
+        record_starts = [i for i, line in enumerate(lines) if unit_re.match(line)]
+        if len(record_starts) < 2:
+            return []
+
+        record_len = record_starts[1] - record_starts[0]
+        if record_len < 2 or record_len > 10:
+            return []
+
+        for start in record_starts:
+            record = lines[start:start + record_len]
+            if len(record) < 2:
+                continue
+
+            m = unit_re.match(record[0])
+            if not m:
+                continue
+            unit_number = m.group(1)
+            unit_type_raw = m.group(2).strip()
+
+            # Extract sqft from unit type ("One BR - 724" → 724)
+            sqft = None
+            unit_type = unit_type_raw
+            sqft_match = re.search(r'[-\s]?\s*(\d{3,5})\s*$', unit_type_raw)
+            if sqft_match:
+                sqft = sqft_match.group(1)
+                unit_type = unit_type_raw[:sqft_match.start()].rstrip(' -').strip()
+
+            # Tenant name
+            tenant_name = record[1] if len(record) > 1 else ''
+            if amount_re.match(tenant_name):
+                continue
+
+            # Numeric fields
+            numeric_values = []
+            for field_line in record[2:]:
+                cleaned = field_line.replace(',', '').strip()
+                try:
+                    numeric_values.append(float(cleaned))
+                except ValueError:
+                    numeric_values.append(None)
+
+            sec_dep = numeric_values[0] if len(numeric_values) > 0 else None
+            monthly_rent = numeric_values[1] if len(numeric_values) > 1 else None
+
+            if sec_dep == 0:
+                sec_dep = None
+
+            row = {
+                'unit_number': unit_number,
+                'tenant_name': tenant_name,
+                'square_footage': float(sqft) if sqft else None,
+                'monthly_rent': monthly_rent,
+                'status': 'occupied' if tenant_name and monthly_rent and monthly_rent > 0 else 'vacant',
+                'notes': unit_type if unit_type else None,
+                'page_number': page_numbers.get(start, 1),
+                'metadata': {
+                    'unit_type': unit_type,
+                    'security_deposit': sec_dep,
+                },
+            }
+
+            if unit_number and tenant_name:
+                all_rows.append(row)
+
+        return all_rows
+
+    def _parse_rent_roll_format_b(self, lines: List[str],
+                                   page_numbers: Dict[int, int]) -> List[Dict]:
+        """
+        Parse "Total"-delimited rent roll records (e.g., Yardi / Chamberlain-style).
+
+        Each record runs from a unit number line to a "Total" line + total amount.
+        Fields within a record are identified by content pattern rather than
+        fixed position, since records can vary in length (subsidy lines, etc.).
+        """
+        all_rows = []
+        unit_re = re.compile(r'^([A-Z]?\d{3,}-\d{2,}|[A-Z]\d{2,})$')
+        unit_type_re = re.compile(
+            r'^[A-Z0-9]+-[A-Z0-9]+$|^(CP|BR|Studio|Alcove|SRO)',
+            re.IGNORECASE
+        )
+        date_re = re.compile(r'\d{2}/\d{2}/\d{4}')
+        amount_re = re.compile(r'^-?[\d,]+\.\d{2}$')
+
+        # Split into records using unit numbers as start markers
+        # Require the next line to be a unit type to avoid false positives
+        record_starts = []
+        for i, line in enumerate(lines):
+            if unit_re.match(line) and i + 1 < len(lines) and unit_type_re.match(lines[i + 1]):
+                record_starts.append(i)
+        if not record_starts:
+            return []
+
+        for ri, start in enumerate(record_starts):
+            # Record ends at next unit start or end of lines
+            end = record_starts[ri + 1] if ri + 1 < len(record_starts) else len(lines)
+            record = lines[start:end]
+
+            if len(record) < 4:
+                continue
+
+            unit_number = record[0]
+            unit_type = record[1] if len(record) > 1 else None
+
+            # Line 3: sqft + tenant ID or "sqft VACANT"
+            sqft = None
+            tenant_id = None
+            is_vacant = False
+            if len(record) > 2:
+                sqft_line = record[2]
+                if 'VACANT' in sqft_line.upper():
+                    is_vacant = True
+                    sqft_match = re.match(r'([\d,.]+)', sqft_line)
+                    if sqft_match:
+                        try:
+                            sqft = float(sqft_match.group(1).replace(',', ''))
+                        except ValueError:
+                            pass
+                else:
+                    parts = sqft_line.split()
+                    if parts:
+                        try:
+                            sqft = float(parts[0].replace(',', ''))
+                        except ValueError:
+                            pass
+                        if len(parts) > 1:
+                            tenant_id = parts[1]
+
+            # Line 4: tenant name
+            tenant_name = ''
+            if len(record) > 3:
+                name_candidate = record[3]
+                # Make sure it's not a number
+                if not amount_re.match(name_candidate.replace(',', '').replace('-', '')):
+                    tenant_name = name_candidate
+
+            if is_vacant:
+                tenant_name = 'VACANT'
+
+            # Find the "Total" line and the total rent after it
+            total_rent = None
+            for j, line in enumerate(record):
+                if line.lower() == 'total' and j + 1 < len(record):
+                    try:
+                        total_rent = float(record[j + 1].replace(',', ''))
+                    except ValueError:
+                        pass
+                    break
+
+            # Parse amounts between name and Total
+            # Line 5 is typically "market_rent rent" or just market_rent
+            market_rent = None
+            monthly_rent = None
+            deposit = None
+            move_in = None
+            lease_end = None
+            balance = None
+
+            # Scan remaining lines for amounts and dates
+            amount_lines = []
+            for j in range(4, len(record)):
+                line = record[j]
+                if line.lower() == 'total':
+                    break
+                if line.lower() in ('subsidy', 'concession', 'credit'):
+                    continue  # skip charge-type labels
+
+                # Extract date if present
+                date_match = date_re.search(line)
+                if date_match:
+                    date_val = date_match.group()
+                    # Line with both amount and date (e.g., "0.00 07/30/2019")
+                    amt_part = line[:date_match.start()].strip()
+                    if not move_in:
+                        move_in = date_val
+                        # The amount before the date is "other deposit"
+                    elif not lease_end:
+                        lease_end = date_val
+                    continue
+
+                # Pure date line
+                if re.match(r'^\d{2}/\d{2}/\d{4}$', line):
+                    if not move_in:
+                        move_in = line
+                    elif not lease_end:
+                        lease_end = line
+                    continue
+
+                # Amount line (possibly with charge code like "859.00 rent")
+                parts = line.split()
+                if parts:
+                    amt_str = parts[0].replace(',', '').replace('-', '', 1) if parts[0].startswith('-') else parts[0].replace(',', '')
+                    # Handle negative amounts
+                    raw = parts[0].replace(',', '')
+                    try:
+                        val = float(raw)
+                        amount_lines.append(val)
+                    except ValueError:
+                        pass
+
+            # Map amounts by position:
+            # [0]=market_rent, [1]=actual_rent, [2]=deposit, [3]=other, [4]=balance
+            if len(amount_lines) >= 1:
+                market_rent = amount_lines[0]
+            if len(amount_lines) >= 2:
+                monthly_rent = amount_lines[1]
+            if len(amount_lines) >= 3:
+                deposit = amount_lines[2]
+            # balance is typically last amount before Total
+            if len(amount_lines) >= 4:
+                balance = amount_lines[-1]
+
+            # Use total_rent as the definitive monthly rent if we have it
+            # (handles cases with subsidy/concession where individual lines
+            # don't add up simply)
+            if total_rent is not None:
+                monthly_rent = total_rent
+
+            row = {
+                'unit_number': unit_number,
+                'tenant_name': tenant_name if tenant_name != 'VACANT' else '',
+                'square_footage': sqft,
+                'monthly_rent': monthly_rent,
+                'lease_start': move_in,
+                'lease_end': lease_end,
+                'status': 'vacant' if is_vacant or not tenant_name or tenant_name == 'VACANT' else 'occupied',
+                'notes': unit_type,
+                'page_number': page_numbers.get(start, 1),
+                'metadata': {
+                    'unit_type': unit_type,
+                    'market_rent': market_rent,
+                    'security_deposit': deposit,
+                    'tenant_id': tenant_id,
+                    'balance': balance,
+                },
+            }
+
+            all_rows.append(row)
+
+        return all_rows
+
+    def _parse_rent_roll_format_c(self, lines: List[str],
+                                   page_numbers: Dict[int, int]) -> List[Dict]:
+        """
+        Parse fixed-length rent roll records where unit number, unit type,
+        and sqft are on separate lines (e.g., 430 Oak Grove / Yardi style).
+
+        Record structure (~10 lines, no "Total" delimiter):
+            101              ← unit number (plain integer)
+            4302b12p         ← unit type code
+            1,070.00 t001450 ← sqft + tenant ID (or "sqft VACANT")
+            Gowri Kabbur     ← tenant name
+            1,885.00         ← market rent
+            1,855.00         ← actual rent
+            300.00           ← deposit
+            0.00 05/17/2018  ← other deposit + move-in date
+            05/31/2021       ← lease expiration
+            0.00             ← balance
+        """
+        all_rows = []
+        unit_re = re.compile(r'^(\d{1,4})$')
+        type_re = re.compile(r'^[a-zA-Z0-9]{4,}$')
+        date_re = re.compile(r'\d{2}/\d{2}/\d{4}')
+        sqft_line_re = re.compile(r'^([\d,.]+)\s+(.+)$')
+
+        # Find record starts: unit number + type code + sqft line
+        header_keywords = {'unit', 'resident', 'tenant', 'rent', 'deposit',
+                           'name', 'market', 'actual', 'balance', 'sq ft',
+                           'expiration', 'move', 'lease', 'total'}
+        record_starts = []
+        for i, line in enumerate(lines):
+            if unit_re.match(line) and i + 2 < len(lines):
+                next_l = lines[i + 1]
+                next_next = lines[i + 2]
+                if (type_re.match(next_l)
+                        and next_l.lower() not in header_keywords
+                        and sqft_line_re.match(next_next)):
+                    record_starts.append(i)
+
+        if len(record_starts) < 2:
+            return []
+
+        # Determine record length
+        record_len = record_starts[1] - record_starts[0]
+        if record_len < 4 or record_len > 15:
+            return []
+
+        for start in record_starts:
+            record = lines[start:start + record_len]
+            if len(record) < 4:
+                continue
+
+            unit_number = record[0]
+            unit_type = record[1]
+
+            # Parse sqft + tenant ID / VACANT
+            sqft = None
+            tenant_id = None
+            is_vacant = False
+            sqft_m = sqft_line_re.match(record[2])
+            if sqft_m:
+                try:
+                    sqft = float(sqft_m.group(1).replace(',', ''))
+                except ValueError:
+                    pass
+                id_part = sqft_m.group(2).strip()
+                if 'VACANT' in id_part.upper():
+                    is_vacant = True
+                else:
+                    tenant_id = id_part
+
+            # Tenant name
+            tenant_name = record[3] if len(record) > 3 else ''
+            if is_vacant:
+                tenant_name = ''
+
+            # Parse remaining lines for amounts and dates
+            move_in = None
+            lease_end = None
+            amounts = []
+
+            for j in range(4, len(record)):
+                line = record[j]
+                if line.lower() in ('total', 'subtotal'):
+                    break
+
+                # Check for date
+                dm = date_re.search(line)
+                if dm:
+                    date_val = dm.group()
+                    if not move_in:
+                        move_in = date_val
+                    elif not lease_end:
+                        lease_end = date_val
+                    # Also parse amount before the date if present
+                    amt_part = line[:dm.start()].strip()
+                    if amt_part:
+                        try:
+                            amounts.append(float(amt_part.replace(',', '')))
+                        except ValueError:
+                            pass
+                    continue
+
+                # Pure date line
+                if re.match(r'^\d{2}/\d{2}/\d{4}$', line):
+                    if not move_in:
+                        move_in = line
+                    elif not lease_end:
+                        lease_end = line
+                    continue
+
+                # Amount line
+                try:
+                    amounts.append(float(line.replace(',', '')))
+                except ValueError:
+                    pass
+
+            # Map amounts: [0]=market, [1]=actual_rent, [2]=deposit, [3..]=other/balance
+            market_rent = amounts[0] if len(amounts) > 0 else None
+            monthly_rent = amounts[1] if len(amounts) > 1 else None
+            deposit = amounts[2] if len(amounts) > 2 else None
+            balance = amounts[-1] if len(amounts) > 3 else None
+
+            row = {
+                'unit_number': unit_number,
+                'tenant_name': tenant_name,
+                'square_footage': sqft,
+                'monthly_rent': monthly_rent,
+                'lease_start': move_in,
+                'lease_end': lease_end,
+                'status': 'vacant' if is_vacant or not tenant_name else 'occupied',
+                'notes': unit_type,
+                'page_number': page_numbers.get(start, 1),
+                'metadata': {
+                    'unit_type': unit_type,
+                    'market_rent': market_rent,
+                    'security_deposit': deposit,
+                    'tenant_id': tenant_id,
+                    'balance': balance,
+                },
+            }
+
+            all_rows.append(row)
+
+        return all_rows
+
     def _map_table_columns(self, table: List[List[str]],
                             template: DocumentTemplate) -> List[Dict]:
         """
@@ -1456,106 +1981,326 @@ class ExtractionEngine:
 
 
 class DocumentClassifier:
-    """Classify document type using content analysis."""
+    """
+    Classify document type using a layered approach:
+      1. Filename pattern matching (highest priority, fast)
+      2. Title/header keyword matching (first 500 chars, high weight)
+      3. Body keyword scoring (first 5000 chars)
+      4. LLM fallback (only when confidence is very low)
 
-    # Keywords strongly associated with each document type
+    Supports 13 document types covering the full CRE document universe.
+    """
+
+    # ── Filename patterns ──────────────────────────────────────────
+    # Checked first.  Tuple of (regex_pattern, doc_type, confidence).
+    # Patterns are tested against the lowercased filename.
+    FILENAME_PATTERNS = [
+        # Partnership / LLC
+        (r'llc.?agreement|limited.?liability.?company.?agreement', 'partnership_agreement', 0.92),
+        (r'amendment.{0,10}llc|llc.{0,10}amendment', 'partnership_agreement', 0.90),
+        (r'exhibit.*llc|llc.*exhibit|llc.?section|llc.?definition', 'partnership_agreement', 0.88),
+        # HUD forms
+        (r'hud.?cost.?cert', 'hud_form', 0.92),
+        (r'hud.?final.?endors', 'hud_form', 0.92),
+        (r'hud.?max.?insur', 'loan', 0.90),  # HUD mortgage schedule is a loan doc
+        (r'hud.?escrow.?release|hud.?offsite|hud.?wc.?escrow', 'hud_form', 0.90),
+        # Due diligence
+        (r'diagnostic.?memo|due.?diligence|forensic.?review', 'due_diligence', 0.90),
+        # Proforma / valuation
+        (r'proforma|valuation.?proforma|portfolio.?proforma', 'proforma', 0.90),
+        (r'investment.?summary|investment.?overview', 'proforma', 0.85),
+        # Equity / waterfall
+        (r'equity.?return.?calc|jv.?equity|equity.?waterfall', 'equity_waterfall', 0.90),
+        (r'equity.?account|equity.?detail', 'equity_waterfall', 0.88),
+        # Operating / budget
+        (r'budget.?overview|operating.?budget|detailed.?budget', 'operating_statement', 0.90),
+        (r'property.?overview.?summary', 'operating_statement', 0.85),
+        (r'leadership.?rollup|cash.?activity', 'operating_statement', 0.85),
+        # Closing / sources-uses
+        (r'closing.?proceeds|settlement.?statement', 'closing', 0.90),
+        (r'sources.?and.?uses|sources.?uses', 'closing', 0.88),
+        (r'development.?agreement', 'closing', 0.88),
+        # Loan
+        (r'surplus.?cash.?note', 'loan', 0.88),
+        (r'loan.?interest.?calc|project.?loan', 'loan', 0.88),
+        (r'promissory.?note|mortgage.?schedule', 'loan', 0.90),
+        # Guarantee
+        (r'guarantee|guaranty', 'guarantee', 0.90),
+        # Rent roll
+        (r'rent.?roll', 'rent_roll', 0.92),
+        # GL
+        (r'general.?ledger|gl.?detail', 'general_ledger', 0.90),
+        # Org chart
+        (r'organizational.?chart|org.?chart|borrower.?org', 'organizational', 0.88),
+        # Reference / context
+        (r'context\.md$|context\.txt$|readme', 'reference', 0.85),
+    ]
+
+    # ── Keyword sets for body-text scoring ─────────────────────────
+    # Each entry: (keywords, negative_keywords)
+    # Negative keywords REDUCE score when found in the title, preventing
+    # cross-referential text from causing misclassification.
     TYPE_KEYWORDS = {
-        "lease": [
-            "lease agreement", "landlord", "tenant", "lessee", "lessor",
-            "rent", "leased premises", "term of lease", "base rent",
-            "common area", "cam", "security deposit"
-        ],
-        "loan": [
-            "promissory note", "loan agreement", "borrower", "lender",
-            "principal", "interest rate", "maturity", "mortgage",
-            "amortization", "debt service", "collateral"
-        ],
-        "closing": [
-            "purchase and sale", "closing statement", "settlement",
-            "buyer", "seller", "purchase price", "earnest money",
-            "title insurance", "closing costs", "settlement statement"
-        ],
-        "guarantee": [
-            "guarantee", "guaranty", "guarantor", "guaranteed obligations",
-            "unconditional", "irrevocable", "net worth", "personal guarantee"
-        ],
-        "rent_roll": [
-            "rent roll", "unit", "tenant", "occupied", "vacant",
-            "monthly rent", "lease expiration", "square feet"
-        ],
-        "operating_statement": [
-            "operating statement", "income and expense", "revenue",
-            "operating expenses", "net operating income", "noi",
-            "property tax", "insurance", "maintenance", "utilities",
-            "budget", "projected", "forecast", "fiscal year",
-            "annual budget", "operating budget", "variance",
-            "actual vs budget", "line item"
-        ],
-        "general_ledger": [
-            "general ledger", "gl detail", "account code", "debit",
-            "credit", "journal entry", "chart of accounts", "posting"
-        ],
+        "lease": {
+            "positive": [
+                "lease agreement", "landlord", "tenant", "lessee", "lessor",
+                "leased premises", "term of lease", "base rent",
+                "common area maintenance", "cam charges", "security deposit",
+                "lease commencement", "triple net", "nnn lease",
+            ],
+            "negative": [
+                "llc agreement", "limited liability", "promissory note",
+                "loan agreement", "hud", "proforma", "budget overview",
+                "diagnostic memo", "equity return",
+            ],
+        },
+        "loan": {
+            "positive": [
+                "promissory note", "loan agreement", "borrower", "lender",
+                "principal balance", "interest rate", "maturity date", "mortgage",
+                "amortization", "debt service", "collateral", "note holder",
+                "loan amount", "prepayment", "default", "surplus cash note",
+                "insurable mortgage", "mortgage schedule",
+            ],
+            "negative": [
+                "llc agreement", "limited liability", "lease agreement",
+                "rent roll", "diagnostic memo", "equity return",
+            ],
+        },
+        "closing": {
+            "positive": [
+                "purchase and sale", "closing statement", "settlement statement",
+                "buyer", "seller", "purchase price", "earnest money",
+                "title insurance", "closing costs", "closing proceeds",
+                "sources and uses", "development agreement", "contract for",
+                "private development",
+            ],
+            "negative": [
+                "llc agreement", "limited liability", "rent roll",
+                "proforma", "budget overview",
+            ],
+        },
+        "guarantee": {
+            "positive": [
+                "guarantee agreement", "guaranty agreement", "guarantor",
+                "guaranteed obligations", "unconditional guarantee",
+                "irrevocable", "personal guarantee", "carve-out guaranty",
+                "completion guaranty",
+            ],
+            "negative": [
+                "llc agreement", "limited liability", "lease agreement",
+            ],
+        },
+        "rent_roll": {
+            "positive": [
+                "rent roll", "unit number", "occupied", "vacant",
+                "monthly rent", "lease expiration", "square feet",
+                "unit type", "market rent", "in-place rent",
+                "move-in date", "lease start",
+            ],
+            "negative": [
+                "llc agreement", "promissory note", "closing",
+                "diagnostic memo", "proforma", "budget overview",
+                "equity return", "investment summary",
+            ],
+        },
+        "operating_statement": {
+            "positive": [
+                "operating statement", "income and expense",
+                "operating expenses", "net operating income", "noi",
+                "property tax", "maintenance", "utilities expense",
+                "budget overview", "detailed budget", "variance",
+                "actual vs budget", "controllable expenses",
+                "non-controllable", "effective gross income",
+                "total revenue", "total expenses", "cash activity",
+                "leadership rollup", "operating budget",
+                "reforecast", "annualized",
+            ],
+            "negative": [
+                "llc agreement", "promissory note", "lease agreement",
+                "proforma year", "capitalized value", "residual cap",
+            ],
+        },
+        "general_ledger": {
+            "positive": [
+                "general ledger", "gl detail", "account code", "debit",
+                "credit", "journal entry", "chart of accounts", "posting",
+                "account register", "beginning balance", "ending balance",
+            ],
+            "negative": [
+                "equity account", "equity return", "equity summary",
+            ],
+        },
+        "partnership_agreement": {
+            "positive": [
+                "llc agreement", "limited liability company agreement",
+                "operating agreement", "amendment no", "amendment to",
+                "managing member", "membership interest", "capital account",
+                "distributions of cash flow", "capital contribution",
+                "section 3.2", "section 5.2", "member",
+                "percentage ownership", "company agreement",
+            ],
+            "negative": [],
+        },
+        "due_diligence": {
+            "positive": [
+                "diagnostic memo", "due diligence", "forensic review",
+                "equity reconciliation", "decision framework",
+                "findings", "recommendation", "risk assessment",
+                "compliance review", "document type: diagnostic",
+            ],
+            "negative": [],
+        },
+        "proforma": {
+            "positive": [
+                "proforma", "pro forma", "proforma summary",
+                "valuation", "capitalized value", "residual cap",
+                "discount rate", "exit cap", "irr",
+                "investment summary", "investment overview",
+                "cost basis", "net sale proceeds", "year 11 noi",
+                "trailing 12", "annualized t6", "annualized t3",
+                "interactive proforma",
+            ],
+            "negative": [
+                "budget overview", "detailed budget",
+            ],
+        },
+        "equity_waterfall": {
+            "positive": [
+                "equity return", "equity return calc", "jv equity",
+                "surplus cash calculation", "equity contribution",
+                "equity balance", "return to each partner",
+                "compounded monthly", "preferred return",
+                "equity period", "equity summary", "net invested equity",
+                "distributions", "amount due to",
+            ],
+            "negative": [
+                "llc agreement",
+            ],
+        },
+        "hud_form": {
+            "positive": [
+                "u.s. department of housing", "urban development",
+                "federal housing commissioner", "hud", "omb approval",
+                "mortgagor's certificate", "cost certification",
+                "final endorsement", "credit instrument",
+                "escrow release", "fha",
+            ],
+            "negative": [],
+        },
+        "organizational": {
+            "positive": [
+                "organizational chart", "org chart", "borrower org",
+                "mortgagor organizational", "corporate structure",
+                "entity structure", "ownership chart",
+            ],
+            "negative": [],
+        },
+        "reference": {
+            "positive": [
+                "context bundle", "master prompt", "batch 1 of",
+                "readme", "instructions", "overview document",
+                "context file", "reference document",
+            ],
+            "negative": [],
+        },
+    }
+
+    # Document types that have extraction templates (Phase 2 analysis)
+    EXTRACTABLE_TYPES = {
+        'lease', 'loan', 'closing', 'guarantee',
+        'rent_roll', 'operating_statement', 'general_ledger',
     }
 
     def __init__(self, llm_client: Optional[LocalLLMClient] = None):
         self.llm = llm_client
+        # Pre-compile filename patterns
+        self._filename_patterns = [
+            (re.compile(pat, re.IGNORECASE), dtype, conf)
+            for pat, dtype, conf in self.FILENAME_PATTERNS
+        ]
 
-    def classify(self, doc: DocumentContent) -> Tuple[str, float]:
+    def classify(self, doc: DocumentContent,
+                 use_llm: bool = True) -> Tuple[str, float]:
         """
-        Classify document type based on content analysis.
+        Classify document type using layered analysis.
+
+        Strategy:
+          1. Filename pattern match (fast, high confidence)
+          2. Title + body keyword scoring with negative penalties
+          3. LLM fallback if confidence is very low
 
         Returns (document_type, confidence) tuple.
         """
-        text_lower = doc.full_text[:5000].lower()
+        # ── Layer 1: Filename patterns ──
+        filename_lower = doc.filename.lower()
+        for pattern, doc_type, confidence in self._filename_patterns:
+            if pattern.search(filename_lower):
+                logger.info(f"Classifier: filename match → {doc_type} ({confidence:.0%})")
+                return doc_type, confidence
 
-        # Title/header text gets heavier weight — first 500 chars typically
-        # contain the document title and key identifiers
+        # ── Layer 2: Keyword scoring ──
+        text_lower = doc.full_text[:5000].lower()
         title_text = doc.full_text[:500].lower()
 
         scores = {}
-        for doc_type, keywords in self.TYPE_KEYWORDS.items():
+        for doc_type, kw_config in self.TYPE_KEYWORDS.items():
+            positive_kws = kw_config["positive"]
+            negative_kws = kw_config["negative"]
+
             score = 0
-            for kw in keywords:
+            for kw in positive_kws:
                 if kw in title_text:
                     score += 3  # strong signal: keyword in title/header
                 elif kw in text_lower:
                     score += 1  # weaker signal: keyword in body
-            # Normalize by keyword count
-            scores[doc_type] = score / len(keywords)
 
-        if not scores:
+            # Negative keywords in the title suppress this type
+            for neg_kw in negative_kws:
+                if neg_kw in title_text:
+                    score -= 4  # strong penalty: contradicting keyword in title
+                elif neg_kw in text_lower[:1000]:
+                    score -= 1  # mild penalty in early body
+
+            # Normalize by positive keyword count, clamp at 0
+            scores[doc_type] = max(0, score) / len(positive_kws) if positive_kws else 0
+
+        if not scores or max(scores.values()) == 0:
+            if use_llm and self.llm and self.llm.is_available():
+                return self._classify_llm(doc)
             return "unknown", 0.0
 
         best_type = max(scores, key=scores.get)
         best_score = scores[best_type]
 
-        # If score is very low, use LLM for classification
-        if best_score < 0.15 and self.llm and self.llm.is_available():
+        # If score is very low and LLM is allowed, use LLM for classification
+        if use_llm and best_score < 0.15 and self.llm and self.llm.is_available():
             return self._classify_llm(doc)
 
         return best_type, min(best_score * 2, 1.0)  # scale up confidence
 
     def _classify_llm(self, doc: DocumentContent) -> Tuple[str, float]:
         """Use LLM to classify ambiguous documents."""
+        type_list = "\n".join(
+            f"- {t}" for t in sorted(self.TYPE_KEYWORDS.keys())
+        )
         prompt = f"""Classify this real estate document into one of these types:
-- lease: Lease agreement
-- loan: Loan document / promissory note / mortgage
-- closing: Purchase/closing document
-- guarantee: Guarantee agreement
-- rent_roll: Rent roll
-- operating_statement: Operating statement / income & expense / budget / forecast
-- general_ledger: General ledger detail
+{type_list}
 
 Return JSON: {{"document_type": "<type>", "confidence": <0-1>}}
+
+Filename: {doc.filename}
 
 First 2000 characters of the document:
 {doc.full_text[:2000]}"""
 
         result = self.llm.generate_structured(prompt)
         if result and isinstance(result, dict):
-            return (
-                result.get('document_type', 'unknown'),
-                result.get('confidence', 0.5)
-            )
+            doc_type = result.get('document_type', 'unknown')
+            # Validate the type is one we recognize
+            if doc_type not in self.TYPE_KEYWORDS and doc_type != 'unknown':
+                logger.warning(f"LLM returned unknown type '{doc_type}', using 'unknown'")
+                doc_type = 'unknown'
+            return doc_type, result.get('confidence', 0.5)
 
         return "unknown", 0.0

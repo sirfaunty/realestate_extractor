@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% block title %}{{ view_title }} Comparison — capactive{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
+    <div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+            <a href="{{ url_for('portfolios') }}" style="color: var(--text-muted);">Portfolios</a>
+            {% if portfolio %} / {{ portfolio.name }}{% endif %}
+        </div>
+        <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">{{ view_title }} — Financial Comparison</h2>
+        <div style="font-size: 14px; color: var(--text-secondary);">
+            {{ comparisons|length }} propert{{ 'y' if comparisons|length == 1 else 'ies' }} · {{ periods|length }} period{{ 's' if periods|length != 1 }}
+        </div>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        {% if portfolios %}
+        <select id="portfolio-filter" onchange="filterPortfolio(this.value)" style="font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: white;">
+            <option value="" {% if not portfolio %}selected{% endif %}>All Properties</option>
+            {% for pf in portfolios %}
+            <option value="{{ pf.id }}" {% if portfolio and portfolio.id == pf.id %}selected{% endif %}>{{ pf.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </div>
+</div>
+
+{% if not comparisons %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#128202;</div>
+        <p>No properties with financial data found. Run Phase 2 analysis on properties first.</p>
+    </div>
+</div>
+{% else %}
+
+<!-- Summary Cards -->
+<div class="card-grid" style="margin-bottom: 20px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+    {% set ns = namespace(total_noi=0, total_income=0, total_expenses=0, latest_period='') %}
+    {% if periods %}
+        {% set ns.latest_period = periods[-1] %}
+        {% for c in comparisons %}
+            {% set ps = c.synthesis.period_summaries.get(ns.latest_period, {}) %}
+            {% set ns.total_income = ns.total_income + ps.get('total_income', 0) %}
+            {% set ns.total_expenses = ns.total_expenses + ps.get('total_expenses', 0) %}
+            {% set ns.total_noi = ns.total_noi + ps.get('calculated_noi', 0) %}
+        {% endfor %}
+    {% endif %}
+    <div class="stat-card">
+        <div class="stat-value">{{ comparisons|length }}</div>
+        <div class="stat-label">Properties</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ periods|length }}</div>
+        <div class="stat-label">Periods</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--cap-signal);">${{ '{:,.0f}'.format(ns.total_income) }}</div>
+        <div class="stat-label">Total Income ({{ ns.latest_period }})</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--cap-navy);">${{ '{:,.0f}'.format(ns.total_noi) }}</div>
+        <div class="stat-label">Total NOI ({{ ns.latest_period }})</div>
+    </div>
+</div>
+
+<!-- Tab Selector -->
+<div style="display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--border); padding-bottom: 0;">
+    <button class="comp-tab active" onclick="switchTab('noi')" id="tab-noi"
+            style="padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;">
+        NOI Timeline
+    </button>
+    <button class="comp-tab" onclick="switchTab('income')" id="tab-income"
+            style="padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;">
+        Income
+    </button>
+    <button class="comp-tab" onclick="switchTab('expenses')" id="tab-expenses"
+            style="padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;">
+        Expenses
+    </button>
+    <button class="comp-tab" onclick="switchTab('sources')" id="tab-sources"
+            style="padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;">
+        Data Sources
+    </button>
+</div>
+
+<!-- NOI Timeline Comparison -->
+<div id="panel-noi" class="comp-panel">
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>NOI by Property &amp; Period</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">Calculated NOI = Income − Expenses</span>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="data-table" style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
+                        {% for p in periods %}
+                        <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in comparisons %}
+                    <tr>
+                        <td style="position: sticky; left: 0; background: white; z-index: 1; font-weight: 500;">
+                            <a href="{{ url_for('property_detail', property_id=c.property.id) }}" style="color: var(--cap-navy);">
+                                {{ c.property.name }}
+                            </a>
+                        </td>
+                        {% for p in periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                            {% set noi = ps.get('calculated_noi', 0) %}
+                            <span style="color: {% if noi > 0 %}var(--cap-signal){% elif noi < 0 %}var(--danger){% else %}var(--text-muted){% endif %};">
+                                ${{ '{:,.0f}'.format(noi) }}
+                            </span>
+                        </td>
+                        {% else %}
+                        <td style="text-align: right; color: var(--text-muted);">—</td>
+                        {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                        <td style="position: sticky; left: 0; background: white; z-index: 1;">Portfolio Total</td>
+                        {% for p in periods %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                            {% set ns2 = namespace(total=0, has_data=false) %}
+                            {% for c in comparisons %}
+                                {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                                {% if ps %}
+                                    {% set ns2.total = ns2.total + ps.get('calculated_noi', 0) %}
+                                    {% set ns2.has_data = true %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if ns2.has_data %}
+                            <span style="color: {% if ns2.total > 0 %}var(--cap-navy){% else %}var(--danger){% endif %};">
+                                ${{ '{:,.0f}'.format(ns2.total) }}
+                            </span>
+                            {% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- NOI Bar Chart (CSS-only) -->
+    {% if periods|length > 0 %}
+    <div class="card">
+        <div class="card-header">NOI Comparison — {{ periods[-1] }}</div>
+        <div style="padding: 8px 0;">
+            {% set ns3 = namespace(max_noi=1) %}
+            {% for c in comparisons %}
+                {% set ps = c.synthesis.period_summaries.get(periods[-1], {}) %}
+                {% if ps and ps.get('calculated_noi', 0) > ns3.max_noi %}
+                    {% set ns3.max_noi = ps.get('calculated_noi', 0) %}
+                {% endif %}
+            {% endfor %}
+            {% for c in comparisons %}
+                {% set ps = c.synthesis.period_summaries.get(periods[-1], {}) %}
+                {% set noi = ps.get('calculated_noi', 0) if ps else 0 %}
+                {% set pct = (noi / ns3.max_noi * 100) if ns3.max_noi > 0 else 0 %}
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+                    <div style="width: 120px; font-size: 13px; font-weight: 500; text-align: right; flex-shrink: 0;">
+                        <a href="{{ url_for('property_detail', property_id=c.property.id) }}" style="color: var(--cap-navy); text-decoration: none;">
+                            {{ c.property.name }}
+                        </a>
+                    </div>
+                    <div style="flex: 1; background: var(--cap-cloud); border-radius: 4px; height: 24px; overflow: hidden;">
+                        <div style="width: {{ pct }}%; background: {% if noi > 0 %}var(--cap-primary){% else %}var(--danger){% endif %}; height: 100%; border-radius: 4px; min-width: {% if noi != 0 %}2px{% else %}0{% endif %}; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div style="width: 100px; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; flex-shrink: 0; color: {% if noi > 0 %}var(--cap-signal){% else %}var(--danger){% endif %};">
+                        ${{ '{:,.0f}'.format(noi) }}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Income Comparison -->
+<div id="panel-income" class="comp-panel" style="display: none;">
+    <div class="card">
+        <div class="card-header">Income by Property &amp; Period</div>
+        <div style="overflow-x: auto;">
+            <table class="data-table" style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
+                        {% for p in periods %}
+                        <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in comparisons %}
+                    <tr>
+                        <td style="position: sticky; left: 0; background: white; z-index: 1; font-weight: 500;">
+                            <a href="{{ url_for('property_detail', property_id=c.property.id) }}" style="color: var(--cap-navy);">
+                                {{ c.property.name }}
+                            </a>
+                        </td>
+                        {% for p in periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps %}
+                        <td style="text-align: right; color: var(--cap-signal); font-variant-numeric: tabular-nums;">
+                            ${{ '{:,.0f}'.format(ps.get('total_income', 0)) }}
+                        </td>
+                        {% else %}
+                        <td style="text-align: right; color: var(--text-muted);">—</td>
+                        {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                        <td style="position: sticky; left: 0; background: white; z-index: 1;">Portfolio Total</td>
+                        {% for p in periods %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums; color: var(--cap-signal);">
+                            {% set ns4 = namespace(total=0, has=false) %}
+                            {% for c in comparisons %}
+                                {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                                {% if ps %}{% set ns4.total = ns4.total + ps.get('total_income', 0) %}{% set ns4.has = true %}{% endif %}
+                            {% endfor %}
+                            {% if ns4.has %}${{ '{:,.0f}'.format(ns4.total) }}{% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Expenses Comparison -->
+<div id="panel-expenses" class="comp-panel" style="display: none;">
+    <div class="card">
+        <div class="card-header">Operating Expenses by Property &amp; Period</div>
+        <div style="overflow-x: auto;">
+            <table class="data-table" style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
+                        {% for p in periods %}
+                        <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in comparisons %}
+                    <tr>
+                        <td style="position: sticky; left: 0; background: white; z-index: 1; font-weight: 500;">
+                            <a href="{{ url_for('property_detail', property_id=c.property.id) }}" style="color: var(--cap-navy);">
+                                {{ c.property.name }}
+                            </a>
+                        </td>
+                        {% for p in periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps %}
+                        <td style="text-align: right; color: var(--danger); font-variant-numeric: tabular-nums;">
+                            ${{ '{:,.0f}'.format(ps.get('total_expenses', 0)) }}
+                        </td>
+                        {% else %}
+                        <td style="text-align: right; color: var(--text-muted);">—</td>
+                        {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                        <td style="position: sticky; left: 0; background: white; z-index: 1;">Portfolio Total</td>
+                        {% for p in periods %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums; color: var(--danger);">
+                            {% set ns5 = namespace(total=0, has=false) %}
+                            {% for c in comparisons %}
+                                {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                                {% if ps %}{% set ns5.total = ns5.total + ps.get('total_expenses', 0) %}{% set ns5.has = true %}{% endif %}
+                            {% endfor %}
+                            {% if ns5.has %}${{ '{:,.0f}'.format(ns5.total) }}{% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- Expense Ratio -->
+    <div class="card">
+        <div class="card-header">Operating Expense Ratio (Expenses ÷ Income)</div>
+        <div style="overflow-x: auto;">
+            <table class="data-table" style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
+                        {% for p in periods %}
+                        <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in comparisons %}
+                    <tr>
+                        <td style="position: sticky; left: 0; background: white; z-index: 1; font-weight: 500;">{{ c.property.name }}</td>
+                        {% for p in periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps and ps.get('total_income', 0) > 0 %}
+                        {% set ratio = ps.get('total_expenses', 0) / ps.get('total_income', 1) * 100 %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums; color: {% if ratio > 70 %}var(--danger){% elif ratio > 50 %}var(--warning){% else %}var(--cap-signal){% endif %};">
+                            {{ '{:.1f}'.format(ratio) }}%
+                        </td>
+                        {% else %}
+                        <td style="text-align: right; color: var(--text-muted);">—</td>
+                        {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Data Sources -->
+<div id="panel-sources" class="comp-panel" style="display: none;">
+    {% for c in comparisons %}
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>
+                <a href="{{ url_for('property_detail', property_id=c.property.id) }}" style="color: var(--cap-navy);">{{ c.property.name }}</a>
+            </span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">
+                {{ c.synthesis.document_sources|length }} source{{ 's' if c.synthesis.document_sources|length != 1 }}
+            </span>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th style="text-align: center;">Authority</th>
+                    <th style="text-align: right;">Items</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for src in c.synthesis.document_sources %}
+                <tr>
+                    <td style="font-size: 13px;">
+                        <a href="{{ url_for('document_detail', doc_id=src.doc_id) }}" style="color: var(--cap-navy);">
+                            {{ src.filename }}
+                        </a>
+                    </td>
+                    <td style="font-size: 12px;">{{ src.doc_type.replace('_', ' ').title() }}</td>
+                    <td style="text-align: center;">
+                        {% for i in range(src.authority) %}<span style="color: var(--cap-signal);">&#9733;</span>{% endfor %}{% for i in range(5 - src.authority) %}<span style="color: var(--border);">&#9733;</span>{% endfor %}
+                    </td>
+                    <td style="text-align: right;">{{ src.item_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if c.synthesis.synthesis_notes %}
+        <div style="font-size: 12px; color: var(--text-muted); padding: 8px 0 0 0; border-top: 1px solid var(--border-subtle); margin-top: 8px;">
+            {% for note in c.synthesis.synthesis_notes %}
+            <div style="padding: 3px 0;">{{ note }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(name) {
+    document.querySelectorAll('.comp-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.comp-tab').forEach(t => {
+        t.classList.remove('active');
+        t.style.color = 'var(--text-muted)';
+        t.style.borderBottomColor = 'transparent';
+    });
+    const panel = document.getElementById('panel-' + name);
+    const tab = document.getElementById('tab-' + name);
+    if (panel) panel.style.display = 'block';
+    if (tab) {
+        tab.classList.add('active');
+        tab.style.color = 'var(--cap-navy)';
+        tab.style.borderBottomColor = 'var(--cap-primary)';
+    }
+}
+
+// Initialize first tab
+switchTab('noi');
+
+function filterPortfolio(val) {
+    if (val) {
+        window.location.href = '/portfolio/' + val + '/comparison';
+    } else {
+        window.location.href = '/portfolio/comparison';
+    }
+}
+</script>
+{% endblock %}

@@ -239,6 +239,40 @@ CREATE INDEX IF NOT EXISTS idx_opstat_category ON operating_statement_items(cate
 CREATE INDEX IF NOT EXISTS idx_gl_doc ON gl_entries(document_id);
 CREATE INDEX IF NOT EXISTS idx_gl_account ON gl_entries(account_code);
 CREATE INDEX IF NOT EXISTS idx_gl_date ON gl_entries(entry_date);
+
+-- ─── Raw Table Storage (Phase 1 ingest) ───────────────────────────
+-- Preserves pdfplumber/PyMuPDF table extractions exactly as found,
+-- so Phase 2 analysis can re-process without touching the PDF again.
+
+CREATE TABLE IF NOT EXISTS document_tables (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL REFERENCES documents(id),
+    page_number     INTEGER NOT NULL,
+    table_index     INTEGER NOT NULL DEFAULT 0,  -- multiple tables per page
+    headers         TEXT,                         -- JSON array of header strings
+    rows_json       TEXT NOT NULL,                -- JSON array of row arrays
+    row_count       INTEGER,
+    col_count       INTEGER,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_tables_doc ON document_tables(document_id);
+
+-- ─── Property Analysis Runs ───────────────────────────────────────
+-- Tracks when analysis was run on a property and what it found.
+
+CREATE TABLE IF NOT EXISTS analysis_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id     INTEGER NOT NULL REFERENCES properties(id),
+    status          TEXT NOT NULL DEFAULT 'running',  -- running, completed, failed
+    doc_count       INTEGER,                          -- how many docs were analyzed
+    started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at    TIMESTAMP,
+    summary_json    TEXT,                              -- JSON summary of findings
+    error           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_property ON analysis_runs(property_id);
 """
 
 
@@ -271,6 +305,25 @@ class Database:
             self.conn.execute("ALTER TABLE financial_terms ADD COLUMN user_value_raw TEXT")
             self.conn.execute("ALTER TABLE financial_terms ADD COLUMN user_value_numeric REAL")
             self.conn.execute("ALTER TABLE financial_terms ADD COLUMN user_modified_at TEXT")
+
+        # Add analysis_status to documents (ingested vs analyzed)
+        doc_cols = [row[1] for row in self.conn.execute("PRAGMA table_info(documents)")]
+        if 'analysis_status' not in doc_cols:
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN analysis_status TEXT DEFAULT 'ingested'"
+            )
+
+        # Add extraction review tracking columns
+        if 'extraction_review' not in doc_cols:
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN extraction_review TEXT DEFAULT 'pending'"
+            )  # pending, approved, flagged
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN review_notes TEXT"
+            )
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN reviewed_at TIMESTAMP"
+            )
 
     def close(self):
         if self.conn:
@@ -562,6 +615,35 @@ class Database:
         """, (property_id, building_id, unit_id, portfolio_id, doc_id))
         self.conn.commit()
 
+    def auto_link_documents_by_name(self):
+        """
+        Auto-link any unlinked documents to properties by matching
+        document.property_name to property.name (case-insensitive).
+        Returns count of documents linked.
+        """
+        cur = self.conn.execute("""
+            UPDATE documents
+            SET property_id = (
+                SELECT p.id FROM properties p
+                WHERE LOWER(p.name) = LOWER(documents.property_name)
+                LIMIT 1
+            ),
+            portfolio_id = (
+                SELECT p.portfolio_id FROM properties p
+                WHERE LOWER(p.name) = LOWER(documents.property_name)
+                LIMIT 1
+            )
+            WHERE property_name IS NOT NULL
+              AND property_name != ''
+              AND property_id IS NULL
+              AND EXISTS (
+                SELECT 1 FROM properties p
+                WHERE LOWER(p.name) = LOWER(documents.property_name)
+              )
+        """)
+        self.conn.commit()
+        return cur.rowcount
+
     def get_property_documents(self, property_id: int,
                                document_type: str = None) -> List[Dict]:
         """Get all documents linked to a property."""
@@ -750,6 +832,112 @@ class Database:
             (doc_id,))
         self.conn.commit()
 
+    # ─── Extraction Review ──────────────────────────────────────────
+
+    def set_extraction_review(self, doc_id: int, status: str,
+                               notes: str = None):
+        """Set extraction review status: pending, approved, flagged."""
+        self.conn.execute("""
+            UPDATE documents
+            SET extraction_review = ?, review_notes = ?,
+                reviewed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (status, notes, doc_id))
+        self.conn.commit()
+
+    def get_extraction_review_queue(self, property_id: int = None,
+                                     status: str = None) -> list:
+        """Get documents with extraction stats for review.
+
+        Returns documents enriched with extraction counts per category.
+        """
+        where_clauses = ["1=1"]
+        params = []
+
+        if property_id:
+            where_clauses.append("d.property_id = ?")
+            params.append(property_id)
+        if status:
+            where_clauses.append("d.extraction_review = ?")
+            params.append(status)
+
+        where = " AND ".join(where_clauses)
+
+        rows = self.conn.execute(f"""
+            SELECT d.id, d.filename, d.document_type, d.property_name,
+                   d.property_id, d.page_count, d.analysis_status,
+                   d.extraction_review, d.review_notes, d.reviewed_at,
+                   p.name as linked_property_name,
+                   -- Extraction counts
+                   COALESCE(os_income.cnt, 0) as income_items,
+                   COALESCE(os_income.total, 0) as income_total,
+                   COALESCE(os_expense.cnt, 0) as expense_items,
+                   COALESCE(os_expense.total, 0) as expense_total,
+                   COALESCE(os_all.cnt, 0) as total_opstat_items,
+                   COALESCE(rr.cnt, 0) as rent_roll_entries,
+                   COALESCE(ft.cnt, 0) as financial_terms,
+                   COALESCE(cl.cnt, 0) as clauses,
+                   COALESCE(gl.cnt, 0) as gl_entries
+            FROM documents d
+            LEFT JOIN properties p ON d.property_id = p.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt, SUM(amount) as total
+                FROM operating_statement_items
+                WHERE category IN ('income', 'revenue') AND is_subtotal = 0
+                GROUP BY document_id
+            ) os_income ON os_income.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt, SUM(amount) as total
+                FROM operating_statement_items
+                WHERE category = 'expense' AND is_subtotal = 0
+                GROUP BY document_id
+            ) os_expense ON os_expense.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM operating_statement_items
+                GROUP BY document_id
+            ) os_all ON os_all.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM rent_roll_entries GROUP BY document_id
+            ) rr ON rr.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM financial_terms GROUP BY document_id
+            ) ft ON ft.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM clauses GROUP BY document_id
+            ) cl ON cl.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM gl_entries GROUP BY document_id
+            ) gl ON gl.document_id = d.id
+            WHERE {where}
+            ORDER BY d.property_id, d.document_type, d.filename
+        """, params).fetchall()
+
+        return [dict(row) for row in rows]
+
+    def get_extraction_review_stats(self, property_id: int = None) -> dict:
+        """Get counts by extraction review status."""
+        where = "WHERE property_id = ?" if property_id else ""
+        params = [property_id] if property_id else []
+
+        rows = self.conn.execute(f"""
+            SELECT COALESCE(extraction_review, 'pending') as status,
+                   COUNT(*) as cnt
+            FROM documents
+            {where}
+            GROUP BY extraction_review
+        """, params).fetchall()
+
+        stats = {'pending': 0, 'approved': 0, 'flagged': 0, 'total': 0}
+        for row in rows:
+            stats[row[0]] = row[1]
+            stats['total'] += row[1]
+        return stats
+
     # ─── Property-Level Aggregations (Layer 2 data) ──────────────────
 
     def get_property_operations_summary(self, property_id: int) -> Dict:
@@ -844,7 +1032,7 @@ class Database:
         cur = self.conn.execute("""
             SELECT os.* FROM operating_statement_items os
             JOIN documents d ON os.document_id = d.id
-            WHERE d.property_id = ? AND os.category = 'revenue'
+            WHERE d.property_id = ? AND os.category IN ('revenue', 'income')
             ORDER BY d.processed_at DESC, os.id
         """, (property_id,))
         summary['revenue_items'] = [dict(row) for row in cur.fetchall()]
@@ -918,15 +1106,33 @@ class Database:
                         page_count: int = None, is_scanned: bool = False,
                         ocr_confidence: float = None, file_hash: str = None,
                         metadata: dict = None) -> int:
-        """Insert a new document record. Returns the document ID."""
+        """Insert a new document record. Returns the document ID.
+
+        If property_name is provided, auto-links to a matching property
+        (case-insensitive) and sets property_id/portfolio_id.
+        """
+        # Auto-link to property if name provided
+        property_id = None
+        portfolio_id = None
+        if property_name:
+            row = self.conn.execute(
+                "SELECT id, portfolio_id FROM properties WHERE LOWER(name) = LOWER(?)",
+                (property_name,)
+            ).fetchone()
+            if row:
+                property_id = row['id']
+                portfolio_id = row['portfolio_id']
+
         cur = self.conn.execute("""
             INSERT INTO documents (filename, filepath, document_type, property_name,
                                    property_address, page_count, is_scanned,
-                                   ocr_confidence, file_hash, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   ocr_confidence, file_hash, metadata,
+                                   property_id, portfolio_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (filename, filepath, document_type, property_name, property_address,
               page_count, is_scanned, ocr_confidence, file_hash,
-              json.dumps(metadata) if metadata else None))
+              json.dumps(metadata) if metadata else None,
+              property_id, portfolio_id))
         self.conn.commit()
         return cur.lastrowid
 
@@ -981,6 +1187,7 @@ class Database:
         self.conn.execute("DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM gl_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM document_tables WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM document_fulltext WHERE document_id = ?", (str(doc_id),))
 
         # Delete the document record itself
@@ -997,6 +1204,119 @@ class Database:
             INSERT INTO document_fulltext (document_id, page_number, content)
             VALUES (?, ?, ?)
         """, (str(document_id), str(page_number), content))
+        self.conn.commit()
+
+    # ─── Raw Table Storage (Phase 1 Ingest) ────────────────────────────
+
+    def insert_document_table(self, document_id: int, page_number: int,
+                               table_index: int, table_data: List[List[str]]):
+        """Store a raw table extracted by pdfplumber/PyMuPDF."""
+        if not table_data or len(table_data) < 1:
+            return
+        headers = table_data[0] if table_data else []
+        rows = table_data[1:] if len(table_data) > 1 else []
+        self.conn.execute("""
+            INSERT INTO document_tables
+                (document_id, page_number, table_index, headers, rows_json, row_count, col_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            document_id, page_number, table_index,
+            json.dumps(headers), json.dumps(rows),
+            len(rows), len(headers)
+        ))
+
+    def get_document_tables(self, document_id: int) -> List[Dict]:
+        """Get all raw tables for a document."""
+        cur = self.conn.execute("""
+            SELECT * FROM document_tables
+            WHERE document_id = ? ORDER BY page_number, table_index
+        """, (document_id,))
+        results = []
+        for row in cur.fetchall():
+            d = dict(row)
+            d['headers'] = json.loads(d['headers']) if d['headers'] else []
+            d['rows_json'] = json.loads(d['rows_json']) if d['rows_json'] else []
+            results.append(d)
+        return results
+
+    def get_property_tables(self, property_id: int) -> List[Dict]:
+        """Get all raw tables across all documents for a property."""
+        cur = self.conn.execute("""
+            SELECT dt.*, d.filename, d.document_type
+            FROM document_tables dt
+            JOIN documents d ON dt.document_id = d.id
+            WHERE d.property_id = ?
+            ORDER BY d.id, dt.page_number, dt.table_index
+        """, (property_id,))
+        results = []
+        for row in cur.fetchall():
+            d = dict(row)
+            d['headers'] = json.loads(d['headers']) if d['headers'] else []
+            d['rows_json'] = json.loads(d['rows_json']) if d['rows_json'] else []
+            results.append(d)
+        return results
+
+    # ─── Analysis Runs ───────────────────────────────────────────────
+
+    def start_analysis_run(self, property_id: int, doc_count: int) -> int:
+        """Start a new analysis run for a property."""
+        cur = self.conn.execute("""
+            INSERT INTO analysis_runs (property_id, status, doc_count)
+            VALUES (?, 'running', ?)
+        """, (property_id, doc_count))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def complete_analysis_run(self, run_id: int, summary: dict = None):
+        """Mark an analysis run as completed."""
+        self.conn.execute("""
+            UPDATE analysis_runs
+            SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+                summary_json = ?
+            WHERE id = ?
+        """, (json.dumps(summary) if summary else None, run_id))
+        self.conn.commit()
+
+    def fail_analysis_run(self, run_id: int, error: str):
+        """Mark an analysis run as failed."""
+        self.conn.execute("""
+            UPDATE analysis_runs
+            SET status = 'failed', completed_at = CURRENT_TIMESTAMP, error = ?
+            WHERE id = ?
+        """, (error, run_id))
+        self.conn.commit()
+
+    def get_latest_analysis(self, property_id: int) -> Optional[Dict]:
+        """Get the most recent analysis run for a property."""
+        cur = self.conn.execute("""
+            SELECT * FROM analysis_runs
+            WHERE property_id = ? ORDER BY started_at DESC LIMIT 1
+        """, (property_id,))
+        row = cur.fetchone()
+        if row:
+            d = dict(row)
+            d['summary_json'] = json.loads(d['summary_json']) if d['summary_json'] else None
+            return d
+        return None
+
+    def get_property_fulltext(self, property_id: int) -> List[Dict]:
+        """Get all fulltext content for a property's documents."""
+        cur = self.conn.execute("""
+            SELECT ft.document_id, ft.page_number, ft.content,
+                   d.filename, d.document_type
+            FROM document_fulltext ft
+            JOIN documents d ON CAST(ft.document_id AS INTEGER) = d.id
+            WHERE d.property_id = ?
+            ORDER BY d.id, CAST(ft.page_number AS INTEGER)
+        """, (property_id,))
+        return [dict(row) for row in cur.fetchall()]
+
+    def mark_document_analyzed(self, doc_id: int):
+        """Mark a document as analyzed."""
+        self.conn.execute(
+            "UPDATE documents SET analysis_status = 'analyzed' WHERE id = ?",
+            (doc_id,)
+        )
         self.conn.commit()
 
     def search_fulltext(self, query: str, limit: int = 20) -> List[Dict]:
