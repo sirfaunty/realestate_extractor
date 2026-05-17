@@ -8,10 +8,32 @@
         {% else %}Batch Processing{% endif %}
     </h2>
     <p id="page-subtitle">
-        {% if job.status == 'processing' %}Extraction in progress...
+        {% if job.status == 'queued' %}Queued — waiting for other jobs to finish
+        {% elif job.status == 'processing' %}Extraction in progress...
         {% elif job.status == 'completed' %}Processing complete
         {% else %}Processing failed{% endif %}
     </p>
+</div>
+
+<!-- Queued State -->
+<div class="card" id="queued-card" style="display: {{ 'block' if job.status == 'queued' else 'none' }};">
+    <div style="display: flex; align-items: center; gap: 14px; padding: 20px;">
+        <div class="queue-dots">
+            <span></span><span></span><span></span>
+        </div>
+        <div>
+            <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">
+                Waiting in queue
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;" id="queue-position-text">
+                {% if job.get('queue_position', 0) > 0 %}
+                {{ job.queue_position }} job{{ 's' if job.queue_position > 1 else '' }} ahead — processing will start automatically
+                {% else %}
+                Starting shortly...
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Pipeline Steps -->
@@ -22,9 +44,14 @@
     </div>
 
     <div class="pipeline-steps" id="pipeline-steps">
-        {% set steps = ['ingesting', 'classifying', 'extracting', 'storing', 'complete'] %}
-        {% set step_labels = {'ingesting': 'Ingest', 'classifying': 'Classify', 'extracting': 'Extract', 'storing': 'Store', 'complete': 'Done'} %}
-        {% set step_icons = {'ingesting': '1', 'classifying': '2', 'extracting': '3', 'storing': '4', 'complete': '&#10003;'} %}
+        {% if job.get('type') == 'analysis' %}
+            {% set steps = ['analyzing', 'complete'] %}
+            {% set step_labels = {'analyzing': 'Analyze', 'complete': 'Done'} %}
+        {% else %}
+            {% set steps = ['ingesting', 'classifying', 'storing', 'complete'] %}
+            {% set step_labels = {'ingesting': 'Ingest PDF', 'classifying': 'Tag Type', 'storing': 'Store', 'complete': 'Done'} %}
+        {% endif %}
+        {% set step_icons = {'ingesting': '1', 'classifying': '2', 'storing': '3', 'analyzing': '1', 'complete': '&#10003;'} %}
         {% set current_step = job.get('step', 'ingesting') %}
 
         {% set ns = namespace(reached_current=false) %}
@@ -90,7 +117,10 @@
 
 <!-- Results -->
 <div class="card" id="results-card">
-    <div class="card-header">Results</div>
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Results</span>
+        <span id="results-summary" style="font-size: 12px; color: var(--text-muted); font-weight: 400;"></span>
+    </div>
     <div id="results-list">
         {% for r in job.results %}
         <div class="result-item">
@@ -255,6 +285,33 @@
     font-size: 12px;
 }
 
+/* Queue dots animation */
+.queue-dots {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+.queue-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cap-primary);
+    opacity: 0.3;
+    animation: queue-bounce 1.4s ease-in-out infinite;
+}
+.queue-dots span:nth-child(1) { animation-delay: 0s; }
+.queue-dots span:nth-child(2) { animation-delay: 0.2s; }
+.queue-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes queue-bounce {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(1); }
+    40% { opacity: 1; transform: scale(1.2); }
+}
+
+.badge-queued {
+    background: var(--cap-cloud);
+    color: var(--cap-primary);
+}
+
 /* Spinner animation */
 @keyframes spin {
     to { transform: rotate(360deg); }
@@ -274,10 +331,15 @@
 <script>
 const jobId = '{{ job_id }}';
 const startedAt = new Date('{{ job.started }}');
-let polling = {{ 'true' if job.status == 'processing' else 'false' }};
+let polling = {{ 'true' if job.status in ('processing', 'queued') else 'false' }};
 
-const STEP_ORDER = ['ingesting', 'classifying', 'extracting', 'storing', 'complete'];
-const STEP_LABELS = {ingesting: 'Ingest', classifying: 'Classify', extracting: 'Extract', storing: 'Store', complete: 'Done'};
+const jobType = '{{ job.get("type", "single") }}';
+const STEP_ORDER = jobType === 'analysis'
+    ? ['analyzing', 'complete']
+    : ['ingesting', 'classifying', 'storing', 'complete'];
+const STEP_LABELS = jobType === 'analysis'
+    ? {analyzing: 'Analyze', complete: 'Done'}
+    : {ingesting: 'Ingest PDF', classifying: 'Tag Type', storing: 'Store', complete: 'Done'};
 
 function updatePipelineUI(currentStep) {
     const stepEls = document.querySelectorAll('.pipeline-step');
@@ -338,6 +400,30 @@ function pollStatus() {
     fetch('/api/job/' + jobId)
         .then(r => r.json())
         .then(job => {
+            // Handle queued state
+            const queuedCard = document.getElementById('queued-card');
+            const pipelineCard = document.getElementById('pipeline-card');
+            const subtitle = document.getElementById('page-subtitle');
+
+            if (job.status === 'queued') {
+                queuedCard.style.display = 'block';
+                const pos = job.queue_position || 1;
+                document.getElementById('queue-position-text').textContent =
+                    pos + ' job' + (pos > 1 ? 's' : '') + ' ahead — processing will start automatically';
+                subtitle.textContent = 'Queued — waiting for other jobs to finish';
+
+                // Update badge
+                const badge = document.getElementById('status-badge');
+                badge.textContent = 'queued';
+                badge.className = 'badge badge-queued';
+
+                setTimeout(pollStatus, 2000);
+                return;
+            }
+
+            // Transition from queued to processing — hide queue card
+            queuedCard.style.display = 'none';
+
             // Update progress
             const pct = job.total ? Math.round(job.progress / job.total * 100) : 0;
             document.getElementById('progress-fill').style.width = pct + '%';
@@ -350,8 +436,8 @@ function pollStatus() {
             badge.className = 'badge badge-' + job.status;
 
             // Update subtitle
-            const subtitle = document.getElementById('page-subtitle');
-            if (job.status === 'completed') subtitle.textContent = 'Processing complete';
+            if (job.status === 'processing') subtitle.textContent = 'Extraction in progress...';
+            else if (job.status === 'completed') subtitle.textContent = 'Processing complete';
             else if (job.status === 'failed') subtitle.textContent = 'Processing failed';
 
             // Update pipeline steps
@@ -368,6 +454,16 @@ function pollStatus() {
             }
 
             if (job.results.length > 0) {
+                // Update summary
+                const ok = job.results.filter(r => r.success).length;
+                const fail = job.results.length - ok;
+                const summaryEl = document.getElementById('results-summary');
+                if (summaryEl) {
+                    let parts = [ok + ' succeeded'];
+                    if (fail > 0) parts.push('<span style="color:var(--danger)">' + fail + ' failed</span>');
+                    summaryEl.innerHTML = parts.join(' · ');
+                }
+
                 let html = '';
                 job.results.forEach(r => {
                     html += '<div class="result-item"><div>';

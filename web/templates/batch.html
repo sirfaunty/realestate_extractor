@@ -4,17 +4,24 @@
 {% block content %}
 <div class="page-header">
     <h2>Batch Process</h2>
-    <p>Upload an entire folder of PDFs at once</p>
+    <p>Upload a folder of documents, or drop ZIP files containing your files</p>
 </div>
 
 <form method="POST" enctype="multipart/form-data" id="batch-form">
     <div class="card">
         <div class="card-header">Choose Folder</div>
 
-        <div class="upload-zone" id="drop-zone" onclick="document.getElementById('folder-input').click()">
-            <div class="icon">&#128193;</div>
-            <p>Click to <span class="browse">choose a folder</span> containing your PDFs</p>
-            <input type="file" name="files" id="folder-input" webkitdirectory multiple style="display: none;">
+        <div style="display: flex; gap: 12px;">
+            <div class="upload-zone" id="drop-zone" onclick="document.getElementById('folder-input').click()" style="flex: 1;">
+                <div class="icon">&#128193;</div>
+                <p><span class="browse">Choose a folder</span> of documents</p>
+                <input type="file" name="files" id="folder-input" webkitdirectory multiple style="display: none;">
+            </div>
+            <div class="upload-zone" id="zip-zone" onclick="document.getElementById('zip-input').click()" style="flex: 1;">
+                <div class="icon">&#128230;</div>
+                <p>Or upload <span class="browse">ZIP files</span></p>
+                <input type="file" name="files" id="zip-input" accept=".pdf,.xlsx,.xls,.docx,.doc,.msg,.png,.jpg,.csv,.txt,.md,.zip" multiple style="display: none;">
+            </div>
         </div>
         <div class="file-selected" id="files-selected"></div>
     </div>
@@ -59,33 +66,51 @@
 {% block scripts %}
 <script>
 const folderInput = document.getElementById('folder-input');
+const zipInput = document.getElementById('zip-input');
 const filesSelected = document.getElementById('files-selected');
 const submitBtn = document.getElementById('submit-btn');
 
-folderInput.addEventListener('change', function() {
-    if (this.files.length) {
-        // Filter to only PDFs
-        const pdfs = Array.from(this.files).filter(f =>
-            f.name.toLowerCase().endsWith('.pdf')
-        );
-        const nonPdfs = this.files.length - pdfs.length;
+const SUPPORTED_EXTS = ['pdf','xlsx','xls','docx','doc','msg','png','jpg','jpeg','csv','txt','md','tsv'];
 
-        if (pdfs.length === 0) {
-            filesSelected.innerHTML = '<span style="color: var(--cap-danger);">No PDF files found in the selected folder.</span>';
-            filesSelected.classList.add('visible');
-            submitBtn.disabled = true;
-            return;
-        }
+function isSupported(name) {
+    const ext = name.toLowerCase().split('.').pop();
+    return SUPPORTED_EXTS.includes(ext) || ext === 'zip';
+}
 
-        let msg = '<strong>' + pdfs.length + ' PDF' + (pdfs.length !== 1 ? 's' : '') + '</strong> found';
-        if (nonPdfs > 0) {
-            msg += ' <span style="color: var(--cap-muted);">(' + nonPdfs + ' non-PDF file' + (nonPdfs !== 1 ? 's' : '') + ' will be skipped)</span>';
-        }
-        filesSelected.innerHTML = msg;
+function showFileCount(files) {
+    const all = Array.from(files);
+    const supported = all.filter(f => isSupported(f.name));
+    const zips = all.filter(f => f.name.toLowerCase().endsWith('.zip'));
+    const docs = supported.filter(f => !f.name.toLowerCase().endsWith('.zip'));
+    const unsupported = all.length - supported.length;
+
+    if (supported.length === 0) {
+        filesSelected.innerHTML = '<span style="color: var(--cap-danger);">No supported files found.</span>';
         filesSelected.classList.add('visible');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Process ' + pdfs.length + ' PDF' + (pdfs.length !== 1 ? 's' : '');
+        submitBtn.disabled = true;
+        return;
     }
+
+    const parts = [];
+    if (docs.length) parts.push(docs.length + ' document' + (docs.length !== 1 ? 's' : ''));
+    if (zips.length) parts.push(zips.length + ' ZIP' + (zips.length !== 1 ? 's' : ''));
+
+    let msg = '<strong>' + parts.join(' + ') + '</strong>';
+    if (unsupported > 0) {
+        msg += ' <span style="color: var(--text-muted);">(' + unsupported + ' unsupported file' + (unsupported !== 1 ? 's' : '') + ' will be skipped)</span>';
+    }
+    filesSelected.innerHTML = msg;
+    filesSelected.classList.add('visible');
+    submitBtn.disabled = false;
+    submitBtn.textContent = zips.length ? 'Upload & Process' : ('Process ' + supported.length + ' File' + (supported.length !== 1 ? 's' : ''));
+}
+
+folderInput.addEventListener('change', function() {
+    if (this.files.length) showFileCount(this.files);
+});
+
+zipInput.addEventListener('change', function() {
+    if (this.files.length) showFileCount(this.files);
 });
 
 // Drag and drop support

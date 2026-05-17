@@ -1,5 +1,6 @@
 # Core PDF processing
 pdfplumber>=0.10.0
+PyMuPDF>=1.23.0
 
 # OCR for scanned documents
 pytesseract>=0.3.10
@@ -15,5 +16,11 @@ requests>=2.31.0
 # Web interface
 Flask>=3.0.0
 
-# Excel export
+# Excel export / ingestion
 openpyxl>=3.1.0
+
+# Word document ingestion
+python-docx>=1.0.0
+
+# Outlook .msg email ingestion
+extract-msg>=0.50.0

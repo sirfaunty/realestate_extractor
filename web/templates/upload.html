@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Upload PDF — capactive{% endblock %}
+{% block title %}Upload Documents — capactive{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Upload PDF</h2>
-    <p>Upload a single document for extraction</p>
+    <h2>Upload Documents</h2>
+    <p>Upload PDFs or ZIP archives containing PDFs</p>
 </div>
 
 <form method="POST" enctype="multipart/form-data" id="upload-form">
@@ -13,8 +13,8 @@
 
         <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
             <div class="icon">&#128196;</div>
-            <p>Drag and drop a PDF here, or <span class="browse">browse files</span></p>
-            <input type="file" name="file" id="file-input" accept=".pdf">
+            <p>Drag and drop documents or ZIP files here, or <span class="browse">browse files</span></p>
+            <input type="file" name="files" id="file-input" accept=".pdf,.xlsx,.xls,.docx,.doc,.msg,.png,.jpg,.csv,.txt,.md,.zip" multiple>
         </div>
         <div class="file-selected" id="file-selected"></div>
     </div>
@@ -63,12 +63,40 @@ const fileInput = document.getElementById('file-input');
 const fileSelected = document.getElementById('file-selected');
 const submitBtn = document.getElementById('submit-btn');
 
+const SUPPORTED_EXTS = ['pdf','xlsx','xls','docx','doc','msg','png','jpg','jpeg','csv','txt','md','tsv'];
+
+function isSupported(name) {
+    const ext = name.toLowerCase().split('.').pop();
+    return SUPPORTED_EXTS.includes(ext) || ext === 'zip';
+}
+
+function updateFileDisplay(files) {
+    const all = Array.from(files);
+    const supported = all.filter(f => isSupported(f.name));
+    const zips = all.filter(f => f.name.toLowerCase().endsWith('.zip'));
+    const docs = supported.filter(f => !f.name.toLowerCase().endsWith('.zip'));
+
+    if (!supported.length) {
+        fileSelected.innerHTML = '<span style="color: var(--danger);">No supported files selected.</span>';
+        fileSelected.classList.add('visible');
+        return;
+    }
+
+    if (supported.length === 1) {
+        fileSelected.textContent = 'Selected: ' + supported[0].name;
+    } else {
+        const parts = [];
+        if (docs.length) parts.push(docs.length + ' document' + (docs.length > 1 ? 's' : ''));
+        if (zips.length) parts.push(zips.length + ' ZIP' + (zips.length > 1 ? 's' : ''));
+        fileSelected.innerHTML = '<strong>' + parts.join(' + ') + '</strong> selected';
+    }
+    submitBtn.textContent = supported.length > 1 ? 'Process ' + supported.length + ' Files' : 'Process Document';
+    fileSelected.classList.add('visible');
+}
+
 // File selection
 fileInput.addEventListener('change', function() {
-    if (this.files.length) {
-        fileSelected.textContent = 'Selected: ' + this.files[0].name;
-        fileSelected.classList.add('visible');
-    }
+    if (this.files.length) updateFileDisplay(this.files);
 });
 
 // Drag and drop
@@ -87,8 +115,7 @@ dropZone.addEventListener('drop', function(e) {
     this.classList.remove('dragover');
     if (e.dataTransfer.files.length) {
         fileInput.files = e.dataTransfer.files;
-        fileSelected.textContent = 'Selected: ' + e.dataTransfer.files[0].name;
-        fileSelected.classList.add('visible');
+        updateFileDisplay(e.dataTransfer.files);
     }
 });
 

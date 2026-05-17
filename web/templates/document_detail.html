@@ -13,12 +13,21 @@
             &middot; Processed {{ doc.processed_at[:16] if doc.processed_at else '' }}
         </p>
     </div>
-    <button class="btn btn-secondary" id="reextract-btn" onclick="reextract()" style="white-space: nowrap; margin-top: 4px;">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;">
-            <path d="M2 8a6 6 0 0 1 10.3-4.2L14 2v4h-4l1.7-1.7A4.5 4.5 0 0 0 3.5 8H2zm12 0a6 6 0 0 1-10.3 4.2L2 14v-4h4l-1.7 1.7A4.5 4.5 0 0 0 12.5 8H14z" fill="currentColor"/>
-        </svg>
-        Re-extract
-    </button>
+    <div style="display: flex; gap: 8px; margin-top: 4px;">
+        <a href="{{ url_for('document_pdf', doc_id=doc.id) }}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;">
+                <path d="M4 2h5l5 5v7a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M9 2v5h5" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+            View PDF
+        </a>
+        <button class="btn btn-secondary" id="reextract-btn" onclick="reextract()" style="white-space: nowrap;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align: -2px; margin-right: 4px;">
+                <path d="M2 8a6 6 0 0 1 10.3-4.2L14 2v4h-4l1.7-1.7A4.5 4.5 0 0 0 3.5 8H2zm12 0a6 6 0 0 1-10.3 4.2L2 14v-4h4l-1.7 1.7A4.5 4.5 0 0 0 12.5 8H14z" fill="currentColor"/>
+            </svg>
+            Re-extract
+        </button>
+    </div>
 </div>
 
 <!-- Tabs -->
@@ -51,6 +60,7 @@
                     <th>Value</th>
                     <th>Numeric</th>
                     <th>Unit</th>
+                    <th>Page</th>
                     <th>Confidence</th>
                 </tr>
             </thead>
@@ -74,6 +84,9 @@
                     </td>
                     <td>{% if t.user_value_numeric %}{{ "{:,.2f}".format(t.user_value_numeric) }}{% elif t.value_numeric %}{{ "{:,.2f}".format(t.value_numeric) }}{% else %}—{% endif %}</td>
                     <td>{{ t.value_unit or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">
+                        {% if t.page_number %}<a href="{{ url_for('document_pdf', doc_id=doc.id) }}#page={{ t.page_number }}" target="_blank" title="View page {{ t.page_number }}">p.{{ t.page_number }}</a>{% else %}—{% endif %}
+                    </td>
                     <td>
                         {% if t.user_modified_at %}
                         <span class="badge badge-info" title="Edited {{ t.user_modified_at[:16] }}">Edited</span>
@@ -99,6 +112,9 @@
         <div class="clause-header">
             <span class="clause-type">{{ c.clause_type.replace('_', ' ').title() }}</span>
             <div>
+                {% if c.page_number %}
+                <a href="{{ url_for('document_pdf', doc_id=doc.id) }}#page={{ c.page_number }}" target="_blank" class="clause-ref" title="View page {{ c.page_number }}" style="text-decoration: none;">p.{{ c.page_number }}</a>
+                {% endif %}
                 {% if c.section_ref %}
                 <span class="clause-ref">{{ c.section_ref }}</span>
                 {% endif %}
@@ -137,6 +153,7 @@
                     <th>Lease Start</th>
                     <th>Lease End</th>
                     <th>Status</th>
+                    <th>Page</th>
                 </tr>
             </thead>
             <tbody>
@@ -151,6 +168,9 @@
                     <td>{{ r.lease_start or '—' }}</td>
                     <td>{{ r.lease_end or '—' }}</td>
                     <td>{{ r.status or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">
+                        {% if r.page_number %}<a href="{{ url_for('document_pdf', doc_id=doc.id) }}#page={{ r.page_number }}" target="_blank" title="View page {{ r.page_number }}">p.{{ r.page_number }}</a>{% else %}—{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -171,6 +191,7 @@
                     <th>Amount</th>
                     <th>$/SF</th>
                     <th>Period</th>
+                    <th>Page</th>
                 </tr>
             </thead>
             <tbody>
@@ -181,6 +202,9 @@
                     <td>{% if o.amount %}${{ "{:,.2f}".format(o.amount) }}{% else %}—{% endif %}</td>
                     <td>{% if o.amount_psf %}${{ "{:,.2f}".format(o.amount_psf) }}{% else %}—{% endif %}</td>
                     <td>{{ o.period or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">
+                        {% if o.page_number %}<a href="{{ url_for('document_pdf', doc_id=doc.id) }}#page={{ o.page_number }}" target="_blank" title="View page {{ o.page_number }}">p.{{ o.page_number }}</a>{% else %}—{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -362,7 +386,7 @@ function showTab(name) {
                     }
 
                     // Update confidence column to show "Edited"
-                    const confCell = row.children[4];
+                    const confCell = row.children[5];
                     confCell.innerHTML = '<span class="badge badge-info">Edited</span>';
 
                     // Flash confirmation

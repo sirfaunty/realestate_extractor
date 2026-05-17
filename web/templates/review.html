@@ -132,7 +132,7 @@
                     <select name="property_id" style="flex: 1;" required>
                         <option value="">Select a property...</option>
                         {% for p in properties %}
-                        <option value="{{ p.id }}">{{ p.name }} �� {{ p.property_type.replace('_', ' ') }}{% if p.city %}, {{ p.city }}{% endif %}</option>
+                        <option value="{{ p.id }}">{{ p.name }} — {{ p.property_type.replace('_', ' ') }}{% if p.city %}, {{ p.city }}{% endif %}</option>
                         {% endfor %}
                     </select>
                     <button type="submit" class="btn btn-sm btn-primary">Link</button>
