@@ -1115,6 +1115,11 @@ class ExtractionEngine:
                 r'[-–—]?\s*([A-Z][^\n]+)',
                 re.MULTILINE
             ),
+            # "5.2 Distributions of Cash Flow ." (dotted section numbers — LLC agreements)
+            re.compile(
+                r'^\s*(\d{1,2}\.\d{1,2})\s+([A-Z][A-Za-z\s,;:\-&\'()]+?)(?:\s*\.|\s*$)',
+                re.MULTILINE
+            ),
             # "12. Title." or "3. Title of Section."  (numbered paragraphs)
             re.compile(
                 r'^\s*(\d{1,2})\.\s+([A-Z][A-Za-z\s,;:\-&\']+?)(?:\.|$)',
@@ -1149,9 +1154,31 @@ class ExtractionEngine:
                             'prohibition on transfer'],
             'subordination': ['subordination', 'subordinate'],
             'cross_default': ['cross default', 'cross-default'],
-            'reporting_requirements': ['reporting', 'financial statements', 'books and records'],
+            'reporting_requirements': ['reporting', 'financial statements', 'books and records',
+                                      'books, records', 'accounting'],
             'cash_management': ['cash management', 'cash sweep'],
             'lockbox': ['lockbox', 'lock box', 'cash collateral'],
+            # Partnership / LLC agreement clause types
+            'distribution_waterfall': ['distribution', 'distributions of cash', 'cash flow distribution',
+                                       'distributions of cash flow', 'allocation of profit'],
+            'capital_contribution': ['capital contribution', "members' initial capital",
+                                     'additional capital', 'capital call'],
+            'capital_call': ['capital call', 'additional capital contribution',
+                             'additional contributions'],
+            'preferred_return': ['preferred return', 'annual return', 'priority return'],
+            'management_authority': ['managing member', 'management', 'general responsibilities',
+                                     'authority of the managing'],
+            'major_decisions': ['major decision', 'consent of', 'approval rights',
+                                'unanimous consent', 'member approval'],
+            'buy_sell': ['buy/sell', 'buy-sell', 'buyout', 'purchase option',
+                         'right of first refusal', 'right of first offer'],
+            'dissolution': ['dissolution', 'winding up', 'liquidation', 'termination of'],
+            'key_person': ['key person', 'key man', 'key individual', 'replacement of'],
+            'removal_of_manager': ['removal', 'removal of managing', 'replacement of managing'],
+            'non_compete': ['non-compete', 'noncompete', 'non compete', 'restrictive covenant',
+                            'competition'],
+            'project_financing': ['project financing', 'project loan', 'construction financing',
+                                  'mortgage', 'hud-insured'],
         }
 
         # Fill in any clause types not explicitly mapped

@@ -1005,6 +1005,147 @@ Document text:
 )
 
 
+# ─── Partnership / Operating Agreement ───────────────────────────────
+
+PARTNERSHIP_AGREEMENT = DocumentTemplate(
+    document_type="partnership_agreement",
+    display_name="Partnership / Operating Agreement",
+    description="LLC operating agreements, JV partnership agreements, and amendments",
+    extraction_modes=[ExtractionMode.DUAL],
+
+    financial_fields=[
+        FieldDefinition("preferred_return_rate", "Preferred return rate for capital contributions",
+                        field_type="percentage",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["preferred return", "annual return", "pref return"],
+                        prose_patterns=[
+                            r"(?i)(?:preferred|annual)\s+return\s+(?:of|equal\s+to)\s+(\d+\.?\d*)\s*%",
+                            r"(?i)(\d+\.?\d*)\s*%\s+(?:preferred|annual)\s+return",
+                            r"(?i)return\s+equal\s+to\s+(\d+\.?\d*)\s*%",
+                        ]),
+        FieldDefinition("managing_member", "Name of managing member / general partner",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["managing partner", "general partner", "GP", "manager"],
+                        prose_patterns=[
+                            r'(?i)(?:the\s+)?"?(\w[\w\s,]+?)"?\s+shall\s+be\s+the\s+["\']?Managing\s+Member',
+                            r"(?i)Managing\s+Member[\"']?\s+(?:means|shall\s+mean)\s+([^,\n.]+)",
+                        ]),
+        FieldDefinition("investor_member", "Name of investor / limited member",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["limited partner", "LP", "investor", "IDP member"],
+                        prose_patterns=[
+                            r'(?i)["\']?IDP\s+Member["\']?\s*(?:means|shall\s+mean)\s+([^,\n.]+)',
+                            r'(?i)["\']?(?:Investor|Limited)\s+(?:Member|Partner)["\']?\s*(?:means|shall\s+mean)\s+([^,\n.]+)',
+                        ]),
+        FieldDefinition("membership_interest_pct", "Membership interest percentage split",
+                        field_type="percentage",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["membership interest", "ownership percentage", "membership percentage"],
+                        prose_patterns=[
+                            r"(?i)\w+(?:-\w+)?\s+percent\s*\((\d+\.?\d*)%?\)",
+                            r"(?i)(\d+\.?\d*)\s*%\s+(?:membership|ownership)\s+interest",
+                            r"(?i)(?:membership|ownership)\s+(?:interest|percentage)\s+.*?(\d+\.?\d*)\s*%",
+                        ]),
+        FieldDefinition("capital_contribution", "Required capital contribution amount",
+                        field_type="currency",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["initial capital contribution", "equity contribution", "capital commitment"],
+                        prose_patterns=[
+                            r"(?i)Capital\s+Contribution[s]?\s+(?:of|in\s+(?:the|an)\s+amount\s+(?:of|equal\s+to))\s+\$?([\d,]+(?:\.\d+)?)",
+                        ]),
+        FieldDefinition("management_fee_pct", "Management fee percentage",
+                        field_type="percentage",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["management fee", "asset management fee", "property management fee"],
+                        prose_patterns=[
+                            r"(?i)management\s+fee\s+(?:of|equal\s+to)\s+(\d+\.?\d*)\s*%",
+                            r"(?i)(\d+\.?\d*)\s*%\s+(?:of\s+)?(?:gross|effective|collected)\s+(?:revenue|rent|income)",
+                        ]),
+        FieldDefinition("developer_fee", "Developer fee amount or percentage",
+                        field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["development fee", "developer's fee"],
+                        prose_patterns=[
+                            r"(?i)(?:Developer'?s?\s+Fee|Development\s+Fee)\s+(?:of|equal\s+to|in\s+the\s+amount\s+of)\s+\$?([\d,]+(?:\.\d+)?)",
+                        ]),
+        FieldDefinition("total_units", "Total number of units in the project",
+                        field_type="number",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["total units", "number of units", "unit count"],
+                        prose_patterns=[
+                            r"(?i)(?:approximately\s+)?(\d+)\s+units?\s+of\s+(?:new\s+)?construction",
+                            r"(?i)(\d+)\s*[-–]\s*unit",
+                        ]),
+        FieldDefinition("entity_type", "Legal entity type (LLC, LP, etc.)",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["entity structure", "company type"],
+                        prose_patterns=[
+                            r"(?i)a\s+\w+\s+(limited\s+liability\s+company|limited\s+partnership|corporation|general\s+partnership)",
+                        ]),
+        FieldDefinition("formation_state", "State of formation / jurisdiction",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["state of formation", "jurisdiction", "organized under"],
+                        prose_patterns=[
+                            r"(?i)formed\s+(?:as\s+)?(?:a\s+)?.*?under\s+the\s+([A-Z][a-z]{3,})\s+Limited",
+                            r"(?i)a\s+([A-Z][a-z]{3,})\s+limited\s+liability\s+company",
+                        ]),
+    ],
+
+    clause_types=[
+        "distribution_waterfall",
+        "capital_contribution",
+        "preferred_return",
+        "management_authority",
+        "major_decisions",
+        "transfer_restrictions",
+        "buy_sell",
+        "dissolution",
+        "reporting_requirements",
+        "key_person",
+        "removal_of_manager",
+        "default_remedies",
+        "indemnification",
+        "non_compete",
+        "capital_call",
+        "project_financing",
+    ],
+
+    llm_system_prompt="""You are a real estate partnership agreement analyst specializing in
+LLC operating agreements and JV structures. Extract financial terms and
+legal clauses with precision. Pay special attention to distribution
+waterfalls, capital contribution structures, preferred returns, and
+governance provisions.""",
+
+    llm_extraction_prompt="""Extract ONLY the financial terms listed below from this partnership agreement.
+
+RULES:
+- If a field is NOT found in the document, set value_raw to null.
+- For percentage fields, extract the exact percentage (e.g., "6.5").
+- For entity names, extract the full legal name.
+- Be precise with numbers — extract exactly as they appear.
+
+Return a JSON array of objects with keys: term_type, value_raw,
+value_numeric, confidence (0-1).
+
+Fields to find:
+{field_list}
+
+Document excerpt:
+{document_text}""",
+
+    llm_clause_prompt="""Extract the following clause types from this partnership/operating agreement.
+For each clause found, preserve the COMPLETE original language.
+
+Clause types to find:
+{clause_types}
+
+Return JSON array with: clause_type, clause_title, full_text, section_ref, confidence.
+
+Document excerpt:
+{document_text}""",
+)
+
+
 # ─── Template Registry ───────────────────────────────────────────────
 
 TEMPLATES: Dict[str, DocumentTemplate] = {
@@ -1018,6 +1159,7 @@ TEMPLATES: Dict[str, DocumentTemplate] = {
     "proforma": PROFORMA,
     "equity_waterfall": EQUITY_WATERFALL,
     "hud_form": HUD_FORM,
+    "partnership_agreement": PARTNERSHIP_AGREEMENT,
 }
 
 
