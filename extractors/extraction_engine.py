@@ -87,10 +87,22 @@ class ExtractionEngine:
 
     # ─── Financial Term Extraction ───────────────────────────────────
 
+    # Doc types with dedicated parsers that outperform the LLM.
+    # LLM gap-fill is skipped for these — their custom parsers run
+    # later in _analyze_with_engine and fill the gaps more reliably.
+    _LLM_SKIP_TYPES = {'hud_form', 'equity_waterfall'}
+
     def _extract_financial(self, doc: DocumentContent,
                            template: DocumentTemplate) -> List[Dict]:
         """Extract structured financial terms from document."""
-        if self.llm_available and template.llm_extraction_prompt:
+        # Skip LLM for types with dedicated parsers — their custom
+        # parsers (HUD regex, equity waterfall table scanner) run after
+        # the engine and produce better results than LLM gap-fill.
+        use_llm = (self.llm_available
+                   and template.llm_extraction_prompt
+                   and template.document_type not in self._LLM_SKIP_TYPES)
+
+        if use_llm:
             return self._extract_financial_llm(doc, template)
         else:
             # Rule-based + prose + inference (no LLM gap-fill)
@@ -141,6 +153,18 @@ class ExtractionEngine:
 
         if not important_missing:
             logger.info("Only OPTIONAL fields missing — skipping LLM call")
+            return rule_terms
+
+        # Skip LLM if rule-based extraction already has good coverage.
+        # The LLM gap-fill adds ~2 min per call and often returns garbage
+        # for CRE docs.  If we found ≥40% of fields already, the marginal
+        # value of the LLM isn't worth the latency.
+        coverage = len(found_fields) / max(len(all_fields), 1)
+        if coverage >= 0.40 and len(rule_terms) >= 3:
+            logger.info(
+                f"Good rule-based coverage ({coverage:.0%}, {len(rule_terms)} terms) "
+                f"— skipping LLM gap-fill for {len(important_missing)} remaining fields"
+            )
             return rule_terms
 
         missing_field_list = "\n".join(
@@ -1198,8 +1222,9 @@ class ExtractionEngine:
             if all_rows:
                 logger.info(f"Text-based rent roll parser found {len(all_rows)} rows")
 
-        # Last resort: LLM
-        if not all_rows and self.llm_available:
+        # Last resort: LLM (skip for types with dedicated parsers)
+        if (not all_rows and self.llm_available
+                and template.document_type not in self._LLM_SKIP_TYPES):
             all_rows = self._extract_tabular_llm(doc, template)
 
         return all_rows
@@ -1920,6 +1945,11 @@ class ExtractionEngine:
 
         return rows
 
+    # Maximum text length (chars) we'll send to the LLM for tabular extraction.
+    # Beyond this, the number of 6K chunks causes cascading timeouts.
+    # 30K chars ≈ 5 chunks × 120s = 10 min worst case (vs 166 chunks for a 995K doc).
+    _TABULAR_LLM_MAX_TEXT = 30_000
+
     def _extract_tabular_llm(self, doc: DocumentContent,
                               template: DocumentTemplate) -> List[Dict]:
         """Use LLM to parse tabular data when pdfplumber can't find tables."""
@@ -1931,6 +1961,17 @@ class ExtractionEngine:
 
         all_rows = []
         text = doc.full_text
+
+        # Guard: skip if doc is too long — chunking a 995K doc into 166
+        # LLM calls guarantees timeouts.  Truncate to first N chars so we
+        # still attempt the head of the document.
+        if len(text) > self._TABULAR_LLM_MAX_TEXT:
+            logger.info(
+                f"Tabular LLM: truncating {len(text):,} chars → "
+                f"{self._TABULAR_LLM_MAX_TEXT:,} chars to avoid timeout cascade"
+            )
+            text = text[:self._TABULAR_LLM_MAX_TEXT]
+
         chunks = self.llm.chunk_text(text, max_chars=6000)
 
         for i, chunk in enumerate(chunks):

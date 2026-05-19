@@ -29,6 +29,7 @@ from .batch_processor import BatchProcessor, ProcessingResult
 from .property_analyzer import PropertyAnalyzer
 from .financial_synthesis import FinancialSynthesizer
 from .extractors.llm_client import LocalLLMClient
+from .extractors.extraction_engine import DocumentClassifier
 from .templates.document_templates import list_templates, TEMPLATES
 from .config import ConfigStore, PLAN_FEATURES
 from .licensing import (
@@ -2243,6 +2244,299 @@ def api_property_synthesis(property_id):
         return jsonify(result)
     finally:
         db.close()
+
+
+# ─── Extraction Health Assessment ──────────────────────────────────
+
+# Doc types that should produce extraction results
+_EXTRACTABLE_TYPES = DocumentClassifier.EXTRACTABLE_TYPES
+_OS_TYPES = {'operating_statement'}
+_NO_EXTRACT_TYPES = {
+    'partnership_agreement', 'organizational', 'reference',
+    'correspondence', 'due_diligence', 'unknown',
+}
+
+
+def _assess_doc(db, doc):
+    """
+    Assess a single document's extraction health.
+    Returns (status, reason) where status is:
+        'good', 'needs_rerun', 'new', or 'skip'
+    """
+    doc_id = doc['id']
+    doc_type = doc.get('document_type', 'unknown')
+    analysis_status = doc.get('analysis_status', 'ingested')
+
+    conf = 1.0
+    if doc.get('metadata'):
+        try:
+            meta = json.loads(doc['metadata']) if isinstance(doc['metadata'], str) else doc['metadata']
+            conf = meta.get('classification_confidence', 1.0)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if analysis_status != 'analyzed':
+        return 'new', 'Not yet analyzed'
+
+    if doc_type in _NO_EXTRACT_TYPES:
+        return 'skip', f'No extraction for {doc_type}'
+
+    if conf < 0.3:
+        return 'needs_rerun', f'Low classification confidence ({conf:.0%})'
+
+    term_count = db.conn.execute(
+        "SELECT COUNT(*) FROM financial_terms WHERE document_id = ?", (doc_id,)
+    ).fetchone()[0]
+    clause_count = db.conn.execute(
+        "SELECT COUNT(*) FROM clauses WHERE document_id = ?", (doc_id,)
+    ).fetchone()[0]
+    os_count = db.conn.execute(
+        "SELECT COUNT(*) FROM operating_statement_items WHERE document_id = ?", (doc_id,)
+    ).fetchone()[0]
+    rr_count = db.conn.execute(
+        "SELECT COUNT(*) FROM rent_roll_entries WHERE document_id = ?", (doc_id,)
+    ).fetchone()[0]
+    total_extracted = term_count + clause_count + os_count + rr_count
+
+    if doc_type in _OS_TYPES:
+        if os_count > 0:
+            return 'good', f'{os_count} OS items'
+        return 'needs_rerun', 'Operating statement with 0 items'
+
+    if doc_type == 'rent_roll':
+        if rr_count > 0:
+            return 'good', f'{rr_count} rent roll entries'
+        if conf < 0.5:
+            return 'skip', f'Low-confidence rent roll ({conf:.0%})'
+        return 'needs_rerun', 'Rent roll with 0 entries'
+
+    if doc_type == 'general_ledger':
+        gl_count = db.conn.execute(
+            "SELECT COUNT(*) FROM gl_entries WHERE document_id = ?", (doc_id,)
+        ).fetchone()[0]
+        if gl_count > 0:
+            return 'good', f'{gl_count} GL entries'
+        if conf < 0.5:
+            return 'skip', f'Low-confidence GL ({conf:.0%})'
+        return 'needs_rerun', 'General ledger with 0 entries'
+
+    if doc_type in _EXTRACTABLE_TYPES:
+        if total_extracted > 0:
+            parts = []
+            if term_count:
+                parts.append(f'{term_count} terms')
+            if clause_count:
+                parts.append(f'{clause_count} clauses')
+            return 'good', ', '.join(parts)
+        return 'needs_rerun', f'{doc_type} with 0 extraction results'
+
+    if total_extracted > 0:
+        return 'good', f'{total_extracted} total extracted'
+    return 'skip', f'No extraction template for {doc_type}'
+
+
+@app.route('/api/property/<int:property_id>/assess')
+@login_required
+def api_assess_property(property_id):
+    """Return per-document extraction health assessment."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            return jsonify({'error': 'Property not found'}), 404
+
+        docs = db.conn.execute(
+            "SELECT * FROM documents WHERE property_id = ? ORDER BY document_type, id",
+            (property_id,)
+        ).fetchall()
+        docs = [dict(d) for d in docs]
+
+        results = []
+        counts = {'good': 0, 'needs_rerun': 0, 'new': 0, 'skip': 0}
+        for doc in docs:
+            status, reason = _assess_doc(db, doc)
+            counts[status] = counts.get(status, 0) + 1
+            results.append({
+                'id': doc['id'],
+                'filename': doc.get('filename', ''),
+                'document_type': doc.get('document_type', 'unknown'),
+                'status': status,
+                'reason': reason,
+            })
+
+        rerun_count = counts['needs_rerun'] + counts['new']
+        return jsonify({
+            'property_id': property_id,
+            'total': len(docs),
+            'counts': counts,
+            'rerun_count': rerun_count,
+            'documents': results,
+        })
+    finally:
+        db.close()
+
+
+@app.route('/api/property/<int:property_id>/analyze-selective', methods=['POST'])
+@login_required
+def api_analyze_selective(property_id):
+    """
+    Run Phase 2 analysis with mode selection.
+
+    POST body (JSON):
+        mode: 'full' | 'smart' | 'new_only'  (default: 'full')
+        doc_types: ['closing', 'loan', ...]   (optional filter)
+    """
+    org_id = session['org_id']
+    body = request.get_json(force=True) if request.data else {}
+    mode = body.get('mode', 'full')
+    doc_types = body.get('doc_types')
+
+    if mode not in ('full', 'smart', 'new_only'):
+        return jsonify({'error': f'Invalid mode: {mode}'}), 400
+
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            return jsonify({'error': 'Property not found'}), 404
+
+        # Get all docs for this property
+        docs = db.conn.execute(
+            "SELECT * FROM documents WHERE property_id = ? ORDER BY document_type, id",
+            (property_id,)
+        ).fetchall()
+        docs = [dict(d) for d in docs]
+
+        if doc_types:
+            doc_type_set = set(doc_types)
+            docs = [d for d in docs if d.get('document_type') in doc_type_set]
+
+        if not docs:
+            return jsonify({'error': 'No documents match the criteria'}), 400
+
+        # Determine which docs to process
+        if mode == 'full':
+            process_ids = [d['id'] for d in docs]
+            skip_ids = []
+        elif mode == 'new_only':
+            process_ids = [d['id'] for d in docs if d.get('analysis_status') != 'analyzed']
+            skip_ids = [d['id'] for d in docs if d.get('analysis_status') == 'analyzed']
+        else:  # smart
+            process_ids = []
+            skip_ids = []
+            for d in docs:
+                status, _ = _assess_doc(db, d)
+                if status in ('new', 'needs_rerun'):
+                    process_ids.append(d['id'])
+                else:
+                    skip_ids.append(d['id'])
+
+        if not process_ids:
+            return jsonify({
+                'success': True,
+                'message': f'All {len(skip_ids)} documents already have good extraction results.',
+                'skipped': len(skip_ids),
+                'processing': 0,
+            })
+    finally:
+        db.close()
+
+    mode_label = {'full': 'Full re-run', 'smart': 'Smart (needs rerun only)', 'new_only': 'New docs only'}.get(mode, mode)
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {
+        'id': job_id,
+        'org_id': org_id,
+        'status': 'processing',
+        'type': 'analysis',
+        'filename': f'{mode_label} — {prop["name"]}',
+        'total': len(process_ids),
+        'progress': 0,
+        'results': [],
+        'error': None,
+        'started': datetime.now().isoformat(),
+        'step': 'analyzing',
+        'step_detail': f'{mode_label}: processing {len(process_ids)} of {len(docs)} documents...',
+        'steps_log': [{
+            'step': 'analyzing',
+            'detail': f'{mode_label} for {prop["name"]} — {len(process_ids)} to process, {len(skip_ids)} skipped',
+            'time': datetime.now().isoformat(),
+        }],
+    }
+
+    def on_step(step, detail=''):
+        jobs[job_id]['step'] = step
+        jobs[job_id]['step_detail'] = detail
+        jobs[job_id]['steps_log'].append({
+            'step': step, 'detail': detail,
+            'time': datetime.now().isoformat()
+        })
+
+    _process_ids = list(process_ids)
+    _skip_ids = list(skip_ids)
+    _mode = mode
+
+    def process_async():
+        try:
+            db2 = get_org_db(org_id)
+            llm = get_llm()
+
+            # Clear extraction data for docs being re-processed
+            if _mode == 'full':
+                # Full mode: clear ALL extraction data for this property's docs
+                all_ids = _process_ids + _skip_ids
+                if all_ids:
+                    ph = ','.join('?' * len(all_ids))
+                    for table in ['clauses', 'financial_terms', 'rent_roll_entries',
+                                  'operating_statement_items', 'gl_entries']:
+                        db2.conn.execute(f"DELETE FROM {table} WHERE document_id IN ({ph})", all_ids)
+                    db2.conn.commit()
+            else:
+                # Smart/new_only: only clear data for docs being re-processed
+                if _process_ids:
+                    ph = ','.join('?' * len(_process_ids))
+                    for table in ['clauses', 'financial_terms', 'rent_roll_entries',
+                                  'operating_statement_items', 'gl_entries']:
+                        db2.conn.execute(f"DELETE FROM {table} WHERE document_id IN ({ph})", _process_ids)
+                    db2.conn.commit()
+
+            analyzer = PropertyAnalyzer(db2, llm)
+            analyzer._on_step = on_step
+
+            if _mode == 'full' and not doc_types:
+                summary = analyzer.analyze_property(property_id)
+            else:
+                summary = analyzer.analyze_documents(property_id, _process_ids)
+
+            summary['skipped'] = len(_skip_ids)
+            summary['mode'] = _mode
+            jobs[job_id]['results'] = [summary]
+            jobs[job_id]['progress'] = summary.get('doc_count', 0)
+
+            if summary.get('error'):
+                on_step('failed', summary['error'])
+                jobs[job_id]['status'] = 'failed'
+                jobs[job_id]['error'] = summary['error']
+            else:
+                on_step('complete',
+                        f'Analysis complete — {summary.get("doc_count", 0)} docs processed, '
+                        f'{len(_skip_ids)} skipped')
+                jobs[job_id]['status'] = 'completed'
+        except Exception as e:
+            jobs[job_id]['status'] = 'failed'
+            jobs[job_id]['error'] = str(e)
+        finally:
+            db2.close()
+
+    enqueue_job(job_id, process_async)
+
+    return jsonify({
+        'success': True,
+        'job_id': job_id,
+        'processing': len(process_ids),
+        'skipped': len(skip_ids),
+        'mode': mode,
+    })
 
 
 @app.route('/document/<int:doc_id>/pdf')
