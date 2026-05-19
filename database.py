@@ -1743,7 +1743,7 @@ class Database:
 
     def insert_operating_statement_item(self, document_id: int, category: str,
                                          line_item: str, **kwargs) -> int:
-        fields = ['property_name', 'period', 'subcategory', 'amount', 'amount_psf',
+        fields = ['property_id', 'property_name', 'period', 'subcategory', 'amount', 'amount_psf',
                   'is_subtotal', 'is_total', 'page_number', 'metadata']
         values = {f: kwargs.get(f) for f in fields}
         if isinstance(values.get('metadata'), dict):
