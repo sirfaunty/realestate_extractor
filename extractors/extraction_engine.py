@@ -2009,8 +2009,13 @@ class DocumentClassifier:
         (r'hud.?final.?endors', 'hud_form', 0.92),
         (r'hud.?max.?insur', 'loan', 0.90),  # HUD mortgage schedule is a loan doc
         (r'hud.?escrow.?release|hud.?offsite|hud.?wc.?escrow', 'hud_form', 0.90),
-        # Due diligence
+        # Due diligence / environmental / appraisal
         (r'diagnostic.?memo|due.?diligence|forensic.?review', 'due_diligence', 0.90),
+        (r'phase.?[i1].?(?:esa|environmental)|environmental.?(?:site|report)', 'due_diligence', 0.90),
+        (r'appraisal|market.?study|property.?valuation', 'due_diligence', 0.88),
+        (r'(?:alta|boundary).?survey|site.?plan', 'due_diligence', 0.88),
+        (r'property.?condition|pca|engineering.?report', 'due_diligence', 0.88),
+        (r'seismic.?report|zoning.?(?:report|letter|compliance)', 'due_diligence', 0.88),
         # Proforma / valuation
         (r'proforma|valuation.?proforma|portfolio.?proforma', 'proforma', 0.90),
         (r'investment.?summary|investment.?overview', 'proforma', 0.85),
@@ -2021,16 +2026,30 @@ class DocumentClassifier:
         (r'budget.?overview|operating.?budget|detailed.?budget', 'operating_statement', 0.90),
         (r'property.?overview.?summary', 'operating_statement', 0.85),
         (r'leadership.?rollup|cash.?activity', 'operating_statement', 0.85),
-        # Closing / sources-uses
-        (r'closing.?proceeds|settlement.?statement', 'closing', 0.90),
+        # Closing / title / settlement
+        (r'closing.?proceeds|settlement.?statement|closing.?statement', 'closing', 0.90),
         (r'sources.?and.?uses|sources.?uses', 'closing', 0.88),
         (r'development.?agreement', 'closing', 0.88),
-        # Loan
+        (r'title.?(?:commitment|policy|insurance|search|report)', 'closing', 0.88),
+        (r'(?:owner|lender).?s?.?(?:title|affidavit)', 'closing', 0.86),
+        (r'subordination.?(?:agreement|nondisturbance)|snda', 'closing', 0.88),
+        (r'estoppel.?(?:certificate|letter)', 'closing', 0.88),
+        (r'assignment.?(?:of\s*)?(?:lease|rent|collateral)', 'closing', 0.88),
+        (r'ucc.?[1-3]|uniform.?commercial', 'closing', 0.86),
+        (r'attorney.?opinion|(?:legal|enforceability).?opinion', 'closing', 0.86),
+        # Loan / mortgage / payoff
         (r'surplus.?cash.?note', 'loan', 0.88),
         (r'loan.?interest.?calc|project.?loan', 'loan', 0.88),
         (r'promissory.?note|mortgage.?schedule', 'loan', 0.90),
+        (r'payoff.?(?:letter|statement)|loan.?payoff', 'loan', 0.90),
+        (r'mortgage.?(?:note|deed|modification|assumption)', 'loan', 0.90),
+        (r'security.?instrument|deed.?of.?trust', 'loan', 0.88),
+        (r'regulatory.?agreement', 'loan', 0.86),
         # Guarantee
         (r'guarantee|guaranty', 'guarantee', 0.90),
+        # Insurance / tax certificates
+        (r'(?:insurance|flood).?cert', 'closing', 0.86),
+        (r'tax.?(?:certificate|search|clearance)', 'closing', 0.86),
         # Rent roll
         (r'rent.?roll', 'rent_roll', 0.92),
         # GL
@@ -2066,6 +2085,17 @@ class DocumentClassifier:
                 "amortization", "debt service", "collateral", "note holder",
                 "loan amount", "prepayment", "default", "surplus cash note",
                 "insurable mortgage", "mortgage schedule",
+                # Refinance / modification
+                "payoff letter", "payoff statement", "loan payoff",
+                "mortgage modification", "loan modification",
+                "mortgage assumption", "assumption agreement",
+                "deed of trust", "security instrument",
+                "regulatory agreement", "mortgage note",
+                "mortgage deed", "note and mortgage",
+                "release of mortgage", "satisfaction of mortgage",
+                # HUD-specific loan terms
+                "section 223", "223(f)", "223(a)(7)", "firm commitment",
+                "mortgage insurance premium", "mip",
             ],
             "negative": [
                 "llc agreement", "limited liability", "lease agreement",
@@ -2079,6 +2109,24 @@ class DocumentClassifier:
                 "title insurance", "closing costs", "closing proceeds",
                 "sources and uses", "development agreement", "contract for",
                 "private development",
+                # Title docs
+                "title commitment", "title policy", "title search",
+                "title company", "schedule b", "legal description",
+                "chain of title", "preliminary title",
+                # Estoppel / subordination
+                "estoppel certificate", "tenant estoppel", "lender estoppel",
+                "subordination agreement", "non-disturbance", "snda",
+                "attornment", "subordination, non-disturbance",
+                # Assignment / UCC
+                "assignment of leases", "assignment of rents",
+                "collateral assignment", "ucc-1", "ucc financing statement",
+                "uniform commercial code",
+                # Legal opinions / certifications
+                "attorney opinion", "legal opinion", "enforceability opinion",
+                "good standing certificate", "secretary certificate",
+                # Insurance / tax certs
+                "insurance certificate", "flood certificate",
+                "tax certificate", "tax clearance", "tax search",
             ],
             "negative": [
                 "llc agreement", "limited liability", "rent roll",
@@ -2153,8 +2201,30 @@ class DocumentClassifier:
                 "equity reconciliation", "decision framework",
                 "findings", "recommendation", "risk assessment",
                 "compliance review", "document type: diagnostic",
+                # Environmental
+                "phase i environmental", "phase ii environmental",
+                "environmental site assessment", "recognized environmental",
+                "controlled recognized", "esa", "hazardous substance",
+                "environmental condition", "astm e1527",
+                # Appraisal / market study
+                "appraisal report", "market study", "market analysis",
+                "comparable sales", "comparable rentals",
+                "highest and best use", "income approach",
+                "sales comparison", "cost approach",
+                # Property condition / engineering
+                "property condition assessment", "property condition report",
+                "engineering report", "capital needs assessment",
+                "remaining useful life", "deferred maintenance",
+                # Survey
+                "alta survey", "boundary survey", "site plan",
+                "flood zone", "fema", "flood determination",
+                # Zoning
+                "zoning report", "zoning letter", "zoning compliance",
+                "certificate of occupancy", "building code",
             ],
-            "negative": [],
+            "negative": [
+                "budget overview", "detailed budget", "proforma",
+            ],
         },
         "proforma": {
             "positive": [
@@ -2209,12 +2279,28 @@ class DocumentClassifier:
             ],
             "negative": [],
         },
+        "correspondence": {
+            "positive": [
+                "from:", "to:", "subject:", "sent:", "cc:",
+                "forwarded message", "re:", "fw:", "fwd:",
+                "hi ", "hello ", "dear ", "please see",
+                "attached", "per our conversation",
+                "follow up", "following up", "let me know",
+                "best regards", "sincerely", "thanks",
+            ],
+            "negative": [
+                "llc agreement", "promissory note", "lease agreement",
+                "closing statement", "rent roll", "budget overview",
+                "proforma", "equity return", "diagnostic memo",
+            ],
+        },
     }
 
     # Document types that have extraction templates (Phase 2 analysis)
     EXTRACTABLE_TYPES = {
         'lease', 'loan', 'closing', 'guarantee',
         'rent_roll', 'operating_statement', 'general_ledger',
+        'proforma', 'equity_waterfall', 'hud_form',
     }
 
     def __init__(self, llm_client: Optional[LocalLLMClient] = None):
@@ -2282,7 +2368,19 @@ class DocumentClassifier:
         if use_llm and best_score < 0.15 and self.llm and self.llm.is_available():
             return self._classify_llm(doc)
 
-        return best_type, min(best_score * 2, 1.0)  # scale up confidence
+        confidence = min(best_score * 2, 1.0)
+
+        # ── Low-confidence .msg fallback ──
+        # Email files that don't strongly match any structured doc type
+        # are likely general correspondence (meeting notes, FYIs, etc.)
+        if confidence < 0.20 and doc.filename.lower().endswith('.msg'):
+            logger.info(
+                f"Classifier: low-confidence .msg ({best_type} @ {confidence:.0%}) "
+                f"→ defaulting to correspondence"
+            )
+            return 'correspondence', 0.25
+
+        return best_type, confidence
 
     def _classify_llm(self, doc: DocumentContent) -> Tuple[str, float]:
         """Use LLM to classify ambiguous documents."""
