@@ -677,6 +677,334 @@ General ledger data:
 )
 
 
+# ─── Proforma / Investment Summary ──────────────────────────────────
+
+PROFORMA = DocumentTemplate(
+    document_type="proforma",
+    display_name="Proforma / Investment Summary",
+    description="Forward-looking financial projections, valuation models, acquisition underwriting, and investment summaries",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL: Property identification & valuation ──
+        FieldDefinition("property_name", "Name of the property",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["asset name", "project name"]),
+        FieldDefinition("property_address", "Property address",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["property address", "street address", "site address"]),
+        FieldDefinition("total_units", "Total number of units", field_type="number",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["total units", "unit count", "total apartment units",
+                                 "number of units"]),
+        FieldDefinition("property_type", "Property type (multifamily, office, etc.)",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["property type", "asset type"]),
+        FieldDefinition("year_built", "Year property was built/delivered",
+                        field_type="number", priority=FieldPriority.CRITICAL,
+                        aliases=["year delivered", "vintage", "built"]),
+
+        # ── CRITICAL: Valuation & pricing ──
+        FieldDefinition("purchase_price", "Purchase price or cost basis",
+                        field_type="currency", priority=FieldPriority.CRITICAL,
+                        aliases=["acquisition price", "purchase price",
+                                 "total project cost", "total development cost",
+                                 "total acquisition cost"]),
+        FieldDefinition("price_per_unit", "Price per unit",
+                        field_type="currency", priority=FieldPriority.CRITICAL,
+                        aliases=["price per unit", "cost per unit",
+                                 "per unit cost", "$/unit"]),
+        FieldDefinition("going_in_cap_rate", "Going-in capitalization rate",
+                        field_type="percentage", priority=FieldPriority.CRITICAL,
+                        aliases=["cap rate", "acquisition cap", "going-in cap"]),
+        FieldDefinition("exit_cap_rate", "Exit / terminal capitalization rate",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["terminal cap", "reversion cap", "exit cap"]),
+
+        # ── IMPORTANT: Income assumptions ──
+        FieldDefinition("gross_potential_rent", "Gross potential rent (GPR)",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["GPR", "gross potential", "gross rent",
+                                 "apartment rents", "total gross potential rent"]),
+        FieldDefinition("vacancy_rate", "Vacancy and credit loss assumption",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["vacancy", "vacancy loss", "physical vacancy",
+                                 "economic vacancy"]),
+        FieldDefinition("effective_gross_income", "Effective gross income (EGI)",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["EGI", "effective income", "total revenues"]),
+        FieldDefinition("other_income", "Other income (parking, laundry, misc)",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["other income", "ancillary income",
+                                 "non-rental income", "miscellaneous income"]),
+        FieldDefinition("rent_growth_rate", "Assumed annual rent growth",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["rent growth", "revenue growth", "GPR growth"]),
+
+        # ── IMPORTANT: Expense assumptions ──
+        FieldDefinition("total_operating_expenses", "Total operating expenses",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["operating expenses", "total expenses", "opex"]),
+        FieldDefinition("expense_ratio", "Expense ratio (expenses / EGI)",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["operating expense ratio", "OER"]),
+        FieldDefinition("expense_growth_rate", "Assumed annual expense growth",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["expense growth", "opex growth"]),
+        FieldDefinition("management_fee_pct", "Property management fee as % of EGI",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["management fee", "mgmt fee"]),
+
+        # ── IMPORTANT: Return metrics ──
+        FieldDefinition("net_operating_income", "Net operating income (NOI)",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["NOI", "net operating"]),
+        FieldDefinition("irr", "Internal rate of return (projected)",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["IRR", "levered IRR", "unlevered IRR",
+                                 "project IRR"]),
+        FieldDefinition("equity_multiple", "Equity multiple",
+                        field_type="number", priority=FieldPriority.IMPORTANT,
+                        aliases=["MOIC", "multiple on invested capital",
+                                 "return multiple"]),
+        FieldDefinition("cash_on_cash", "Cash-on-cash return",
+                        field_type="percentage", priority=FieldPriority.OPTIONAL,
+                        aliases=["CoC", "cash yield", "current yield"]),
+        FieldDefinition("dscr", "Debt service coverage ratio",
+                        field_type="number", priority=FieldPriority.IMPORTANT,
+                        aliases=["DSCR", "debt coverage", "coverage ratio"]),
+
+        # ── IMPORTANT: Capital structure ──
+        FieldDefinition("total_equity", "Total equity invested",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["total equity", "equity contribution",
+                                 "total equity investment", "KA equity",
+                                 "sponsor equity", "LP equity"]),
+        FieldDefinition("loan_to_value", "Loan-to-value ratio (LTV)",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["LTV"]),
+
+        # ── OPTIONAL: Market context ──
+        FieldDefinition("market", "Market / MSA",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["market area", "MSA", "metro area"]),
+        FieldDefinition("hold_period", "Projected hold period",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["investment horizon", "holding period"]),
+    ],
+
+    llm_system_prompt="""You are a real estate investment analyst. Extract key underwriting
+assumptions and return metrics from proforma documents, investment summaries,
+and valuation models.""",
+
+    llm_extraction_prompt="""Extract the following terms from this proforma/investment document.
+Return results as a JSON array of objects with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+effective_date, section_ref, page_number, confidence
+
+Terms to extract:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
+# ─── Equity Waterfall / JV Return Calculation ──────────────────────
+
+EQUITY_WATERFALL = DocumentTemplate(
+    document_type="equity_waterfall",
+    display_name="Equity Waterfall / Return Calculation",
+    description="JV equity return calculations, distribution waterfalls, surplus cash computations, and partner capital account statements",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL: Partnership structure ──
+        FieldDefinition("jv_partner_a", "Name of first JV partner / managing member",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["managing member", "GP", "sponsor", "developer"]),
+        FieldDefinition("jv_partner_b", "Name of second JV partner / investor",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["investor", "LP", "limited partner", "equity partner"]),
+        FieldDefinition("partner_a_pct", "Partner A ownership / distribution percentage",
+                        field_type="percentage", priority=FieldPriority.CRITICAL,
+                        aliases=["sponsor share", "GP share", "managing member %"]),
+        FieldDefinition("partner_b_pct", "Partner B ownership / distribution percentage",
+                        field_type="percentage", priority=FieldPriority.CRITICAL,
+                        aliases=["investor share", "LP share"]),
+
+        # ── CRITICAL: Capital contributions ──
+        FieldDefinition("total_equity_invested", "Total equity invested by all partners",
+                        field_type="currency", priority=FieldPriority.CRITICAL,
+                        aliases=["total equity", "total capital", "total contributions"]),
+        FieldDefinition("partner_a_contribution", "Partner A capital contribution",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["sponsor equity", "GP contribution"]),
+        FieldDefinition("partner_b_contribution", "Partner B capital contribution",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["investor equity", "LP contribution"]),
+
+        # ── IMPORTANT: Distribution terms ──
+        FieldDefinition("preferred_return", "Preferred return rate",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["pref", "preferred", "hurdle rate",
+                                 "preferred return rate"]),
+        FieldDefinition("promote_structure", "Promote / carried interest structure",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["promote", "carried interest", "waterfall tiers",
+                                 "incentive allocation"]),
+        FieldDefinition("catch_up", "GP catch-up provision",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["catch up", "GP catch-up"]),
+
+        # ── IMPORTANT: Return calculations ──
+        FieldDefinition("total_distributions", "Total distributions to date",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["cumulative distributions", "total distributed"]),
+        FieldDefinition("partner_a_distributions", "Distributions to Partner A",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["amount due to KA", "sponsor distributions"]),
+        FieldDefinition("partner_b_distributions", "Distributions to Partner B",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["amount due to IDP", "investor distributions"]),
+        FieldDefinition("irr_blended", "Blended / partnership IRR",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["IRR", "project IRR", "partnership IRR"]),
+        FieldDefinition("irr_partner_a", "Partner A IRR",
+                        field_type="percentage", priority=FieldPriority.OPTIONAL,
+                        aliases=["sponsor IRR", "GP IRR"]),
+        FieldDefinition("irr_partner_b", "Partner B IRR",
+                        field_type="percentage", priority=FieldPriority.OPTIONAL,
+                        aliases=["investor IRR", "LP IRR"]),
+        FieldDefinition("equity_multiple_blended", "Blended equity multiple",
+                        field_type="number", priority=FieldPriority.IMPORTANT,
+                        aliases=["equity multiple", "MOIC"]),
+
+        # ── IMPORTANT: Cash flow items ──
+        FieldDefinition("surplus_cash", "Surplus cash available for distribution",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["distributable cash", "available cash",
+                                 "net cash flow"]),
+        FieldDefinition("property_operations_cf", "Cash flow from property operations",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["property operations", "operating cash flow"]),
+        FieldDefinition("debt_service_paid", "Debt service paid",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        aliases=["debt service", "mortgage payments"]),
+    ],
+
+    llm_system_prompt="""You are a real estate partnership analyst. Extract capital structure,
+distribution terms, and return calculations from equity waterfall documents,
+JV return calculations, and partner capital account statements.""",
+
+    llm_extraction_prompt="""Extract the following terms from this equity/partnership document.
+Return results as a JSON array of objects with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+effective_date, section_ref, page_number, confidence
+
+Terms to extract:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
+# ─── HUD Forms ──────────────────────────────────────────────────────
+
+HUD_FORM = DocumentTemplate(
+    document_type="hud_form",
+    display_name="HUD Form / FHA Document",
+    description="HUD cost certifications, FHA endorsement requests, mortgage insurance schedules, and escrow releases",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL: Loan identification ──
+        FieldDefinition("fha_project_number", "FHA project number",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["project number", "FHA number", "HUD project"]),
+        FieldDefinition("property_name", "Name of the property / project",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["project name", "property"]),
+        FieldDefinition("borrower", "Borrower / mortgagor name",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["mortgagor", "owner", "sponsor"]),
+
+        # ── CRITICAL: Mortgage terms ──
+        FieldDefinition("mortgage_amount", "Mortgage amount / insured amount",
+                        field_type="currency", priority=FieldPriority.CRITICAL,
+                        aliases=["insurable mortgage", "maximum insurable mortgage",
+                                 "loan amount", "mortgage insurance"]),
+        FieldDefinition("interest_rate", "Interest rate on the HUD-insured mortgage",
+                        field_type="percentage", priority=FieldPriority.CRITICAL,
+                        aliases=["note rate", "mortgage rate"]),
+        FieldDefinition("mortgage_term", "Mortgage term (years)",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["loan term", "amortization term", "term"]),
+        FieldDefinition("mip_rate", "Mortgage insurance premium rate",
+                        field_type="percentage", priority=FieldPriority.IMPORTANT,
+                        aliases=["MIP", "insurance premium", "annual MIP"]),
+
+        # ── IMPORTANT: Cost certification data ──
+        FieldDefinition("total_project_cost", "Total project cost (certified)",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["total cost", "certified cost",
+                                 "total development cost"]),
+        FieldDefinition("land_cost", "Land / acquisition cost",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["land", "site acquisition"]),
+        FieldDefinition("construction_cost", "Construction / hard cost",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["hard cost", "building cost", "construction"]),
+        FieldDefinition("soft_costs", "Soft costs / professional fees",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["professional fees", "architecture", "engineering"]),
+        FieldDefinition("developer_fee", "Developer fee",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["builder profit", "BSPRA",
+                                 "builder and sponsor profit and risk allowance"]),
+        FieldDefinition("replacement_reserves", "Initial replacement reserve deposit",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        aliases=["reserve deposit", "initial deposit",
+                                 "replacement reserve"]),
+
+        # ── IMPORTANT: Endorsement / escrow ──
+        FieldDefinition("endorsement_date", "Final endorsement date",
+                        field_type="date", priority=FieldPriority.IMPORTANT,
+                        aliases=["final endorsement", "initial endorsement"]),
+        FieldDefinition("escrow_amount", "Escrow amount being released or held",
+                        field_type="currency", priority=FieldPriority.IMPORTANT,
+                        aliases=["escrow", "holdback", "reserve"]),
+        FieldDefinition("escrow_account_number", "Escrow account number",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["account number", "escrow #"]),
+
+        # ── OPTIONAL: Unit / rent data from HUD forms ──
+        FieldDefinition("total_units", "Total number of units",
+                        field_type="number", priority=FieldPriority.OPTIONAL,
+                        aliases=["units", "dwelling units"]),
+        FieldDefinition("annual_debt_service", "Annual debt service",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        aliases=["debt service", "annual payment"]),
+    ],
+
+    llm_system_prompt="""You are a HUD/FHA housing finance specialist. Extract key terms from
+HUD cost certifications, FHA endorsement documents, mortgage insurance
+schedules, and escrow releases.""",
+
+    llm_extraction_prompt="""Extract the following terms from this HUD/FHA document.
+Return results as a JSON array of objects with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+effective_date, section_ref, page_number, confidence
+
+Terms to extract:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
 # ─── Template Registry ───────────────────────────────────────────────
 
 TEMPLATES: Dict[str, DocumentTemplate] = {
@@ -687,6 +1015,9 @@ TEMPLATES: Dict[str, DocumentTemplate] = {
     "rent_roll": RENT_ROLL,
     "operating_statement": OPERATING_STATEMENT,
     "general_ledger": GENERAL_LEDGER,
+    "proforma": PROFORMA,
+    "equity_waterfall": EQUITY_WATERFALL,
+    "hud_form": HUD_FORM,
 }
 
 
