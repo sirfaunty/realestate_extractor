@@ -87,6 +87,26 @@
 - Added `^total$` to `_SUBTOTAL_PATTERN` — bare "Total" rows flagged as subtotals
 - Added `'net equity'` to BTL financing keywords
 
+### Round 3: Re-Run Verification & Storage-Layer Fixes
+
+**Re-run results (Run #15, 41 min):**
+- **2047 OS items** — BTL taxonomy working: debt_service (85), reserve (73), noi_subtotal (48), capital_expense (41), admin_expense (34), financing (25), expense (1315), income (418), unknown (8)
+- **40 financial terms** — down from 70 (Round 1) thanks to Round 2 quality hardening
+- **18 clauses** — stable
+- **0 rent roll** — garbage correctly filtered
+- LLM timeouts: 4/4 equity_waterfall, 3/4 hud_form, 3/4 proforma, 1/3 loan (docs too long for Ollama)
+
+**Issues found and fixed:**
+
+1. **Universal CRE validation gate** (`_analyze_with_engine`) — CRE currency minimums, positive-only, and range checks only applied to `_extract_financial_from_tables()` path. Engine/prose extraction bypassed them, allowing garbage from KA Portfolio through (purchase_price=$52.67, GPR=$5.5, NOI=$1.0, total_equity=$1.86). Added a validation filter that applies to ALL terms before DB storage, regardless of extraction source. Drops 40→36 terms.
+
+2. **OS items `property_id` NULL bug** — `insert_operating_statement_item()` didn't include `property_id` in its field list, so all 2047 OS items had `property_id = NULL`. Added `property_id` to the DB insert field list and passed it from `doc_record` in the caller. Queries joining through `documents` were unaffected, but direct `WHERE property_id = 1` queries returned nothing.
+
+**Residual issues (not blocking):**
+- `earnest_money = $5,000` has value_numeric=5.0 (engine parsing bug)
+- `property_name = KA Headquarters Apartments` from portfolio spreadsheet (wrong property, needs property-level disambiguation)
+- `dscr = $1.16` has `$` prefix in value_raw (cosmetic, numeric correct)
+
 ### Needs Re-Run
 ```bash
 python3 run_analysis.py --property-id 1
@@ -96,43 +116,39 @@ python3 run_analysis.py --property-id 1
 
 ## Queued — Next Steps
 
-### Priority 1: Re-run & Verify (BLOCKED — needs local run)
-- Run `python3 run_analysis.py --property-id 1` locally to repopulate with Round 2 fixes
-- Expected: OS items split into 6+ categories (not all debt_service), cleaner financial terms, GPR as income
-- Check property page in web UI for correct synthesis output
+### Priority 1: Upload 26 Refinance Closing Docs
+- Upload via batch upload UI after current re-run
+- Classifier already prepped with 20+ new filename patterns and 70+ new keywords
+- Watch for: classifier accuracy on new doc types, extraction coverage
 
-### Priority 2: HUD PDF Text Handling
-- **STILL OPEN** — PDFs produce garbage terms ("of", "Purchase,"). OCR text too fragmented for rule-based extraction.
-- Options: (a) improve OCR preprocessing, (b) rely on LLM gap-fill when Ollama is available, (c) build HUD-specific parsing for tabular PDF layouts
+### Priority 2: Equity Waterfall Coverage
+- Only getting 1 term from equity waterfall docs (surplus_cash) — all 4 LLM calls timed out
+- Needs better alias coverage for surplus cash calculation format
+- May need specialized parsing for the JV return calculation spreadsheet layout
 
 ### Priority 3: New Property Onboarding
 - Feed in a fresh property's docs to stress-test the full pipeline
-- Watch for: classifier misses on new doc formats, parser failures on different spreadsheet layouts, synthesis issues with different period structures
+- Watch for: classifier misses on new doc formats, parser failures on different spreadsheet layouts
 
-### Priority 4: Classifier Improvements
-- Add `correspondence` doc type for emails that don't fit other categories
-- Low-confidence emails (IDP_Meeting.msg at 0.14, Tax Appeal email at 0.11) currently get misfiled
-- .msg files with `classification_confidence < 0.2` should default to `correspondence` or `reference`
-
-### Priority 5: Equity Waterfall Coverage
-- Only getting 3-6 terms from equity waterfall docs — needs better alias coverage for surplus cash calculation format
-- May need specialized parsing for the JV return calculation spreadsheet layout
+### Priority 4: Engine Numeric Parsing
+- `earnest_money = $5,000` parsed as value_numeric=5.0 instead of 5000.0
+- Root cause in extraction_engine.py currency parsing, not in `_safe_float`
 
 ---
 
 ## Chamberlain Data Inventory (40 docs)
 
-| Type | Count | Tables Stored | Text (chars) | Extraction Status |
-|------|-------|--------------|-------------|-------------------|
-| operating_statement | 3 | 31 sheets | 503K | Best coverage — 2022–2026 income/expense/NOI |
-| proforma | 4 | 49 sheets | 995K | NEW: 21+ terms from table-aware extraction |
-| partnership_agreement | 11 | 0 | 184K | No template (text-heavy legal docs) |
-| equity_waterfall | 4 | 20 sheets | 135K | NEW: 3 terms, needs LLM for more |
-| organizational | 4 | 0 | 13K | No template needed (emails + org chart) |
-| hud_form | 4 | 45 tables | 62K | NEW template, minimal results (OCR quality) |
-| closing | 3 | 2 sheets | 214K | Existing template, 13 terms |
-| loan | 3 | 1 sheet | 40K | Existing template, 28 terms |
-| due_diligence | 1 | 64 tables | 92K | No template (diagnostic memo) |
-| general_ledger | 1 | 0 | 2K | Email, low value |
-| rent_roll | 1 | 0 | 11K | Email, garbage data filtered by validation |
-| reference | 1 | 0 | 16K | Context doc, no extraction needed |
+| Type | Count | Tables | Text | Financial Terms | Notes |
+|------|-------|--------|------|-----------------|-------|
+| operating_statement | 3 | 31 | 503K | 2047 OS items | BTL split into 6 subcategories |
+| proforma | 4 | 49 | 995K | 20 terms (pre-gate) | Chamberlain Valuation clean; KA Portfolio has garbage |
+| partnership_agreement | 11 | 0 | 184K | 0 | No template (text-heavy legal docs) |
+| equity_waterfall | 4 | 20 | 135K | 1 (surplus_cash) | All 4 LLM timeouts, needs specialized parser |
+| organizational | 4 | 0 | 13K | 0 | Emails + org chart, no extraction needed |
+| hud_form | 4 | 45 | 62K | 8 | HUD parser working (FHA#, borrower, mortgage, etc.) |
+| closing | 3 | 2 | 214K | 2 | purchase_price + earnest_money |
+| loan | 3 | 1 | 40K | 9 | borrower, loan_amount, rate_type, interest_rate |
+| due_diligence | 1 | 64 | 92K | 0 | No template (diagnostic memo) |
+| general_ledger | 1 | 0 | 2K | 0 | Email, low value |
+| rent_roll | 1 | 0 | 11K | 0 | Email, garbage data filtered |
+| reference | 1 | 0 | 16K | 0 | Context doc |

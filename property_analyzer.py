@@ -327,12 +327,14 @@ class PropertyAnalyzer:
 
         # Store results
         property_name = doc_record.get('property_name')
+        property_id = doc_record.get('property_id')
         for row in rows:
             try:
                 self.db.insert_operating_statement_item(
                     document_id=doc_id,
                     category=row.get('category', 'unknown'),
                     line_item=row.get('line_item', ''),
+                    property_id=property_id,
                     property_name=property_name,
                     period=row.get('period'),
                     subcategory=row.get('subcategory'),
@@ -1264,6 +1266,206 @@ class PropertyAnalyzer:
             )
         return list(found_terms.values())
 
+    def _extract_equity_waterfall_fields(self, doc_id: int,
+                                          doc: 'DocumentContent') -> List[Dict]:
+        """
+        Extract structured fields from equity waterfall / JV return calc
+        spreadsheets by scanning stored raw tables.
+
+        These docs have two main layouts:
+          1. Surplus cash distribution table:
+             Date | Description | Amount | Split | Due to KA | Due to IDP
+          2. Equity return calculation:
+             Label | Contribution | Balance | Dates | Days | Rate | Return | Total
+
+        The generic table extractor misses these because the labels are row-
+        oriented (not key-value pairs) and use context-dependent column positions.
+        """
+        import json as _json
+
+        table_rows = self.db.get_document_tables(doc_id)
+        if not table_rows:
+            return []
+
+        found = {}  # field_name -> term dict
+
+        for tbl in table_rows:
+            headers = tbl.get('headers') or []
+            raw_rows = tbl.get('rows_json') or []
+            if isinstance(headers, str):
+                headers = _json.loads(headers)
+            if isinstance(raw_rows, str):
+                raw_rows = _json.loads(raw_rows)
+
+            all_rows = [headers] + raw_rows
+
+            for row_idx, row in enumerate(all_rows):
+                if not row:
+                    continue
+
+                label = str(row[0] or '').strip()
+                label_lower = label.lower()
+
+                # ── Initial equity contribution ──
+                # Row like: "Initial Closing" | "" | 1858797 | "" | 1858797 | ...
+                if ('initial' in label_lower and
+                        any(kw in label_lower for kw in ['closing', 'contribution', 'capital', 'investment']) and
+                        'initial' not in found):
+                    for ci in range(1, min(6, len(row))):
+                        val = self._safe_float(
+                            str(row[ci] or '').replace(',', '').replace('$', ''))
+                        if val and val > 10_000:
+                            found['initial_equity_contribution'] = {
+                                'term_type': 'initial_equity_contribution',
+                                'term_label': 'Initial Equity Contribution',
+                                'value_raw': str(row[ci]),
+                                'value_numeric': val,
+                                'value_unit': 'USD',
+                                'confidence': 0.90,
+                                'section_ref': 'Equity return calculation',
+                            }
+                            break
+
+                # ── Preferred return rate ──
+                # In return calc tables, col 7 has the rate (e.g. 0.07)
+                # Only grab from rows with "Initial" or "Add" + "Return"
+                if ('preferred_return_rate' not in found and
+                        ('initial' in label_lower or
+                         ('add' in label_lower and 'return' in label_lower))):
+                    # Look for a rate column (decimal 0.01–0.30)
+                    for ci in range(5, min(10, len(row))):
+                        val = self._safe_float(str(row[ci] or ''))
+                        if val and 0.01 <= val <= 0.30:
+                            found['preferred_return_rate'] = {
+                                'term_type': 'preferred_return_rate',
+                                'term_label': 'Preferred Return Rate',
+                                'value_raw': f'{val:.0%}',
+                                'value_numeric': round(val * 100, 4),  # store as 7.0 not 0.07
+                                'value_unit': '%',
+                                'confidence': 0.85,
+                                'section_ref': 'Equity return calculation',
+                            }
+                            break
+
+                # ── Grand total distributions ──
+                # Row: "Grand Total" | "Total Distribution" | 5481809 | ...
+                if ('grand total' in label_lower and
+                        'grand_total_distributions' not in found):
+                    # Check if second cell says "Total Distribution"
+                    cell1 = str(row[1] or '').lower() if len(row) > 1 else ''
+                    if 'total distribution' in cell1 or 'total' in cell1:
+                        for ci in range(2, min(8, len(row))):
+                            val = self._safe_float(
+                                str(row[ci] or '').replace(',', '').replace('$', ''))
+                            if val and val > 100_000:
+                                found['grand_total_distributions'] = {
+                                    'term_type': 'grand_total_distributions',
+                                    'term_label': 'Grand Total Distributions',
+                                    'value_raw': str(row[ci]),
+                                    'value_numeric': val,
+                                    'value_unit': 'USD',
+                                    'confidence': 0.85,
+                                    'section_ref': 'Surplus cash distribution',
+                                }
+                                break
+
+                # ── Partner distribution splits (KA / IDP amounts) ──
+                # Grand Total rows with amounts in "Due to KA" and "Due to IDP" cols
+                if 'grand total' in label_lower:
+                    cell1 = str(row[1] or '').lower() if len(row) > 1 else ''
+                    if 'total distribution' in cell1 or 'total' in cell1:
+                        # KA amount is typically col 6, IDP col 7
+                        for ci in range(5, min(9, len(row))):
+                            val = self._safe_float(
+                                str(row[ci] or '').replace(',', '').replace('$', ''))
+                            if val and val > 50_000:
+                                if 'ka_total_distributions' not in found:
+                                    found['ka_total_distributions'] = {
+                                        'term_type': 'ka_total_distributions',
+                                        'term_label': 'KA Total Distributions',
+                                        'value_raw': str(row[ci]),
+                                        'value_numeric': val,
+                                        'value_unit': 'USD',
+                                        'confidence': 0.80,
+                                        'section_ref': 'Surplus cash distribution',
+                                    }
+                                elif 'idp_total_distributions' not in found:
+                                    found['idp_total_distributions'] = {
+                                        'term_type': 'idp_total_distributions',
+                                        'term_label': 'IDP Total Distributions',
+                                        'value_raw': str(row[ci]),
+                                        'value_numeric': val,
+                                        'value_unit': 'USD',
+                                        'confidence': 0.80,
+                                        'section_ref': 'Surplus cash distribution',
+                                    }
+
+                # ── Grand total return (IDP preferred return) ──
+                # Row: "Grand Total at 12-31-29" | ... | | | ... | | | | | 930,716.78
+                if ('grand total at' in label_lower and
+                        'total_preferred_return' not in found):
+                    # The total is usually in the last non-empty column
+                    for ci in range(len(row) - 1, 4, -1):
+                        val = self._safe_float(
+                            str(row[ci] or '').replace(',', '').replace('$', ''))
+                        if val and val > 1_000:
+                            found['total_preferred_return'] = {
+                                'term_type': 'total_preferred_return',
+                                'term_label': 'Total Preferred Return',
+                                'value_raw': str(row[ci]),
+                                'value_numeric': val,
+                                'value_unit': 'USD',
+                                'confidence': 0.85,
+                                'section_ref': 'Equity return calculation',
+                            }
+                            break
+
+                # ── Distribution split percentage ──
+                # Cell containing "75% / 25% split" or "75% to KA"
+                for ci in range(len(row)):
+                    cell = str(row[ci] or '')
+                    cell_lower = cell.lower()
+                    if ('distribution_split' not in found and
+                            '%' in cell and 'split' in cell_lower):
+                        found['distribution_split'] = {
+                            'term_type': 'distribution_split',
+                            'term_label': 'Distribution Split',
+                            'value_raw': cell.strip(),
+                            'value_numeric': None,
+                            'value_unit': None,
+                            'confidence': 0.85,
+                            'section_ref': 'Surplus cash distribution',
+                        }
+                        break
+
+                # ── Equity contributions from summary tables ──
+                # Row: "" | "" | "" | "Contributions" | 907,200.28 | -907,200.28
+                if 'contribution' in label_lower or (
+                        len(row) > 3 and 'contribution' in str(row[3] or '').lower()):
+                    lbl = label_lower or str(row[3] or '').lower()
+                    if 'contribution' in lbl and 'equity_contributions' not in found:
+                        for ci in range(1, min(8, len(row))):
+                            val = self._safe_float(
+                                str(row[ci] or '').replace(',', '').replace('$', ''))
+                            if val and val > 10_000:
+                                found['equity_contributions'] = {
+                                    'term_type': 'equity_contributions',
+                                    'term_label': 'Equity Contributions',
+                                    'value_raw': str(row[ci]),
+                                    'value_numeric': val,
+                                    'value_unit': 'USD',
+                                    'confidence': 0.80,
+                                    'section_ref': 'Equity account summary',
+                                }
+                                break
+
+        if found:
+            logger.info(
+                f"Equity waterfall parser: extracted {len(found)} fields "
+                f"from doc {doc_id}"
+            )
+        return list(found.values())
+
     def _analyze_with_engine(self, doc_id: int, doc: DocumentContent,
                               template) -> Dict[str, int]:
         """Run the full extraction engine for lease/loan/closing docs."""
@@ -1293,10 +1495,52 @@ class PropertyAnalyzer:
                     if ht['term_type'] not in existing_types:
                         extraction.setdefault('financial_terms', []).append(ht)
 
+        # Supplement with equity waterfall parser
+        if template.document_type == 'equity_waterfall':
+            ew_terms = self._extract_equity_waterfall_fields(doc_id, doc)
+            if ew_terms:
+                existing_types = {t['term_type'] for t in extraction.get('financial_terms', [])}
+                for et in ew_terms:
+                    if et['term_type'] not in existing_types:
+                        extraction.setdefault('financial_terms', []).append(et)
+
         counts = {'terms': 0, 'clauses': 0}
 
-        # Store financial terms
+        # ── Universal CRE validation gate ──
+        # Apply the same plausibility guards that _extract_financial_from_tables
+        # uses, but to ALL terms regardless of extraction source (engine prose,
+        # table extraction, HUD parser).  This catches garbage from multi-
+        # property portfolio spreadsheets where the engine picks up values
+        # from the wrong property row (e.g. purchase_price=$52.67).
+        validated_terms = []
         for term in extraction.get('financial_terms', []):
+            ttype = term.get('term_type', 'unknown')
+            vnum = self._safe_float(term.get('value_numeric'))
+
+            if vnum is not None:
+                # Currency minimum thresholds
+                min_val = self._CRE_CURRENCY_MINIMUMS.get(ttype)
+                if min_val and abs(vnum) < min_val:
+                    logger.debug(f"CRE gate: dropping {ttype}={vnum} (min {min_val})")
+                    continue
+
+                # Positive-only fields
+                if ttype in self._CRE_POSITIVE_ONLY and vnum < 0:
+                    logger.debug(f"CRE gate: dropping {ttype}={vnum} (must be positive)")
+                    continue
+
+                # Number range checks
+                num_range = self._CRE_NUMBER_RANGES.get(ttype)
+                if num_range:
+                    lo, hi = num_range
+                    if not (lo <= abs(vnum) <= hi):
+                        logger.debug(f"CRE gate: dropping {ttype}={vnum} (range {lo}-{hi})")
+                        continue
+
+            validated_terms.append(term)
+
+        # Store financial terms
+        for term in validated_terms:
             try:
                 self.db.insert_financial_term(
                     document_id=doc_id,

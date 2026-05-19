@@ -925,6 +925,13 @@ class ExtractionEngine:
         # Remove spaces
         s = raw.replace(' ', '')
 
+        # ── Fast path: standard comma-formatted numbers ──
+        # Match "5,000" or "1,234,567.89" etc. — these are NOT garbled
+        # and must be parsed normally before the garbled heuristic runs.
+        std_comma = re.match(r'^(\d{1,3}(?:,\d{3})+(?:\.\d+)?)$', s)
+        if std_comma:
+            return float(std_comma.group(1).replace(',', ''))
+
         # Check for garbled pattern: digits followed by repeated zeros with
         # misplaced commas/periods.  These come from pdfplumber encoding bugs
         # where "$3,000,000.00" becomes "$3000,.00000.,"
@@ -2013,7 +2020,7 @@ class DocumentClassifier:
         (r'diagnostic.?memo|due.?diligence|forensic.?review', 'due_diligence', 0.90),
         (r'phase.?[i1].?(?:esa|environmental)|environmental.?(?:site|report)', 'due_diligence', 0.90),
         (r'appraisal|market.?study|property.?valuation', 'due_diligence', 0.88),
-        (r'(?:alta|boundary).?survey|site.?plan', 'due_diligence', 0.88),
+        (r'(?:alta|boundary).?survey|site.?plan|(?:^|[\d_\-\s])survey(?:[\d_\-\s.]|$)|surveyor', 'due_diligence', 0.88),
         (r'property.?condition|pca|engineering.?report', 'due_diligence', 0.88),
         (r'seismic.?report|zoning.?(?:report|letter|compliance)', 'due_diligence', 0.88),
         # Proforma / valuation
@@ -2027,9 +2034,11 @@ class DocumentClassifier:
         (r'property.?overview.?summary', 'operating_statement', 0.85),
         (r'leadership.?rollup|cash.?activity', 'operating_statement', 0.85),
         # Closing / title / settlement
-        (r'closing.?proceeds|settlement.?statement|closing.?statement', 'closing', 0.90),
+        (r'closing.?(?:proceeds|book|transcript|binder)', 'closing', 0.90),
+        (r'settlement.?statement|closing.?statement', 'closing', 0.90),
         (r'sources.?and.?uses|sources.?uses', 'closing', 0.88),
-        (r'development.?agreement', 'closing', 0.88),
+        (r'development.?agreement|contract.{0,20}development', 'closing', 0.88),
+        (r'management.?agreement', 'closing', 0.86),
         (r'title.?(?:commitment|policy|insurance|search|report)', 'closing', 0.88),
         (r'(?:owner|lender).?s?.?(?:title|affidavit)', 'closing', 0.86),
         (r'subordination.?(?:agreement|nondisturbance)|snda', 'closing', 0.88),
