@@ -2281,9 +2281,6 @@ def _assess_doc(db, doc):
     if doc_type in _NO_EXTRACT_TYPES:
         return 'skip', f'No extraction for {doc_type}'
 
-    if conf < 0.3:
-        return 'needs_rerun', f'Low classification confidence ({conf:.0%})'
-
     term_count = db.conn.execute(
         "SELECT COUNT(*) FROM financial_terms WHERE document_id = ?", (doc_id,)
     ).fetchone()[0]
@@ -2301,13 +2298,15 @@ def _assess_doc(db, doc):
     if doc_type in _OS_TYPES:
         if os_count > 0:
             return 'good', f'{os_count} OS items'
+        if conf < 0.5:
+            return 'skip', f'Low-confidence OS ({conf:.0%}), likely misclassified'
         return 'needs_rerun', 'Operating statement with 0 items'
 
     if doc_type == 'rent_roll':
         if rr_count > 0:
             return 'good', f'{rr_count} rent roll entries'
         if conf < 0.5:
-            return 'skip', f'Low-confidence rent roll ({conf:.0%})'
+            return 'skip', f'Low-confidence rent roll ({conf:.0%}), likely misclassified'
         return 'needs_rerun', 'Rent roll with 0 entries'
 
     if doc_type == 'general_ledger':
@@ -2317,7 +2316,7 @@ def _assess_doc(db, doc):
         if gl_count > 0:
             return 'good', f'{gl_count} GL entries'
         if conf < 0.5:
-            return 'skip', f'Low-confidence GL ({conf:.0%})'
+            return 'skip', f'Low-confidence GL ({conf:.0%}), likely misclassified'
         return 'needs_rerun', 'General ledger with 0 entries'
 
     if doc_type in _EXTRACTABLE_TYPES:
@@ -2328,6 +2327,8 @@ def _assess_doc(db, doc):
             if clause_count:
                 parts.append(f'{clause_count} clauses')
             return 'good', ', '.join(parts)
+        if conf < 0.5:
+            return 'skip', f'Low-confidence {doc_type} ({conf:.0%}), likely misclassified'
         return 'needs_rerun', f'{doc_type} with 0 extraction results'
 
     if total_extracted > 0:
