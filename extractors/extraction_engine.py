@@ -2378,6 +2378,7 @@ class DocumentClassifier:
         'lease', 'loan', 'closing', 'guarantee',
         'rent_roll', 'operating_statement', 'general_ledger',
         'proforma', 'equity_waterfall', 'hud_form',
+        'partnership_agreement',
     }
 
     def __init__(self, llm_client: Optional[LocalLLMClient] = None):
