@@ -66,14 +66,68 @@ DEV_MODE = os.environ.get('CAPACTIVE_DEV_MODE', '0') == '1'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# Global state for background jobs
+# Global state for background jobs — org-scoped with thread safety
+# Jobs are stored as jobs[job_id] = {org_id: ..., ...}
+# Old jobs are automatically cleaned up after JOB_EXPIRY_HOURS
+import collections
+
 jobs = {}
+_jobs_lock = threading.Lock()
+JOB_EXPIRY_HOURS = int(os.environ.get('CAPACTIVE_JOB_EXPIRY_HOURS', '24'))
+
+
+def _cleanup_expired_jobs():
+    """Remove jobs older than JOB_EXPIRY_HOURS."""
+    cutoff = datetime.now().timestamp() - (JOB_EXPIRY_HOURS * 3600)
+    with _jobs_lock:
+        expired = [
+            jid for jid, job in jobs.items()
+            if datetime.fromisoformat(job.get('started', datetime.now().isoformat())).timestamp() < cutoff
+        ]
+        for jid in expired:
+            del jobs[jid]
+
+
+# ─── Rate Limiting ──────────────────────────────────────────────────
+# Simple in-memory per-org rate limiter for upload/batch endpoints.
+# Limits: max N requests per window (sliding window counter).
+
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = int(os.environ.get('CAPACTIVE_RATE_LIMIT', '30'))  # requests per window
+_rate_counters = {}  # org_id -> list of timestamps
+_rate_lock = threading.Lock()
+
+
+def _check_rate_limit(org_id):
+    """Returns True if request is allowed, False if rate limited."""
+    now = time.time()
+    with _rate_lock:
+        if org_id not in _rate_counters:
+            _rate_counters[org_id] = []
+        # Remove expired entries
+        _rate_counters[org_id] = [
+            t for t in _rate_counters[org_id]
+            if now - t < _RATE_LIMIT_WINDOW
+        ]
+        if len(_rate_counters[org_id]) >= _RATE_LIMIT_MAX:
+            return False
+        _rate_counters[org_id].append(now)
+        return True
 
 # ─── Processing Queue ───────────────────────────────────────────────
-# Single worker thread processes jobs sequentially so Ollama isn't
-# hammered by parallel requests.
+# Configurable worker pool for parallel job processing.
+# Phase 1 (ingest) is CPU/IO-bound with no LLM, so parallel workers
+# are safe and dramatically speed up large batches.
+# Phase 2 (analyze) uses Ollama, so those are still sequential per-job.
 
 import queue as _queue
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Number of concurrent job workers (each job runs in its own thread)
+_NUM_JOB_WORKERS = int(os.environ.get('CAPACTIVE_JOB_WORKERS', '2'))
+
+# Number of parallel document processors within a single batch job
+_NUM_DOC_WORKERS = int(os.environ.get('CAPACTIVE_DOC_WORKERS', '4'))
 
 _work_queue = _queue.Queue()
 
@@ -106,8 +160,12 @@ def _refresh_queue_positions():
             pos += 1
 
 
-_worker_thread = threading.Thread(target=_queue_worker, daemon=True)
-_worker_thread.start()
+# Start worker pool — multiple workers can process jobs in parallel
+_worker_threads = []
+for _i in range(_NUM_JOB_WORKERS):
+    _t = threading.Thread(target=_queue_worker, daemon=True, name=f'job-worker-{_i}')
+    _t.start()
+    _worker_threads.append(_t)
 
 
 def enqueue_job(job_id, process_fn):
@@ -116,6 +174,33 @@ def enqueue_job(job_id, process_fn):
     jobs[job_id]['status'] = 'queued' if pending_count > 0 else 'processing'
     jobs[job_id]['queue_position'] = pending_count + 1 if pending_count > 0 else 0
     _work_queue.put({'job_id': job_id, 'fn': process_fn})
+
+
+def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_name):
+    """Process a single document in its own thread with its own DB connection.
+    Returns (result, error_occurred) tuple."""
+    fname = os.path.basename(filepath)
+    db = None
+    try:
+        db = get_org_db(org_id)
+        llm = get_llm()
+        processor = BatchProcessor(db, llm)
+        result = processor.process_single(
+            filepath, document_type=doc_type,
+            property_name=property_name)
+        return result, False
+    except Exception as doc_err:
+        result = ProcessingResult(
+            filename=fname, success=False,
+            error=str(doc_err),
+            document_type=doc_type or 'unknown',
+            page_count=0, processing_time=0,
+            tables_stored=0
+        )
+        return result, True
+    finally:
+        if db:
+            db.close()
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -554,6 +639,11 @@ def upload():
     user_id = session['user_id']
 
     if request.method == 'POST':
+        # Rate limit check
+        if not _check_rate_limit(org_id):
+            flash('Too many requests. Please wait a moment and try again.', 'error')
+            return redirect(request.url)
+
         # Check volume limit
         store = get_config_store()
         tracker = get_usage_tracker()
@@ -635,6 +725,7 @@ def upload():
         # Process in background
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
+            'org_id': org_id,
             'status': 'processing',
             'type': 'single' if file_count == 1 else 'batch',
             'filename': first_filename if file_count == 1 else f'{file_count} documents',
@@ -656,39 +747,26 @@ def upload():
             })
 
         def process_async():
-            db = None
             try:
-                db = get_org_db(org_id)
-                llm = get_llm()
-                processor = BatchProcessor(db, llm)
-                processor._on_step = on_step
-
                 failed_count = 0
-                for i, (fname, fpath) in enumerate(saved):
-                    on_step('ingesting', f'Reading {fname}... ({i+1}/{file_count})')
-                    try:
-                        result = processor.process_single(
-                            fpath, document_type=doc_type,
-                            property_name=property_name)
-                    except Exception as doc_err:
-                        result = ProcessingResult(
-                            filename=fname, success=False,
-                            error=str(doc_err),
-                            document_type=doc_type or 'unknown',
-                            page_count=0, processing_time=0,
-                            tables_stored=0
-                        )
-                        failed_count += 1
+                completed_count = 0
+                _lock = threading.Lock()
 
-                    jobs[job_id]['progress'] = i + 1
-                    jobs[job_id]['results'].append(_result_to_dict(result))
+                def _on_result(result, failed):
+                    nonlocal failed_count, completed_count
+                    with _lock:
+                        if failed:
+                            failed_count += 1
+                        completed_count += 1
+                        jobs[job_id]['progress'] = completed_count
+                        jobs[job_id]['results'].append(_result_to_dict(result))
 
                     # Log usage
                     t = get_usage_tracker()
                     try:
                         t.log_document_processed(
                             org_id=org_id, user_id=user_id,
-                            filename=fname,
+                            filename=result.filename,
                             document_type=result.document_type or 'unknown',
                             page_count=result.page_count,
                             processing_time=result.processing_time,
@@ -700,6 +778,33 @@ def upload():
                     finally:
                         t.close()
 
+                if file_count == 1:
+                    # Single file — process directly
+                    fname, fpath = saved[0]
+                    on_step('ingesting', f'Reading {fname}...')
+                    result, was_error = _process_single_doc_thread(
+                        org_id, user_id, fpath, doc_type, property_name)
+                    _on_result(result, was_error)
+                else:
+                    # Multiple files — process in parallel
+                    on_step('ingesting', f'Processing {file_count} files with {_NUM_DOC_WORKERS} workers...')
+                    with ThreadPoolExecutor(max_workers=_NUM_DOC_WORKERS) as executor:
+                        futures = {}
+                        for fname, fpath in saved:
+                            future = executor.submit(
+                                _process_single_doc_thread,
+                                org_id, user_id, fpath,
+                                doc_type, property_name
+                            )
+                            futures[future] = fname
+
+                        for future in as_completed(futures):
+                            fname = futures[future]
+                            result, was_error = future.result()
+                            _on_result(result, was_error)
+                            on_step('ingesting',
+                                    f'Processed {fname} ({completed_count}/{file_count})')
+
                 on_step('complete', 'Ingested' if file_count == 1 else f'All {file_count} files ingested')
                 jobs[job_id]['status'] = 'completed'
                 jobs[job_id]['failed_count'] = failed_count
@@ -708,9 +813,6 @@ def upload():
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
-            finally:
-                if db:
-                    db.close()
 
         enqueue_job(job_id, process_async)
 
@@ -728,6 +830,11 @@ def batch():
     user_id = session['user_id']
 
     if request.method == 'POST':
+        # Rate limit check
+        if not _check_rate_limit(org_id):
+            flash('Too many requests. Please wait a moment and try again.', 'error')
+            return redirect(request.url)
+
         uploaded_files = request.files.getlist('files')
 
         # Save all uploaded files to a batch subfolder
@@ -799,6 +906,7 @@ def batch():
 
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
+            'org_id': org_id,
             'status': 'processing',
             'type': 'batch',
             'folder': f'Uploaded batch ({pdf_count} files)',
@@ -820,36 +928,19 @@ def batch():
             })
 
         def process_async():
-            db = None
             try:
-                db = get_org_db(org_id)
-                llm = get_llm()
-                processor = BatchProcessor(db, llm)
-                processor._on_step = on_step
-
                 failed_count = 0
-                for i, filepath in enumerate(saved_paths):
-                    fname = os.path.basename(filepath)
-                    on_step('ingesting', f'Processing {fname}... ({i+1}/{pdf_count})')
-                    try:
-                        result = processor.process_single(
-                            filepath,
-                            document_type=doc_type,
-                            property_name=property_name
-                        )
-                    except Exception as doc_err:
-                        # Single document failure — log and continue
-                        result = ProcessingResult(
-                            filename=fname, success=False,
-                            error=str(doc_err),
-                            document_type=doc_type or 'unknown',
-                            page_count=0, processing_time=0,
-                            tables_stored=0
-                        )
-                        failed_count += 1
+                completed_count = 0
+                _lock = threading.Lock()
 
-                    jobs[job_id]['progress'] = i + 1
-                    jobs[job_id]['results'].append(_result_to_dict(result))
+                def _on_result(result, failed):
+                    nonlocal failed_count, completed_count
+                    with _lock:
+                        if failed:
+                            failed_count += 1
+                        completed_count += 1
+                        jobs[job_id]['progress'] = completed_count
+                        jobs[job_id]['results'].append(_result_to_dict(result))
 
                     # Log each document
                     t = get_usage_tracker()
@@ -868,6 +959,26 @@ def batch():
                     finally:
                         t.close()
 
+                on_step('ingesting', f'Processing {pdf_count} files with {_NUM_DOC_WORKERS} workers...')
+
+                # Process documents in parallel using thread pool
+                with ThreadPoolExecutor(max_workers=_NUM_DOC_WORKERS) as executor:
+                    futures = {}
+                    for filepath in saved_paths:
+                        future = executor.submit(
+                            _process_single_doc_thread,
+                            org_id, user_id, filepath,
+                            doc_type, property_name
+                        )
+                        futures[future] = os.path.basename(filepath)
+
+                    for future in as_completed(futures):
+                        fname = futures[future]
+                        result, was_error = future.result()
+                        _on_result(result, was_error)
+                        on_step('ingesting',
+                                f'Processed {fname} ({completed_count}/{pdf_count})')
+
                 if failed_count > 0:
                     on_step('complete',
                             f'{pdf_count - failed_count} of {pdf_count} files processed '
@@ -880,9 +991,6 @@ def batch():
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
-            finally:
-                if db:
-                    db.close()
 
         enqueue_job(job_id, process_async)
 
@@ -894,8 +1002,10 @@ def batch():
 @app.route('/job/<job_id>')
 @login_required
 def job_status(job_id):
+    # Periodically clean up expired jobs
+    _cleanup_expired_jobs()
     job = jobs.get(job_id)
-    if not job:
+    if not job or job.get('org_id') != session.get('org_id'):
         flash('Job not found.', 'error')
         return redirect(url_for('index'))
     return render_template('job_status.html', job_id=job_id, job=job)
@@ -1616,6 +1726,77 @@ def create_property():
         db.close()
 
 
+@app.route('/properties/bulk-create', methods=['POST'])
+@login_required
+@permission_required('property.operations', 'edit')
+def bulk_create_properties():
+    """Create multiple properties from a CSV or line-separated list."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        # Accept either a CSV file upload or a text field with names
+        created = []
+        skipped = []
+
+        uploaded = request.files.get('csv_file')
+        if uploaded and uploaded.filename:
+            import csv
+            import io
+            content = uploaded.read().decode('utf-8-sig')
+            reader = csv.DictReader(io.StringIO(content))
+            for row in reader:
+                name = (row.get('name') or row.get('Name') or
+                        row.get('property_name') or row.get('Property Name') or '').strip()
+                if not name:
+                    continue
+                # Check if property already exists
+                existing = db._fuzzy_match_property(name)
+                if existing:
+                    skipped.append(f'{name} (matches "{existing["name"]}")')
+                    continue
+                prop_type = (row.get('type') or row.get('property_type') or 'multifamily').strip()
+                address = (row.get('address') or row.get('Address') or '').strip() or None
+                city = (row.get('city') or row.get('City') or '').strip() or None
+                state = (row.get('state') or row.get('State') or '').strip() or None
+                zip_code = (row.get('zip') or row.get('zip_code') or '').strip() or None
+                units = None
+                units_raw = (row.get('units') or row.get('total_units') or '').strip()
+                if units_raw:
+                    try:
+                        units = int(units_raw)
+                    except ValueError:
+                        pass
+                db.create_property(
+                    name=name, property_type=prop_type,
+                    address=address, city=city, state=state,
+                    zip_code=zip_code, total_units=units)
+                created.append(name)
+        else:
+            # Fallback: line-separated names from text field
+            names_text = request.form.get('property_names', '')
+            for line in names_text.strip().split('\n'):
+                name = line.strip()
+                if not name:
+                    continue
+                existing = db._fuzzy_match_property(name)
+                if existing:
+                    skipped.append(f'{name} (matches "{existing["name"]}")')
+                    continue
+                db.create_property(name=name)
+                created.append(name)
+
+        if created:
+            flash(f'Created {len(created)} properties: {", ".join(created)}', 'success')
+        if skipped:
+            flash(f'Skipped {len(skipped)} (already exist): {", ".join(skipped)}', 'info')
+        if not created and not skipped:
+            flash('No property names found in input.', 'error')
+    finally:
+        db.close()
+
+    return redirect(url_for('properties'))
+
+
 @app.route('/property/<int:property_id>')
 @login_required
 def property_detail(property_id):
@@ -1823,11 +2004,14 @@ def api_bulk_extraction_review():
 @app.route('/api/jobs/active')
 @login_required
 def api_active_jobs():
-    """Return list of currently processing or queued jobs."""
+    """Return list of currently processing or queued jobs for this org."""
+    org_id = session.get('org_id')
     active = []
     # Recalculate queue positions for queued jobs
     queue_pos = 1
     for jid, job in jobs.items():
+        if job.get('org_id') != org_id:
+            continue
         if job.get('status') in ('processing', 'queued'):
             if job['status'] == 'queued':
                 job['queue_position'] = queue_pos
@@ -1848,11 +2032,14 @@ def api_active_jobs():
 
 
 @app.route('/api/job/<job_id>')
+@login_required
 def api_job_status(job_id):
     job = jobs.get(job_id)
-    if not job:
+    if not job or job.get('org_id') != session.get('org_id'):
         return jsonify({'error': 'Job not found'}), 404
-    return jsonify(job)
+    # Don't leak org_id to the client
+    safe_job = {k: v for k, v in job.items() if k != 'org_id'}
+    return jsonify(safe_job)
 
 
 @app.route('/api/term/<int:term_id>', methods=['PUT'])
@@ -1906,6 +2093,7 @@ def api_reextract(doc_id):
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
             'id': job_id,
+            'org_id': org_id,
             'status': 'processing',
             'type': 'single',
             'filename': filename,
@@ -1977,6 +2165,7 @@ def api_analyze_property(property_id):
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {
         'id': job_id,
+        'org_id': org_id,
         'status': 'processing',
         'type': 'analysis',
         'filename': f'Analyzing {prop["name"]}',
@@ -2175,6 +2364,27 @@ def _result_to_dict(result: ProcessingResult) -> dict:
         'error': result.error,
         'time': round(result.processing_time, 1),
     }
+
+
+# ─── Module Registration ────────────────────────────────────────────
+# Discover and register all platform modules (proforma, etc.)
+
+try:
+    from .modules import registry as module_registry
+    module_registry.register_routes(app)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(f'Module registration failed: {e}')
+
+# ─── Warehouse Registration ────────────────────────────────────────
+# Analytical warehouse (DuckDB) — property z-scores, sales comps, cap rates
+
+try:
+    from .warehouse.routes import warehouse_bp
+    app.register_blueprint(warehouse_bp)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(f'Warehouse registration failed: {e}')
 
 
 # ─── App Runner ──────────────────────────────────────────────────────

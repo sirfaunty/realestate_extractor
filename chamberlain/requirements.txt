@@ -1,0 +1,25 @@
+# Chamberlain model — pinned runtime dependencies
+# Verified working set as of 2026-05-16. Python 3.12.
+#
+# Core engine + data model:
+pydantic==2.13.4
+openpyxl==3.1.5
+pyyaml==6.0.3
+numpy-financial==1.0.0
+python-dateutil>=2.8
+
+# Source-document parsing (historical loaders read PDF + .msg):
+pdfplumber==0.11.9
+extract-msg==0.55.0
+
+# Output rendering / QA only (NOT required to run the proforma engine;
+# used to render the drill-back HTML to image during development and to
+# QA the Summary workbook). Safe to omit in a headless integration that
+# only consumes the Python API + xlsx/html outputs:
+playwright==1.56.0      # optional: HTML screenshot QA
+xlsx2html==0.6.4        # optional: xlsx->html QA preview
+
+# Install:
+#   pip install -r requirements.txt
+# Minimal (engine only, no source re-parsing/QA):
+#   pip install pydantic openpyxl pyyaml numpy-financial python-dateutil

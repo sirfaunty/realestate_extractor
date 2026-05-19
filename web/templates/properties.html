@@ -101,6 +101,34 @@
     </form>
 </div>
 
+<!-- Bulk Create Properties -->
+<div class="card" style="margin-top: 16px;">
+    <div class="card-header">Bulk Add Properties</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+            <form method="POST" action="{{ url_for('bulk_create_properties') }}">
+                <div class="form-group">
+                    <label for="property_names">Property Names <span style="color: var(--text-secondary); font-weight: normal;">(one per line)</span></label>
+                    <textarea id="property_names" name="property_names" rows="5" placeholder="Parkview Apartments&#10;Oakwood Tower&#10;Riverside Place" style="width: 100%; font-family: inherit;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Create All</button>
+            </form>
+        </div>
+        <div>
+            <form method="POST" action="{{ url_for('bulk_create_properties') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="csv_file">Upload CSV <span style="color: var(--text-secondary); font-weight: normal;">(columns: name, type, address, city, state, zip, units)</span></label>
+                    <input type="file" id="csv_file" name="csv_file" accept=".csv">
+                </div>
+                <button type="submit" class="btn btn-primary">Import from CSV</button>
+            </form>
+        </div>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">
+        Duplicates are automatically detected via fuzzy name matching and skipped.
+    </p>
+</div>
+
 <!-- Properties Table -->
 {% if properties %}
 <div class="card">

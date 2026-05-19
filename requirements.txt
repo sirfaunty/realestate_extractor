@@ -24,3 +24,9 @@ python-docx>=1.0.0
 
 # Outlook .msg email ingestion
 extract-msg>=0.50.0
+
+# Proforma engine (chamberlain module)
+pydantic>=2.0.0
+pyyaml>=6.0
+numpy-financial>=1.0.0
+python-dateutil>=2.8

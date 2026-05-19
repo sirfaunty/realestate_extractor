@@ -1,0 +1,1056 @@
+# =====================================================================
+# Chamberlain Apartments — Base Scenario Configuration
+# =====================================================================
+#
+# This YAML defines the BASE scenario for Chamberlain's forward proforma.
+# Scenario overlays (e.g. "Inc Improvements" vs "No Improvements") layer
+# on top of this base by overriding specific values.
+#
+# Every material input value uses the following shape:
+#   field_name:
+#     value: <number or string>
+#     source: <SourceDocument id>          # see registry_builder.py
+#     locator:                             # any of these
+#       sheet: <worksheet name>
+#       cell: <e.g. "N53">
+#       row: <int>
+#       column: <letter or label>
+#       col_label: <header label>
+#       page: <int, 1-indexed>
+#       section: <e.g. "§5.2(a)">
+#       note: <free-form>
+#     verbatim: <exact text/value from source>
+#     note: <optional context>
+#
+# Non-material values (formatting, IDs, free text) are plain YAML scalars.
+#
+# Source document IDs reference registry_builder.py. The loader verifies
+# every cited source_document_id exists in the registry before constructing
+# Cited[T] values.
+# =====================================================================
+
+
+meta:
+  scenario_id: chamberlain_base
+  name: "Chamberlain Base Scenario"
+  description: >
+    Base forward proforma for Chamberlain Apartments derived from the
+    Excel "Inc Improvements" valuation proforma (11/16/2025) and Property
+    Overview Summary (11/7/2025). Year 1 = 2026 calendar year.
+  proforma_start_date: 2026-04-01   # FY basis: Year 1 = Apr 2026 - Mar 2027
+  hold_years: 10
+  sale_year: 10
+
+
+# =====================================================================
+# 1. PROPERTY INFO
+# =====================================================================
+# Sourced from Property Overview Summary 11/7/25, "Property Summary" tab.
+# These are the static facts; they don't change scenario-to-scenario.
+property:
+  name:
+    value: "Chamberlain Apartments"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C5" }
+    verbatim: "Chamberlain Apartments"
+  address:
+    value: "6630 Richfield Parkway"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C6" }
+    verbatim: "6630 Richfield Parkway"
+  city:
+    value: "Richfield"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C7" }
+    verbatim: "Richfield"
+  state:
+    value: "Minnesota"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C8" }
+  zip_code:
+    value: "55423"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C9" }
+  market:
+    value: "Minneapolis / St. Paul"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C10" }
+  submarket:
+    value: "Richfield / Bloomington East"
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C11" }
+  year_built:
+    value: 2020
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C12" }
+  total_units:
+    value: 316
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C13" }
+    verbatim: "316"
+  total_buildings:
+    value: 6
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C14" }
+  stories:
+    value: 3
+    source: property_overview_11_7_25
+    locator: { sheet: "Property Summary", cell: "C15" }
+  rentable_sf:
+    value: 226803
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ANNUAL PROFORMA", cell: "C15", row_label: "Rentable SF" }
+    verbatim: "226,803"
+  land_acres:
+    value: 5.0
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ANNUAL PROFORMA", cell: "C17", row_label: "Total Land Acreage" }
+
+
+# =====================================================================
+# 2. UNIT ROSTER
+# =====================================================================
+# Sourced from Excel proforma ASSUMPTIONS rows 53-62 with explicit citations.
+# Column map:
+#   D=# of Units, E=Unit SF, F=In-Place Face Rent ($/unit/mo),
+#   J=In-Place NER ($/unit/mo), M=Proforma Year-1 Market Rent ($/unit/mo)
+
+unit_roster:
+  as_of_date: 2025-05-01   # The Excel uses "May 25 In-Place" rents
+  units:
+    - name: "Vintage 1 Bedroom Affordable"
+      bedroom_category: "1 Bedroom"
+      affordability: "affordable_vintage"
+      unit_count: { value: 18, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D53" }, verbatim: "18" }
+      unit_sf: { value: 650, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E53" }, verbatim: "650" }
+      in_place_face_rent: { value: 1251.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F53" }, verbatim: "$1,251" }
+      in_place_ner: { value: 1251.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J53" }, verbatim: "$1,251" }
+      proforma_year1_rent: { value: 1085.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M53" }, verbatim: "$1,085" }
+
+    - name: "Vintage 2 Bedroom Affordable"
+      bedroom_category: "2 Bedroom"
+      affordability: "affordable_vintage"
+      unit_count: { value: 15, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D54" } }
+      unit_sf: { value: 900, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E54" } }
+      in_place_face_rent: { value: 1406.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F54" } }
+      in_place_ner: { value: 1406.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J54" } }
+      proforma_year1_rent: { value: 1305.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M54" } }
+
+    - name: "New Affordable 1 Bedroom"
+      bedroom_category: "1 Bedroom"
+      affordability: "new_affordable"
+      unit_count: { value: 1, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D55" } }
+      unit_sf: { value: 675, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E55" } }
+      in_place_face_rent: { value: 1047.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F55" } }
+      in_place_ner: { value: 1047.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J55" } }
+      proforma_year1_rent: { value: 1050.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M55" } }
+
+    - name: "New Affordable Studio"
+      bedroom_category: "Studio"
+      affordability: "new_affordable"
+      unit_count: { value: 9, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D56" } }
+      unit_sf: { value: 509, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E56" } }
+      in_place_face_rent: { value: 978.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F56" } }
+      in_place_ner: { value: 978.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J56" } }
+      proforma_year1_rent: { value: 990.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M56" } }
+
+    - name: "New Affordable Alcove"
+      bedroom_category: "Alcove"
+      affordability: "new_affordable"
+      unit_count: { value: 21, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D57" } }
+      unit_sf: { value: 507, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E57" } }
+      in_place_face_rent: { value: 990.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F57" } }
+      in_place_ner: { value: 990.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J57" } }
+      proforma_year1_rent: { value: 990.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M57" } }
+
+    - name: "Market Rate 1 Bedroom"
+      bedroom_category: "1 Bedroom"
+      affordability: "market"
+      unit_count: { value: 62, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D58" } }
+      unit_sf: { value: 689, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E58" } }
+      in_place_face_rent: { value: 1519.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F58" } }
+      in_place_ner: { value: 1395.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J58", note: "After concessions per Rent Roll tab" } }
+      proforma_year1_rent: { value: 1559.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M58" } }
+
+    - name: "Market Rate 2 Bedroom"
+      bedroom_category: "2 Bedroom"
+      affordability: "market"
+      unit_count: { value: 86, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D59" } }
+      unit_sf: { value: 1011, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E59" } }
+      in_place_face_rent: { value: 1935.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F59" } }
+      in_place_ner: { value: 1780.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J59" } }
+      proforma_year1_rent: { value: 1950.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M59" } }
+
+    - name: "Market Rate 3 Bedroom"
+      bedroom_category: "3 Bedroom"
+      affordability: "market"
+      unit_count: { value: 2, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D60" } }
+      unit_sf: { value: 1315, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E60" } }
+      in_place_face_rent: { value: 2375.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F60" } }
+      in_place_ner: { value: 2545.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J60" } }
+      proforma_year1_rent: { value: 2450.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M60" } }
+
+    - name: "Market Rate Studio"
+      bedroom_category: "Studio"
+      affordability: "market"
+      unit_count: { value: 9, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D61" } }
+      unit_sf: { value: 509, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E61" } }
+      in_place_face_rent: { value: 1279.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F61" } }
+      in_place_ner: { value: 915.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J61" } }
+      proforma_year1_rent: { value: 1285.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M61" } }
+
+    - name: "Market Rate Alcove"
+      bedroom_category: "Alcove"
+      affordability: "market"
+      unit_count: { value: 93, source: valuation_proforma_with_improvements_11_16_25,
+                    locator: { sheet: "ASSUMPTIONS", cell: "D62" } }
+      unit_sf: { value: 525, source: valuation_proforma_with_improvements_11_16_25,
+                 locator: { sheet: "ASSUMPTIONS", cell: "E62" } }
+      in_place_face_rent: { value: 1337.0, source: valuation_proforma_with_improvements_11_16_25,
+                            locator: { sheet: "ASSUMPTIONS", cell: "F62" } }
+      in_place_ner: { value: 1152.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "J62" } }
+      proforma_year1_rent: { value: 1350.0, source: valuation_proforma_with_improvements_11_16_25,
+                             locator: { sheet: "ASSUMPTIONS", cell: "M62" } }
+
+
+# =====================================================================
+# 3. INFLATION SCHEDULES
+# =====================================================================
+# Year 2..10 explicit, Year 11+ uses terminal_rate.
+# Source: Excel ASSUMPTIONS row 28-30, columns E-M (Years 2-10), N (terminal)
+
+base_rent_inflation:
+  rates_by_year:
+    2: { value: 0.04095, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "E28" }, verbatim: "4.0950%" }
+    3: { value: 0.04029, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "F28" } }
+    4: { value: 0.03984, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "G28" } }
+    5: { value: 0.03881, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "H28" } }
+    6: { value: 0.03790, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "I28" } }
+    7: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "J28" } }
+    8: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "K28" } }
+    9: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "L28" } }
+    10: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+          locator: { sheet: "ASSUMPTIONS", cell: "M28" } }
+  terminal_rate:
+    value: 0.03000
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "N28", col_label: "Yrs 11+" }
+
+opex_inflation:
+  rates_by_year:
+    2: { value: 0.03074, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "E29" } }
+    3: { value: 0.03144, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "F29" } }
+    4: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "G29" } }
+    5: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "H29" } }
+    6: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "I29" } }
+    7: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "J29" } }
+    8: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "K29" } }
+    9: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "L29" } }
+    10: { value: 0.03000, source: valuation_proforma_with_improvements_11_16_25,
+          locator: { sheet: "ASSUMPTIONS", cell: "M29" } }
+  terminal_rate:
+    value: 0.03000
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "N29" }
+
+other_income_inflation:
+  rates_by_year:
+    2: { value: 0.02781, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "E30" } }
+    3: { value: 0.01346, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "F30" } }
+    4: { value: 0.01457, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "G30" } }
+    5: { value: 0.01468, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "H30" } }
+    6: { value: 0.01480, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "I30" } }
+    7: { value: 0.01491, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "J30" } }
+    8: { value: 0.01502, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "K30" } }
+    9: { value: 0.01513, source: valuation_proforma_with_improvements_11_16_25,
+         locator: { sheet: "ASSUMPTIONS", cell: "L30" } }
+    10: { value: 0.01514, source: valuation_proforma_with_improvements_11_16_25,
+          locator: { sheet: "ASSUMPTIONS", cell: "M30" } }
+  terminal_rate:
+    value: 0.01526
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "N30" }
+
+
+# =====================================================================
+# 4. INCOME OFFSETS
+# =====================================================================
+# Year 1 / Year 2 / Year 3 / Year 4+ schedule from Excel rows 34-36.
+# Stabilized vacancy is a single rate applied to all years.
+
+income_offsets:
+  # Proforma-year offsets map to Excel ASSUMPTIONS columns F/G/H/I:
+  #   F = Proforma Year 1, G = Year 2, H = Year 3, I = Year 4+ (terminal).
+  # Columns D (2024 Actuals) and E (2025 Budget) are HISTORICAL and are
+  # deliberately NOT used as forward proforma inputs (prior bug: keys 1-5
+  # were mis-mapped onto D..H, applying 2024A/2025B rates to proforma
+  # Years 1-2 and causing a spurious Year-2 NOI dip).
+  loss_to_lease_by_year:
+    1: { value: 0.0137, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "F34" }, note: "Proforma Year 1" }
+    2: { value: 0.0100, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "G34" }, note: "Proforma Year 2" }
+    3: { value: 0.0050, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "H34" }, note: "Proforma Year 3" }
+  loss_to_lease_terminal:
+    value: 0.0000
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "I34", col_label: "Proforma Year 4+" }
+    note: "L2L burns down to zero as Year-1 rents lift in-place to market"
+
+  concessions_by_year:
+    1: { value: 0.0342, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "F35" }, note: "Proforma Year 1" }
+    2: { value: 0.0350, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "G35" }, note: "Proforma Year 2" }
+    3: { value: 0.0250, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "H35" }, note: "Proforma Year 3" }
+  concessions_terminal:
+    value: 0.0150
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "I35", col_label: "Proforma Year 4+" }
+
+  bad_debt_by_year:
+    1: { value: 0.0000, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "F36" }, note: "Proforma Year 1" }
+    2: { value: 0.0000, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "G36" }, note: "Proforma Year 2" }
+    3: { value: 0.0000, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "H36" }, note: "Proforma Year 3" }
+  bad_debt_terminal:
+    value: 0.0000
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "I36", col_label: "Proforma Year 4+" }
+
+  stabilized_vacancy:
+    value: 0.05436
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "D47", row_label: "STABILIZED VACANCY FACTOR" }
+    verbatim: "5.436%"
+  
+  vacancy_stabilized_year: 1
+
+
+# =====================================================================
+# 5. OPERATING EXPENSES (Detail Mode)
+# =====================================================================
+# Year 1 amounts in $/year flat (TOTAL_DOLLARS basis).
+# Year 2 typically follows the global OpEx inflation; per-line overrides
+# allowed (none for Chamberlain in base case).
+# Year-1 anchor: 2026 Budget Reforecast values (Property Overview),
+# which carry the Excel proforma's Y1 forecast.
+
+opex:
+  method: DETAIL
+  lines:
+    - name: "Real Estate Taxes"
+      line_id: real_estate_taxes
+      basis: total_dollars
+      year1_amount: { value: 940000.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J29",
+                                 row_label: "Real Estate Taxes", col_label: "2026 Proforma" } }
+    - name: "Insurance"
+      line_id: insurance
+      basis: total_dollars
+      year1_amount: { value: 125664.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J30",
+                                 row_label: "Insurance", col_label: "2026 Proforma" } }
+    - name: "Utilities"
+      line_id: utilities
+      basis: total_dollars
+      year1_amount: { value: 257500.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J28",
+                                 row_label: "Utilities", col_label: "2026 Proforma" } }
+    - name: "Turnover & Common Areas"
+      line_id: turnover
+      basis: total_dollars
+      year1_amount: { value: 88580.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J24" } }
+    - name: "Repairs & Maintenance"
+      line_id: repairs_maintenance
+      basis: total_dollars
+      year1_amount: { value: 381100.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J23" } }
+    - name: "Leasing Commissions"
+      line_id: leasing_commissions
+      basis: total_dollars
+      year1_amount: { value: 32960.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J22" } }
+    - name: "Advertising / Marketing"
+      line_id: advertising_marketing
+      basis: total_dollars
+      year1_amount: { value: 124630.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J20" } }
+    - name: "Payroll"
+      line_id: payroll
+      basis: total_dollars
+      year1_amount: { value: 577830.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J19" } }
+    - name: "Administrative"
+      line_id: administrative
+      basis: total_dollars
+      year1_amount: { value: 128750.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J21" } }
+    - name: "3rd-Party Management Fees"
+      line_id: management_fees
+      basis: total_dollars
+      year1_amount: { value: 198761.0, source: property_overview_11_7_25,
+                      locator: { sheet: "Annual Cash Flow Reforecast", cell: "J25" } }
+
+
+# =====================================================================
+# 6. OTHER INCOME (Detail Mode)
+# =====================================================================
+# Year-1 monthly amounts from Excel ASSUMPTIONS rows 371-385 (column D,
+# being the Year 1 / Month 1 amounts that recur monthly).
+# Note: TIF revenue lives separately in the TIF section below.
+
+other_income:
+  method: DETAIL
+  lines:
+    - name: "Parking"
+      line_id: parking
+      basis: total_dollars
+      year1_amount: { value: 245100.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D371", note: "$20,425/mo × 12" } }
+    - name: "Pet Rents"
+      line_id: pet_rents
+      basis: total_dollars
+      year1_amount: { value: 35343.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D374", note: "$2,945.28/mo × 12" } }
+    - name: "Trash Reimbursement"
+      line_id: trash_reimbursement
+      basis: total_dollars
+      year1_amount: { value: 48660.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D375", note: "$4,055/mo × 12" } }
+    - name: "Utility Reimbursement"
+      line_id: utility_reimbursement
+      basis: total_dollars
+      year1_amount: { value: 124333.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D376", note: "$10,361/mo × 12" } }
+    - name: "Application Fees"
+      line_id: application_fees
+      basis: total_dollars
+      year1_amount: { value: 9918.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D378", note: "$826.5/mo × 12" } }
+    - name: "Transfer Fees"
+      line_id: transfer_fees
+      basis: total_dollars
+      year1_amount: { value: 19288.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D380", note: "$1,607/mo × 12" } }
+    - name: "Late Fees"
+      line_id: late_fees
+      basis: total_dollars
+      year1_amount: { value: 30270.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D381", note: "$2,522.50/mo × 12" } }
+    - name: "Renter's Insurance"
+      line_id: renters_insurance
+      basis: total_dollars
+      year1_amount: { value: 8621.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D382", note: "$718.42/mo × 12" } }
+    - name: "Misc Other Income"
+      line_id: misc_other_income
+      basis: total_dollars
+      year1_amount: { value: 9420.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D384", note: "$785/mo × 12" } }
+    - name: "Damages / Bad Debt Recovery"
+      line_id: damages_bad_debt_recovery
+      basis: total_dollars
+      year1_amount: { value: -14067.0, source: valuation_proforma_with_improvements_11_16_25,
+                      locator: { sheet: "ASSUMPTIONS", cell: "D385", note: "-$1,172.25/mo × 12 (net of recovery)" } }
+
+
+# =====================================================================
+# 7. CAPEX SCHEDULE (Improvement Plan)
+# =====================================================================
+# 5-year improvement plan from Excel ASSUMPTIONS rows 643-650.
+# Amounts in $/year (column F-N for Years 1-5+).
+# In the Inc Improvements scenario, capex runs Years 2-5 (no Year-1 capex
+# in the base proforma — the unit upgrades start in Year 2 of the model).
+
+capex:
+  funding_type: equity_first
+  lines:
+    - name: "Market Rate Unit Upgrades"
+      line_id: market_rate_unit_upgrades
+      category: improvement
+      amount_by_year:
+        1: { value: 295250.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E643" } }
+        2: { value: 293750.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "G643" } }
+        3: { value: 291000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "I643" } }
+        4: { value: 280000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "K643" } }
+        5: { value: 278500.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "M643" } }
+    - name: "Common Area / Amenity FFE"
+      line_id: common_area_amenity
+      category: improvement
+      amount_by_year:
+        1: { value: 100000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E644" } }
+    - name: "Vintage Affordable Exterior Improvements"
+      line_id: vintage_exterior
+      category: improvement
+      amount_by_year:
+        1: { value: 200000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E645" } }
+    - name: "Vintage Affordable Interiors"
+      line_id: vintage_interiors
+      category: improvement
+      amount_by_year:
+        1: { value: 50000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E646" } }
+    - name: "Landscaping / Grounds"
+      line_id: landscaping
+      category: improvement
+      amount_by_year:
+        1: { value: 75000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E647" } }
+        2: { value: 25000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "G647" } }
+    - name: "Wayfinding / Monument Signage"
+      line_id: wayfinding
+      category: improvement
+      amount_by_year:
+        1: { value: 50000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E648" } }
+    - name: "Vintage Affordable Branding / Standalone"
+      line_id: vintage_branding
+      category: improvement
+      amount_by_year:
+        1: { value: 25000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E649" } }
+    - name: "Unit HVAC Replacements / Repairs"
+      line_id: unit_hvac
+      category: required
+      amount_by_year:
+        1: { value: 121000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "E650" } }
+        2: { value: 77000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "G650" } }
+        3: { value: 88000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "I650" } }
+        4: { value: 110000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "K650" } }
+        5: { value: 110000.0, source: valuation_proforma_with_improvements_11_16_25, locator: { sheet: "ASSUMPTIONS", cell: "M650" } }
+
+
+non_operating:
+  property_mgmt_fee_pct_egr:
+    value: 0.03
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "D588", row_label: "PROPERTY MANAGEMENT FEE" }
+    verbatim: "3.00%"
+  property_mgmt_fee_includes_commercial: true
+
+  asset_mgmt_fee_pct_egr:
+    value: 0.01
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "D589", row_label: "ASSET MANAGEMENT FEE" }
+    verbatim: "1.00%"
+  asset_mgmt_fee_includes_commercial: true
+
+  replacement_reserves_pupy:
+    value: 250.0
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "D590", row_label: "REPLACEMENT RESERVES" }
+    verbatim: "$250 PUPY"
+
+  professional_expenses_annual:
+    value: 30000.0
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", cell: "D591" }
+    verbatim: "$30,000/yr"
+
+  mip_pct_upb:
+    value: 0.0035
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ANNUAL PROFORMA", cell: "B72", row_label: "LOAN MIP (0.35% of UPB)" }
+    verbatim: "0.35% of UPB"
+    note: "HUD 223(f) Mortgage Insurance Premium"
+
+  surplus_cash_note_annual:
+    value: 45282.0
+    source: property_overview_11_7_25
+    locator: { sheet: "Cash Surplus", cell: "C25", row_label: "Surplus Cash Note Payment" }
+    verbatim: "$45,282/year ($22,641 × 2 payments)"
+    note: "HRA Surplus Cash Note: $22,641 every 2/1 and 8/1, conditional on surplus cash availability"
+
+
+# =====================================================================
+# 9. DEBT
+# =====================================================================
+# Source: Colliers HUD 223(f) loan, terms from Property Overview Summary
+# 'Existing Loan' tab + ANNUAL PROFORMA tab rows 22-28.
+
+debt:
+  acquisition_loan:
+    lender:
+      value: "Colliers Mortgage, LLC"
+      source: property_overview_11_7_25
+      locator: { sheet: "Property Summary", cell: "K5", row_label: "Lender" }
+    loan_type: hud_223f
+    original_principal:
+      value: 52967700.0
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B7", row_label: "Initial Loan Proceeds" }
+      verbatim: "$52,967,700"
+    rate:
+      value: 0.0233
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B11", row_label: "Interest Rate" }
+      verbatim: "2.33%"
+    term_months:
+      value: 420
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B8", row_label: "Loan Term", note: "35 years × 12" }
+      verbatim: "35 Years"
+    amortization_months:
+      value: 420
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B8", note: "Self-amortizing 35-year HUD loan" }
+    io_period_months:
+      value: 0
+      source: valuation_proforma_with_improvements_11_16_25
+      locator: { sheet: "ANNUAL PROFORMA", cell: "C27", row_label: "I/O Period (Yrs)" }
+    first_payment_date:
+      value: 2021-12-01
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B9", row_label: "Initial Payment Date" }
+    maturity_date:
+      value: 2056-11-01
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B10", row_label: "Loan Expiration" }
+    proforma_start_balance:
+      value: 48771038.11
+      source: property_overview_11_7_25
+      locator: { sheet: "Existing Loan", cell: "B20", row_label: "12/31/25 Loan Balance" }
+      verbatim: "$48,771,038.11"
+      note: "UPB at start of pay-2026 (proforma Year 1 begins 1/1/2026)"
+    proforma_start_balance_date: 2025-12-31
+    monthly_payment_override:
+      value: 184565.17
+      source: property_overview_11_7_25
+      locator: { sheet: "Property Summary", cell: "K9", row_label: "Monthly Payment" }
+      verbatim: "$184,565.17"
+
+  capital_funding_loan:
+    max_principal:
+      value: 1013857.0
+      source: valuation_proforma_with_improvements_11_16_25
+      locator: { sheet: "ANNUAL PROFORMA", cell: "C107",
+                 row_label: "LOAN / CAPEX RESERVE FUNDING" }
+      note: "Capex funding loan; equity-first funded, 0% rate"
+    rate:
+      value: 0.0
+      source: valuation_proforma_with_improvements_11_16_25
+      locator: { sheet: "ANNUAL PROFORMA", note: "0% per scenario" }
+    funding_priority: equity_first
+    fully_funded_balance:
+      value: 1013857.0
+      source: valuation_proforma_with_improvements_11_16_25
+      locator: { sheet: "ANNUAL PROFORMA", note: "If all capex funded from loan" }
+
+  refinance:
+    enabled: false
+
+
+# =====================================================================
+# 10. PARTNERSHIP CONFIGURATION
+# =====================================================================
+# Source: LLC Agreement of Chamberlain Apartments LLC (7/5/2017), §3 and §5.
+
+partnership:
+  entity_name:
+    value: "Chamberlain Apartments LLC"
+    source: llc_agreement_2017
+    locator: { page: 1, section: "Preamble" }
+    verbatim: "Chamberlain Apartments LLC"
+  formation_date:
+    value: 2017-07-05
+    source: llc_agreement_2017
+    locator: { page: 1 }
+  governing_state:
+    value: "Minnesota"
+    source: llc_agreement_2017
+    locator: { page: 1 }
+
+  investor_classes:
+    - id: KA
+      name:
+        value: "Kraus-Anderson, Incorporated"
+        source: llc_agreement_2017
+        locator: { section: "Definitions — KA Member" }
+      role: MANAGING_MEMBER
+      membership_interest_pct:
+        value: 0.75
+        source: llc_agreement_2017
+        locator: { section: "§3.2 Membership Interests" }
+        verbatim: "75%"
+      membership_adjusted_distribution_pct:
+        value: 0.75
+        source: llc_agreement_2017
+        locator: { section: "§5.2(c) Distribution of Cash Flow" }
+      pref_return_rate:
+        value: 0.065
+        source: llc_agreement_2017
+        locator: { section: "§5.2(b) Preferred Return" }
+        verbatim: "6.5%"
+      pref_compounding: monthly
+    - id: IDP
+      name:
+        value: "Inland Development Partners"
+        source: llc_agreement_2017
+        locator: { section: "Definitions — IDP Member" }
+      role: LP
+      membership_interest_pct:
+        value: 0.25
+        source: llc_agreement_2017
+        locator: { section: "§3.2 Membership Interests" }
+        verbatim: "25%"
+      membership_adjusted_distribution_pct:
+        value: 0.25
+        source: llc_agreement_2017
+        locator: { section: "§5.2(c)" }
+      pref_return_rate:
+        value: 0.065
+        source: llc_agreement_2017
+        locator: { section: "§5.2(b)" }
+      pref_compounding: monthly
+
+  waterfall:
+    # Tier 1: KA 100% escrow recapture
+    - tier_order: 1
+      tier_type: escrow_recapture
+      name: "KA Escrow Recapture"
+      governing_provision_id: llc_5_2_a
+      allocation:
+        KA: { value: 1.0, source: llc_agreement_2017, locator: { section: "§5.2(a)" } }
+        IDP: { value: 0.0, source: llc_agreement_2017, locator: { section: "§5.2(a)" } }
+      cap_amount:
+        value: 0.0   # filled in by historical equity ledger once we know escrow balance
+        source: equity_account_details
+        locator: { note: "Determined by historical KA escrow contributions" }
+      note: "100% of distributable cash to KA until KA's escrow contribution is fully recouped"
+
+    # Tier 2: 6.5% pref to both, pro-rata to unreturned pref balance
+    - tier_order: 2
+      tier_type: preferred_return
+      name: "6.5% Preferred Return"
+      governing_provision_id: llc_5_2_b
+      pref_classes: [KA, IDP]
+      allocation:
+        KA: { value: 0.75, source: llc_agreement_2017, locator: { section: "§5.2(b)" } }
+        IDP: { value: 0.25, source: llc_agreement_2017, locator: { section: "§5.2(b)" } }
+      note: "Pro-rata allocation by unreturned pref balance; both classes earn 6.5% on contributed capital, compounded monthly"
+
+    # Tier 3: 75/25 pari-passu on remaining
+    - tier_order: 3
+      tier_type: pari_passu
+      name: "75/25 Pari Passu"
+      governing_provision_id: llc_5_2_c
+      allocation:
+        KA: { value: 0.75, source: llc_agreement_2017, locator: { section: "§5.2(c)" } }
+        IDP: { value: 0.25, source: llc_agreement_2017, locator: { section: "§5.2(c)" } }
+
+
+# =====================================================================
+# 11. TIF CONFIGURATION
+# =====================================================================
+# Mirrors the Live TIF Model's 4 scenarios. Mechanics anchored to the TIF
+# Plan, TIF Note, MAA, and Ehlers' April 2026 TIF Update.
+
+tif:
+  mechanics:
+    class_rate:
+      value: 0.0125
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B4", note: "MN 273.13 — apartments above first $100K" }
+      verbatim: "1.25%"
+    tax_capacity_rate:
+      value: 1.27866
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B5", note: "Hennepin County composite (city + county + school + special)" }
+    developer_share:
+      value: 1.0
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B6", note: "TIF Plan §IV — Developer receives 90% × developer_share; corrected from IDP double-count" }
+      verbatim: "100%"
+    admin_pct:
+      value: 0.10
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B7", note: "Ehlers: City admin holdback" }
+      verbatim: "10%"
+    osa_pct:
+      value: 0.0036
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B8", note: "MN State Auditor TIF fee" }
+      verbatim: "0.36%"
+    base_ntc:
+      value: 37179.0
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B9", note: "Reverse-engineered from Ehlers' published figures" }
+      verbatim: "$37,179"
+    note_original_principal:
+      value: 7142377.0
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B12" }
+      verbatim: "$7,142,377"
+    note_interest_rate:
+      value: 0.046
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B13" }
+      verbatim: "4.60%"
+    note_maturity_date:
+      value: 2046-02-01
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B14", note: "TIF District termination + 1 yr" }
+    note_beginning_balance:
+      value: 7269118.57
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B15", note: "UPB at start of pay-2026 (1/1/2026)" }
+      verbatim: "$7,269,118.57"
+    maa_floor:
+      value: 43835000.0
+      source: tif_live_model
+      locator: { sheet: "Assumptions", cell: "B18", section: "MAA §4" }
+      verbatim: "$43,835,000"
+    maa_effective_from:
+      value: 2021-01-02
+      source: tif_live_model
+      locator: { sheet: "Assumptions", section: "MAA §4" }
+    tif_district_last_increment_year: 2045
+
+  scenarios:
+    baseline:
+      description: "No appeal; 4% annual TMV growth from $54.866M baseline"
+      appeal_years: []
+      growth_rate_assumption:
+        value: 0.04
+        source: tif_live_model
+        locator: { sheet: "Inputs_TMV", note: "Baseline 4% growth" }
+      # Year-by-year TMV — generated from the formula; for v1 we hard-code
+      # the first 10 years per the live TIF model's Inputs_TMV tab
+      tmv_by_year:
+        2026: { value: 54866000.0, source: tif_live_model,
+                locator: { sheet: "Inputs_TMV", note: "2026 starting TMV — Pay 2025 1H" } }
+        2027: { value: 57060640.0, source: tif_live_model,
+                locator: { sheet: "Inputs_TMV", note: "4% growth" } }
+        2028: { value: 59343066.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2029: { value: 61716789.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2030: { value: 64185460.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2031: { value: 66752878.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2032: { value: 69422994.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2033: { value: 72199913.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2034: { value: 75087910.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2035: { value: 78091426.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+
+    mid_appeal:
+      description: "Mid appeal: TMV reset to $50.0M every 5 years, ~2.81% effective CAGR"
+      appeal_years: [2026, 2031]
+      growth_rate_assumption:
+        value: 0.04
+        source: tif_live_model
+        locator: { sheet: "Inputs_TMV" }
+      tmv_by_year:
+        2026: { value: 50000000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2027: { value: 52000000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2028: { value: 54080000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2029: { value: 56243200.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2030: { value: 58492928.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2031: { value: 50000000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV", note: "Re-appeal" } }
+        2032: { value: 52000000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2033: { value: 54080000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2034: { value: 56243200.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2035: { value: 58492928.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+
+    aggressive_appeal:
+      description: "Aggressive: TMV reset to $47.5M every 5 years, ~2.5% effective CAGR"
+      appeal_years: [2026, 2031]
+      growth_rate_assumption:
+        value: 0.04
+        source: tif_live_model
+        locator: { sheet: "Inputs_TMV" }
+      tmv_by_year:
+        2026: { value: 47500000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2027: { value: 49400000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2028: { value: 51376000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2029: { value: 53431040.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2030: { value: 55568282.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2031: { value: 47500000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV", note: "Re-appeal" } }
+        2032: { value: 49400000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2033: { value: 51376000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2034: { value: 53431040.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2035: { value: 55568282.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+
+    maa_floor:
+      description: "MAA Floor: TMV re-appealed to $43.835M every 5 years; maximum benefit case"
+      appeal_years: [2026, 2031]
+      growth_rate_assumption:
+        value: 0.04
+        source: tif_live_model
+        locator: { sheet: "Inputs_TMV" }
+      tmv_by_year:
+        2026: { value: 43835000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV", note: "MAA contractual floor" } }
+        2027: { value: 45588400.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2028: { value: 47411936.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2029: { value: 49308413.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2030: { value: 51280750.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2031: { value: 43835000.0, source: tif_live_model, locator: { sheet: "Inputs_TMV", note: "Re-appeal to floor" } }
+        2032: { value: 45588400.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2033: { value: 47411936.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2034: { value: 49308413.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+        2035: { value: 51280750.0, source: tif_live_model, locator: { sheet: "Inputs_TMV" } }
+
+  attorney_fees:
+    fee_pct_of_year1_savings:
+      value: 0.25
+      source: tif_live_model
+      locator: { sheet: "Attorney_Fees", note: "25% of first-year tax savings per appeal" }
+      verbatim: "25%"
+    recurring: false
+
+  discount_rate:
+    value: 0.05
+    source: tif_live_model
+    locator: { sheet: "Assumptions", cell: "B34", note: "Match Ehlers @ 5%" }
+    verbatim: "5%"
+
+  active_scenario: baseline
+
+
+# =====================================================================
+# 12. RESIDUAL ASSUMPTIONS (Year-10 sale)
+# =====================================================================
+
+residual:
+  sale_year:
+    value: 10
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", note: "Standard 10-year hold" }
+  residual_cap_rate:
+    value: 0.0550
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", note: "Residual exit cap 5.50%" }
+    verbatim: "5.50%"
+  cost_of_sale_pct:
+    value: 0.02
+    source: valuation_proforma_with_improvements_11_16_25
+    locator: { sheet: "ASSUMPTIONS", note: "2.0% transaction costs" }
+
+
+# =====================================================================
+# 13. ACQUISITION COST BASIS (Year-0 reference)
+# =====================================================================
+
+acquisition_cost_basis:
+  value: 61805592.0
+  source: valuation_proforma_with_improvements_11_16_25
+  locator: { sheet: "ANNUAL PROFORMA", cell: "C97", row_label: "Cost Basis" }
+  verbatim: "$61,805,592"
+  note: "Total Project Costs excluding Contributed Development Fee per Sources & Uses"
+
+
+# =====================================================================
+# 14. GOVERNING PROVISIONS (LLC §5.2 waterfall, MAA, TIF Plan)
+# =====================================================================
+# Encoded as evaluable logic for the reconciliation engine (Phase B).
+# Phase A registers them but doesn't yet reconcile against actual practice.
+
+governing_provisions:
+  - id: llc_5_2_a
+    provision_type: distribution_waterfall
+    title: "LLC §5.2(a) — KA Escrow Recapture"
+    citations:
+      - source: llc_agreement_2017
+        locator: { section: "§5.2(a)", page: 23 }
+        verbatim: "First, to the KA Member until the entire amount of all distributions made..."
+    structured_logic:
+      tier_type: escrow_recapture
+      allocation: { KA: 1.0, IDP: 0.0 }
+      cap: "KA_escrow_contribution_balance"
+
+  - id: llc_5_2_b
+    provision_type: distribution_waterfall
+    title: "LLC §5.2(b) — 6.5% Preferred Return"
+    citations:
+      - source: llc_agreement_2017
+        locator: { section: "§5.2(b)", page: 23 }
+        verbatim: "Second, to the Members in proportion to their unreturned Preferred Return..."
+    structured_logic:
+      tier_type: preferred_return
+      pref_rate: 0.065
+      compound: monthly
+      classes: [KA, IDP]
+      allocation_basis: pro_rata_unreturned_pref
+
+  - id: llc_5_2_c
+    provision_type: distribution_waterfall
+    title: "LLC §5.2(c) — 75/25 Pari Passu"
+    citations:
+      - source: llc_agreement_2017
+        locator: { section: "§5.2(c)", page: 23 }
+        verbatim: "Third, to the Members in proportion to their Membership Adjusted Distribution Percentages (KA 75% / IDP 25%)"
+    structured_logic:
+      tier_type: pari_passu
+      allocation: { KA: 0.75, IDP: 0.25 }
+
+  - id: maa_value_floor
+    provision_type: maa_value_floor
+    title: "MAA §4 — Minimum Assessment Agreement Value Floor"
+    citations:
+      - source: llc_agreement_2017
+        locator: { section: "MAA §4" }
+        verbatim: "the taxable market value of the Property shall not be less than $43,835,000"
+    structured_logic:
+      floor_value: 43835000
+      effective_from: "2021-01-02"
+      effective_through: "TIF_termination"
+      applies_to: taxable_market_value
