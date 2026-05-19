@@ -3,10 +3,25 @@ Local LLM Client for Real Estate Document Extractor.
 
 Communicates with Ollama running locally. All inference happens
 on-device — no data is transmitted to any external service.
+
+Model Version Pinning
+─────────────────────
+Set CAPACTIVE_MODEL_DIGEST to the sha256 digest of the exact model
+binary you want to enforce.  When set, the client will refuse to run
+if the locally installed model doesn't match — preventing silent
+drift from model updates or different quantisations across devices.
+
+To find a model's digest:
+    curl http://localhost:11434/api/tags | python3 -m json.tool
+    # look for the "digest" field next to your model name
+
+Or use the helper:
+    python -m realestate_extractor.extractors.llm_client --pin
 """
 
 import json
 import logging
+import os
 import requests
 from typing import Optional, Dict, Any, List
 
@@ -16,17 +31,111 @@ DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.1:8b"  # Good balance of capability and speed
 
 
+class ModelVersionMismatch(RuntimeError):
+    """Raised when the running model digest doesn't match the pinned digest."""
+    pass
+
+
 class LocalLLMClient:
     """Client for local LLM inference via Ollama."""
 
     def __init__(self, base_url: str = DEFAULT_OLLAMA_URL,
                  model: str = DEFAULT_MODEL,
                  temperature: float = 0.1,
-                 max_tokens: int = 4096):
+                 max_tokens: int = 4096,
+                 pinned_digest: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        # Digest pin: explicit arg > env var > None (no enforcement)
+        self.pinned_digest = (
+            pinned_digest
+            or os.environ.get('CAPACTIVE_MODEL_DIGEST')
+            or None
+        )
+        self._digest_verified = False
+
+    # ─── Model Version Pinning ──────────────────────────────────────
+
+    def get_model_info(self) -> Optional[Dict[str, Any]]:
+        """Return full model metadata from Ollama /api/show."""
+        try:
+            resp = requests.post(
+                f"{self.base_url}/api/show",
+                json={"name": self.model},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception:
+            pass
+        return None
+
+    def get_running_digest(self) -> Optional[str]:
+        """Get the digest of the currently installed model."""
+        try:
+            resp = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                for m in resp.json().get('models', []):
+                    if m['name'] == self.model or self.model.split(':')[0] in m['name']:
+                        return m.get('digest')
+        except Exception:
+            pass
+        return None
+
+    def verify_digest(self, raise_on_mismatch: bool = True) -> Dict[str, Any]:
+        """
+        Compare the running model's digest against the pinned digest.
+
+        Returns a dict with:
+          - pinned: the expected digest (or None)
+          - running: the actual digest found
+          - match: True/False/None (None when no pin is set)
+
+        Raises ModelVersionMismatch if raise_on_mismatch=True and
+        the digests don't match.
+        """
+        running = self.get_running_digest()
+        result = {
+            "pinned": self.pinned_digest,
+            "running": running,
+            "model": self.model,
+        }
+
+        if not self.pinned_digest:
+            result["match"] = None  # no pin configured
+            return result
+
+        # Compare using prefix match (Ollama sometimes truncates)
+        if running and self.pinned_digest:
+            min_len = min(len(self.pinned_digest), len(running))
+            matches = running[:min_len] == self.pinned_digest[:min_len]
+        else:
+            matches = False
+
+        result["match"] = matches
+
+        if not matches and raise_on_mismatch:
+            msg = (
+                f"Model version mismatch!\n"
+                f"  Expected digest: {self.pinned_digest}\n"
+                f"  Running digest:  {running or '(model not found)'}\n"
+                f"  Model:           {self.model}\n\n"
+                f"This means the model binary has changed since it was pinned.\n"
+                f"To accept the new version, update CAPACTIVE_MODEL_DIGEST.\n"
+                f"To revert, run: ollama pull {self.model}@{self.pinned_digest}"
+            )
+            raise ModelVersionMismatch(msg)
+
+        return result
+
+    def _ensure_digest(self):
+        """One-time digest check on first use (lazy, not in __init__)."""
+        if self._digest_verified or not self.pinned_digest:
+            return
+        self.verify_digest(raise_on_mismatch=True)
+        self._digest_verified = True
 
     def is_available(self) -> bool:
         """Check if Ollama is running and the model is available."""
@@ -84,6 +193,9 @@ class LocalLLMClient:
             payload["format"] = "json"
 
         try:
+            # Enforce digest pin on first generation call
+            self._ensure_digest()
+
             prompt_len = len(prompt)
             logger.info(
                 f"Sending request to local LLM ({self.model}) — "
@@ -91,10 +203,15 @@ class LocalLLMClient:
             )
             import time as _time
             _start = _time.time()
+            # Timeout scales with prompt length:
+            #   ≤3K chars → 30s (gap-fill calls with truncated text)
+            #   ≤10K chars → 60s
+            #   >10K chars → 90s (full doc extraction — rare after skip guards)
+            _timeout = 30 if prompt_len <= 3000 else (60 if prompt_len <= 10000 else 90)
             resp = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
-                timeout=120  # 2 min timeout per chunk
+                timeout=_timeout,
             )
 
             if resp.status_code == 200:
@@ -194,3 +311,62 @@ class LocalLLMClient:
             start = end - overlap  # overlap for context continuity
 
         return chunks
+
+
+# ─── CLI Helper ─────────────────────────────────────────────────────
+#
+#   python -m realestate_extractor.extractors.llm_client --pin
+#   python -m realestate_extractor.extractors.llm_client --verify
+#
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="Ollama model version pinning helper")
+    parser.add_argument("--url", default=DEFAULT_OLLAMA_URL, help="Ollama API URL")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--pin", action="store_true",
+                       help="Print the current model digest (use this value for CAPACTIVE_MODEL_DIGEST)")
+    group.add_argument("--verify", action="store_true",
+                       help="Verify the running model against CAPACTIVE_MODEL_DIGEST")
+    group.add_argument("--info", action="store_true",
+                       help="Print full model metadata")
+    args = parser.parse_args()
+
+    client = LocalLLMClient(base_url=args.url, model=args.model)
+
+    if args.pin:
+        digest = client.get_running_digest()
+        if digest:
+            print(f"Model:  {args.model}")
+            print(f"Digest: {digest}")
+            print()
+            print("To pin this version, set the environment variable:")
+            print(f"  export CAPACTIVE_MODEL_DIGEST={digest}")
+        else:
+            print(f"Could not find model '{args.model}'. Is Ollama running?", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.verify:
+        pinned = os.environ.get('CAPACTIVE_MODEL_DIGEST')
+        if not pinned:
+            print("CAPACTIVE_MODEL_DIGEST is not set. Run with --pin first.", file=sys.stderr)
+            sys.exit(1)
+        client.pinned_digest = pinned
+        try:
+            result = client.verify_digest(raise_on_mismatch=True)
+            print(f"OK — model digest matches.")
+            print(f"  Model:  {result['model']}")
+            print(f"  Digest: {result['running']}")
+        except ModelVersionMismatch as e:
+            print(f"MISMATCH\n{e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.info:
+        info = client.get_model_info()
+        if info:
+            print(json.dumps(info, indent=2))
+        else:
+            print(f"Could not get info for '{args.model}'.", file=sys.stderr)
+            sys.exit(1)
