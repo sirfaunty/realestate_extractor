@@ -32,10 +32,15 @@ Wire the sales comp pipeline into the platform with query UI.
 - Hedonic intrinsic model can run on 883 Larking leases
 - Depends on inventory
 
-### 5. Market Intelligence
-- Partner code: `outputs/brokerage/warehouse/market_intel/`
-- 8 pipeline scripts, 18 source PDFs, PPTX template
-- Depends on scorecard
+### 5. Market Intelligence ✅
+- Module: `modules/market_intel/` — registered in INSTALLED_MODULES
+- `engine.py`: MarketIntelEngine queries warehouse + scorecard to build structured briefs
+  - 9 data surfaces: market overview, cap rate trends, sales activity, pricing trends, scorecard context, top owners, market list, full brief, market comparison
+  - Market name resolution: auto-maps dim_property bare names ("New York") to fact-table names ("New York, NY")
+  - Signal generation engine: auto-derives narrative signals (cap rate direction, pricing momentum, volume trends, scorecard rank, spread analysis)
+- `routes.py`: Flask blueprint at `/market-intel` — dashboard with 371 markets, market detail brief, market comparison page, 6 API endpoints
+- Tested against live warehouse: New York (17K props, 838 deals, $52.8B volume, 129yr cap rate history), Atlanta, Dallas-Fort Worth comparison working
+- **Note:** Partner code (8 scripts, 18 PDFs, PPTX template) was not available in repo — module built from warehouse/scorecard APIs directly
 
 ## Architecture
 - **Module pattern:** `modules/` dir, `AbstractModule` base class, `ModuleRegistry` auto-discovery
