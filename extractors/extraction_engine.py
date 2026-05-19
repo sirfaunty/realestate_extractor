@@ -1057,7 +1057,12 @@ class ExtractionEngine:
                 if not isinstance(llm_clauses, list):
                     llm_clauses = [llm_clauses]
 
-        # Merge
+        # Merge — normalize clause_type to string if LLM returned a list
+        for c in llm_clauses:
+            if isinstance(c, dict):
+                ct = c.get('clause_type')
+                if isinstance(ct, list):
+                    c['clause_type'] = ct[0] if ct else 'unknown'
         all_clauses = rule_clauses + [
             c for c in llm_clauses
             if isinstance(c, dict) and c.get('clause_type') not in found_types
