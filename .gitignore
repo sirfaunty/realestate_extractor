@@ -19,10 +19,18 @@ env/
 *.db-wal
 *.db-shm
 
+# DuckDB warehouse (generated at runtime)
+*.duckdb
+*.duckdb.wal
+
 # Data directories (user uploads, processed files)
 data/
 uploads/
 output/
+outputs/
+
+# Partner data (large parquets, CSVs)
+*.parquet
 
 # IDE
 .vscode/

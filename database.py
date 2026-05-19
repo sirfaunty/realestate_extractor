@@ -285,10 +285,14 @@ class Database:
 
     def connect(self):
         """Open connection and initialize schema."""
-        self.conn = sqlite3.connect(self.db_path)
+        self.conn = sqlite3.connect(self.db_path, timeout=30)
         self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")      # better concurrent reads
+        self.conn.execute("PRAGMA journal_mode=WAL")           # better concurrent reads
         self.conn.execute("PRAGMA foreign_keys=ON")
+        self.conn.execute("PRAGMA busy_timeout=10000")         # 10s retry on lock
+        self.conn.execute("PRAGMA synchronous=NORMAL")         # faster writes, still safe with WAL
+        self.conn.execute("PRAGMA cache_size=-64000")          # 64MB page cache
+        self.conn.execute("PRAGMA wal_autocheckpoint=1000")    # checkpoint every 1000 pages
         self._create_schema()
 
     def _create_schema(self):
@@ -1101,27 +1105,68 @@ class Database:
 
     # ─── Document Operations ─────────────────────────────────────────
 
+    def _fuzzy_match_property(self, name: str) -> Optional[Dict]:
+        """Find a property by fuzzy name matching.
+        Returns dict with id, name, portfolio_id or None."""
+        if not name:
+            return None
+        name_lower = name.strip().lower()
+
+        # 1. Exact match (case-insensitive)
+        row = self.conn.execute(
+            "SELECT id, name, portfolio_id FROM properties WHERE LOWER(name) = LOWER(?)",
+            (name,)
+        ).fetchone()
+        if row:
+            return dict(row)
+
+        # 2. Substring/contains match (property name in input or vice versa)
+        all_props = self.conn.execute(
+            "SELECT id, name, portfolio_id FROM properties"
+        ).fetchall()
+
+        best_match = None
+        best_score = 0
+        for prop in all_props:
+            prop_lower = prop['name'].lower()
+            # Check containment both ways
+            if prop_lower in name_lower or name_lower in prop_lower:
+                # Score by length overlap
+                overlap = min(len(prop_lower), len(name_lower))
+                if overlap > best_score:
+                    best_score = overlap
+                    best_match = dict(prop)
+
+        # Require at least 4 chars overlap to avoid false matches
+        if best_match and best_score >= 4:
+            return best_match
+
+        return None
+
     def insert_document(self, filename: str, filepath: str, document_type: str,
                         property_name: str = None, property_address: str = None,
                         page_count: int = None, is_scanned: bool = False,
                         ocr_confidence: float = None, file_hash: str = None,
-                        metadata: dict = None) -> int:
+                        metadata: dict = None, auto_create_property: bool = True) -> int:
         """Insert a new document record. Returns the document ID.
 
-        If property_name is provided, auto-links to a matching property
-        (case-insensitive) and sets property_id/portfolio_id.
+        If property_name is provided:
+        1. Tries exact match (case-insensitive)
+        2. Tries fuzzy/substring match
+        3. If auto_create_property=True and no match, creates the property
         """
         # Auto-link to property if name provided
         property_id = None
         portfolio_id = None
         if property_name:
-            row = self.conn.execute(
-                "SELECT id, portfolio_id FROM properties WHERE LOWER(name) = LOWER(?)",
-                (property_name,)
-            ).fetchone()
-            if row:
-                property_id = row['id']
-                portfolio_id = row['portfolio_id']
+            match = self._fuzzy_match_property(property_name)
+            if match:
+                property_id = match['id']
+                portfolio_id = match['portfolio_id']
+            elif auto_create_property:
+                # Auto-create the property
+                property_id = self.create_property(name=property_name)
+                portfolio_id = None
 
         cur = self.conn.execute("""
             INSERT INTO documents (filename, filepath, document_type, property_name,

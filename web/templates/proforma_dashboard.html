@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Proforma — {{ property.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Proforma — {{ property.name }}</h1>
+    <span class="badge">{{ total_docs }} source documents · {{ total_citations }} citations</span>
+</div>
+
+<div style="display: flex; gap: 12px; margin-bottom: 20px;">
+    <a href="{{ url_for('property_detail', property_id=property.id) }}" class="btn btn-secondary">← Property Dashboard</a>
+    <a href="{{ url_for('proforma_drillback', property_id=property.id) }}" class="btn btn-primary" target="_blank">Open Full Drillback View</a>
+</div>
+
+<!-- KPI Cards -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px;">
+    <div class="card" style="text-align: center; padding: 16px;">
+        <div style="font-size: 24px; font-weight: 700; color: var(--primary);">{{ total_docs }}</div>
+        <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Source Documents</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 16px;">
+        <div style="font-size: 24px; font-weight: 700; color: var(--primary);">{{ total_citations }}</div>
+        <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Traced Citations</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 16px;">
+        <div style="font-size: 24px; font-weight: 700; color: var(--primary);">{{ periods|length }}</div>
+        <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Financial Periods</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 16px;">
+        <div style="font-size: 24px; font-weight: 700; color: var(--primary);">{{ rent_roll_count }}</div>
+        <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Rent Roll Entries</div>
+    </div>
+</div>
+
+<!-- NOI Timeline -->
+<div class="card">
+    <div class="card-header">NOI Timeline — Cited</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Period</th>
+                <th style="text-align: right;">Income</th>
+                <th style="text-align: right;">Expenses</th>
+                <th style="text-align: right;">NOI</th>
+                <th style="text-align: center;">Citations</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for period_key, pdata in periods %}
+            <tr>
+                <td><strong>{{ period_key }}</strong></td>
+                <td style="text-align: right;">${{ "{:,.0f}".format(pdata.income) }}</td>
+                <td style="text-align: right;">${{ "{:,.0f}".format(pdata.expense) }}</td>
+                <td style="text-align: right; {% if pdata.noi < 0 %}color: var(--danger);{% endif %}">
+                    ${{ "{:,.0f}".format(pdata.noi) }}
+                </td>
+                <td style="text-align: center;">
+                    <span class="badge" style="font-size: 11px;">
+                        {{ pdata.income_citation_count + pdata.expense_citation_count }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Tabs: Income / Expenses / Terms / Registry -->
+<div class="card" style="margin-top: 16px;">
+    <div style="display: flex; border-bottom: 2px solid var(--border); margin-bottom: 12px;">
+        <button class="tab-btn active" onclick="showTab('income')">Income</button>
+        <button class="tab-btn" onclick="showTab('expenses')">Expenses</button>
+        <button class="tab-btn" onclick="showTab('terms')">Financial Terms</button>
+        <button class="tab-btn" onclick="showTab('registry')">Source Registry</button>
+    </div>
+
+    <!-- Income Tab -->
+    <div id="tab-income" class="tab-content">
+        {% for period_key, items in income_by_period.items()|sort %}
+        <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">{{ period_key }}</h4>
+        <table class="data-table" style="margin-bottom: 12px;">
+            <thead>
+                <tr>
+                    <th>Line Item</th>
+                    <th style="text-align: right;">Amount</th>
+                    <th>Source</th>
+                    <th>Locator</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr{% if item.is_subtotal %} style="background: var(--bg-secondary); font-weight: 600;"{% endif %}>
+                    <td>{{ item.line_item }}</td>
+                    <td style="text-align: right;">${{ "{:,.0f}".format(item.amount) }}</td>
+                    <td>
+                        <span class="citation-chip tier-{{ item.citation.authority_tier }}"
+                              title="{{ item.citation.source_title }}">
+                            {{ item.citation.source_title|truncate(30) }}
+                        </span>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">
+                        {{ item.citation.locator }}
+                        {% if item.citation.verbatim_text %}
+                        <span title="{{ item.citation.verbatim_text }}" style="cursor: help;">📋</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endfor %}
+    </div>
+
+    <!-- Expenses Tab -->
+    <div id="tab-expenses" class="tab-content" style="display: none;">
+        {% for period_key, items in expense_by_period.items()|sort %}
+        <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">{{ period_key }}</h4>
+        <table class="data-table" style="margin-bottom: 12px;">
+            <thead>
+                <tr>
+                    <th>Line Item</th>
+                    <th style="text-align: right;">Amount</th>
+                    <th>Source</th>
+                    <th>Locator</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr{% if item.is_subtotal %} style="background: var(--bg-secondary); font-weight: 600;"{% endif %}>
+                    <td>{{ item.line_item }}</td>
+                    <td style="text-align: right;">${{ "{:,.0f}".format(item.amount) }}</td>
+                    <td>
+                        <span class="citation-chip tier-{{ item.citation.authority_tier }}"
+                              title="{{ item.citation.source_title }}">
+                            {{ item.citation.source_title|truncate(30) }}
+                        </span>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">
+                        {{ item.citation.locator }}
+                        {% if item.citation.verbatim_text %}
+                        <span title="{{ item.citation.verbatim_text }}" style="cursor: help;">📋</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endfor %}
+    </div>
+
+    <!-- Terms Tab -->
+    <div id="tab-terms" class="tab-content" style="display: none;">
+        {% for category, terms in terms_by_category.items()|sort %}
+        <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">{{ category|title }}</h4>
+        <table class="data-table" style="margin-bottom: 12px;">
+            <thead>
+                <tr>
+                    <th>Term</th>
+                    <th>Value</th>
+                    <th>Source</th>
+                    <th>Locator</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for term in terms %}
+                <tr>
+                    <td>{{ term.term_name }}</td>
+                    <td>{{ term.value }}</td>
+                    <td>
+                        <span class="citation-chip tier-{{ term.citation.authority_tier }}">
+                            {{ term.citation.source_title|truncate(30) }}
+                        </span>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">{{ term.citation.locator }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endfor %}
+    </div>
+
+    <!-- Registry Tab -->
+    <div id="tab-registry" class="tab-content" style="display: none;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th>Authority</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in source_docs %}
+                <tr>
+                    <td>{{ doc.title }}</td>
+                    <td>{{ doc.doc_type }}</td>
+                    <td>
+                        <span class="tier-{{ doc.authority_tier }}" style="font-weight: 600; text-transform: uppercase;">
+                            {{ doc.authority_tier }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .tab-btn {
+        padding: 8px 16px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--text-secondary);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+    }
+    .tab-btn.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+        font-weight: 600;
+    }
+    .citation-chip {
+        display: inline-block;
+        font-size: 11px;
+        background: #eaf1fb;
+        color: #2f6fd0;
+        border-radius: 10px;
+        padding: 2px 8px;
+        border: 1px solid #c7dbf5;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .tier-primary { background: #dcf5e7; color: #1a7f37; border-color: #a7e3bb; }
+    .tier-secondary { background: #fff8e1; color: #9a6700; border-color: #f5dfa0; }
+    .tier-tertiary { background: #f3eef8; color: #8250df; border-color: #d4c4ef; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).style.display = 'block';
+    event.target.classList.add('active');
+}
+</script>
+{% endblock %}
