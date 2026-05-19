@@ -2252,7 +2252,7 @@ def api_property_synthesis(property_id):
 _EXTRACTABLE_TYPES = DocumentClassifier.EXTRACTABLE_TYPES
 _OS_TYPES = {'operating_statement'}
 _NO_EXTRACT_TYPES = {
-    'partnership_agreement', 'organizational', 'reference',
+    'organizational', 'reference',
     'correspondence', 'due_diligence', 'unknown',
 }
 
@@ -2327,7 +2327,11 @@ def _assess_doc(db, doc):
             if clause_count:
                 parts.append(f'{clause_count} clauses')
             return 'good', ', '.join(parts)
-        if conf < 0.5:
+        # If a dedicated template exists, always flag for re-run —
+        # low classifier confidence shouldn't block types we know
+        # how to extract from.
+        has_template = doc_type in TEMPLATES
+        if conf < 0.5 and not has_template:
             return 'skip', f'Low-confidence {doc_type} ({conf:.0%}), likely misclassified'
         return 'needs_rerun', f'{doc_type} with 0 extraction results'
 

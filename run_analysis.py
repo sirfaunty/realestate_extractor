@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from realestate_extractor.database import Database
 from realestate_extractor.property_analyzer import PropertyAnalyzer
 from realestate_extractor.extractors.extraction_engine import DocumentClassifier
+from realestate_extractor.templates.document_templates import TEMPLATES
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'org_dev.db')
 
@@ -35,7 +36,7 @@ EXTRACTABLE_TYPES = DocumentClassifier.EXTRACTABLE_TYPES
 OS_TYPES = {'operating_statement'}
 # Types that are expected to produce no structured extraction
 NO_EXTRACT_TYPES = {
-    'partnership_agreement', 'organizational', 'reference',
+    'organizational', 'reference',
     'correspondence', 'due_diligence', 'unknown',
 }
 
@@ -148,7 +149,10 @@ def assess_doc(db, doc):
             if clause_count: parts.append(f'{clause_count} clauses')
             return 'good', ', '.join(parts)
         # Already analyzed with 0 results + low confidence → skip
-        if conf < 0.5:
+        # BUT: if a dedicated template exists, always re-run — we know
+        # how to extract from this type regardless of classifier confidence.
+        has_template = doc_type in TEMPLATES
+        if conf < 0.5 and not has_template:
             return 'skip', f'Low-confidence {doc_type} ({conf:.0%}), likely misclassified'
         return 'needs_rerun', f'{doc_type} with 0 extraction results'
 
