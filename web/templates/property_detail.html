@@ -21,10 +21,36 @@
         </span>
         <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end;">
             {% if documents %}
-            <button id="analyze-btn" onclick="runAnalysis()" class="btn btn-sm btn-primary" title="Run structured extraction on all linked documents">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M14 8H10L8.5 11L5.5 5L4 8H2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Analyze
-            </button>
+            <!-- Analyze dropdown -->
+            <div style="position: relative; display: inline-block;" id="analyze-group">
+                <button id="analyze-btn" onclick="runAnalysis('smart')" class="btn btn-sm btn-primary" title="Smart re-run: only process docs that need it" style="border-top-right-radius: 0; border-bottom-right-radius: 0;">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M14 8H10L8.5 11L5.5 5L4 8H2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Analyze
+                </button><button id="analyze-dropdown-toggle" onclick="toggleAnalyzeMenu(event)" class="btn btn-sm btn-primary" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(255,255,255,0.3); padding: 4px 6px;" title="Analysis options">
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <div id="analyze-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 220px; z-index: 100; overflow: hidden;">
+                    <div style="padding: 6px 12px; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border);">Run Mode</div>
+                    <button onclick="runAnalysis('smart')" class="analyze-menu-item">
+                        <strong>Smart Re-run</strong>
+                        <span>Only docs that need it</span>
+                    </button>
+                    <button onclick="runAnalysis('new_only')" class="analyze-menu-item">
+                        <strong>New Docs Only</strong>
+                        <span>Skip already-analyzed docs</span>
+                    </button>
+                    <button onclick="runAnalysis('full')" class="analyze-menu-item" style="border-bottom: none;">
+                        <strong>Full Re-run</strong>
+                        <span>Clear all &amp; re-extract everything</span>
+                    </button>
+                    <div style="border-top: 1px solid var(--border);">
+                        <button onclick="runAssessment()" class="analyze-menu-item" style="border-bottom: none;">
+                            <strong>Assess Health</strong>
+                            <span>Check which docs need re-processing</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
             <a href="{{ url_for('proforma_dashboard', property_id=prop.id) }}" class="btn btn-sm btn-secondary" title="View proforma with citation drillback">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M2 2h12v12H2z" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12M6 2v12" stroke="currentColor" stroke-width="1"/></svg>
                 Proforma
@@ -102,6 +128,16 @@
         </div>
         <div id="analysis-progress-text" style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Starting...</div>
     </div>
+</div>
+
+<!-- Assessment Results (hidden until triggered) -->
+<div id="assessment-panel" class="card" style="margin-bottom: 20px; display: none;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Extraction Health</span>
+        <button onclick="document.getElementById('assessment-panel').style.display='none'" class="btn btn-sm btn-secondary" style="padding: 2px 8px; font-size: 11px;">Dismiss</button>
+    </div>
+    <div id="assessment-summary" style="padding: 4px 0; font-size: 13px;"></div>
+    <div id="assessment-docs" style="max-height: 300px; overflow-y: auto; font-size: 12px;"></div>
 </div>
 
 <!-- Three-Bucket Tabs (permission-gated) -->
@@ -795,6 +831,16 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.analyze-menu-item {
+    display: block; width: 100%; text-align: left; padding: 8px 12px;
+    border: none; border-bottom: 1px solid var(--border); background: none;
+    cursor: pointer; font-size: 13px; color: var(--text-primary);
+}
+.analyze-menu-item:hover { background: var(--bg-surface); }
+.analyze-menu-item strong { display: block; font-size: 13px; margin-bottom: 1px; }
+.analyze-menu-item span { display: block; font-size: 11px; color: var(--text-muted); }
+</style>
 <script>
 function showBucket(name) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -803,31 +849,71 @@ function showBucket(name) {
     event.target.classList.add('active');
 }
 
-function runAnalysis() {
+/* ── Analyze dropdown menu ── */
+function toggleAnalyzeMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('analyze-menu');
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', () => {
+    document.getElementById('analyze-menu').style.display = 'none';
+});
+
+/* ── Run analysis (mode: 'full' | 'smart' | 'new_only') ── */
+function runAnalysis(mode) {
+    document.getElementById('analyze-menu').style.display = 'none';
     const btn = document.getElementById('analyze-btn');
+    const toggle = document.getElementById('analyze-dropdown-toggle');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:4px;"></span> Analyzing...';
+    toggle.disabled = true;
+
+    const modeLabels = {full: 'Full re-run', smart: 'Smart re-run', new_only: 'New docs only'};
+    btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:4px;"></span> ' + (modeLabels[mode] || 'Analyzing') + '...';
 
     document.getElementById('analysis-progress').style.display = 'block';
+    document.getElementById('assessment-panel').style.display = 'none';
 
-    fetch('/api/property/{{ prop.id }}/analyze', { method: 'POST' })
+    fetch('/api/property/{{ prop.id }}/analyze-selective', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mode: mode})
+    })
         .then(r => r.json())
         .then(data => {
             if (data.error) {
-                btn.disabled = false;
-                btn.textContent = 'Analyze';
+                resetAnalyzeBtn();
                 document.getElementById('analysis-progress').style.display = 'none';
                 alert('Error: ' + data.error);
                 return;
             }
+            if (data.message) {
+                // Nothing to process (smart/new_only found 0 docs)
+                resetAnalyzeBtn();
+                document.getElementById('analysis-progress').style.display = 'none';
+                const text = document.getElementById('analysis-progress-text');
+                document.getElementById('analysis-progress').style.display = 'block';
+                document.getElementById('analysis-progress-bar').style.width = '100%';
+                text.textContent = data.message;
+                setTimeout(() => { document.getElementById('analysis-progress').style.display = 'none'; }, 4000);
+                return;
+            }
+            const text = document.getElementById('analysis-progress-text');
+            text.textContent = `${modeLabels[mode]}: processing ${data.processing} docs (${data.skipped} skipped)...`;
             pollAnalysis(data.job_id);
         })
         .catch(err => {
-            btn.disabled = false;
-            btn.textContent = 'Analyze';
+            resetAnalyzeBtn();
             document.getElementById('analysis-progress').style.display = 'none';
             alert('Request failed: ' + err);
         });
+}
+
+function resetAnalyzeBtn() {
+    const btn = document.getElementById('analyze-btn');
+    const toggle = document.getElementById('analyze-dropdown-toggle');
+    btn.disabled = false;
+    toggle.disabled = false;
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M14 8H10L8.5 11L5.5 5L4 8H2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Analyze';
 }
 
 function pollAnalysis(jobId) {
@@ -844,12 +930,77 @@ function pollAnalysis(jobId) {
 
                 if (job.status === 'completed' || job.status === 'failed') {
                     clearInterval(poll);
-                    // Reload the page to show fresh results
                     setTimeout(() => location.reload(), 500);
                 }
             })
             .catch(() => {});
     }, 1500);
+}
+
+/* ── Assess extraction health ── */
+function runAssessment() {
+    document.getElementById('analyze-menu').style.display = 'none';
+    const panel = document.getElementById('assessment-panel');
+    const summary = document.getElementById('assessment-summary');
+    const docsDiv = document.getElementById('assessment-docs');
+
+    panel.style.display = 'block';
+    summary.innerHTML = '<span style="color: var(--text-muted);">Assessing...</span>';
+    docsDiv.innerHTML = '';
+
+    fetch('/api/property/{{ prop.id }}/assess')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                summary.innerHTML = '<span style="color: var(--text-error);">Error: ' + data.error + '</span>';
+                return;
+            }
+
+            const c = data.counts;
+            const statusColors = {good: '#22c55e', needs_rerun: '#f59e0b', new: '#3b82f6', skip: '#94a3b8'};
+            const statusLabels = {good: 'Good', needs_rerun: 'Needs Re-run', new: 'New', skip: 'Skip'};
+
+            let summaryHtml = '<div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">';
+            for (const [s, label] of Object.entries(statusLabels)) {
+                if (c[s] > 0) {
+                    summaryHtml += `<span><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${statusColors[s]}; margin-right: 4px;"></span>${label}: <strong>${c[s]}</strong></span>`;
+                }
+            }
+            summaryHtml += '</div>';
+
+            if (data.rerun_count > 0) {
+                const savings = Math.round((data.total - data.rerun_count) / data.total * 100);
+                summaryHtml += `<div style="color: var(--text-secondary); margin-bottom: 4px;">${data.rerun_count} docs need processing. Smart re-run saves ~${savings}% of a full run.</div>`;
+                summaryHtml += `<button onclick="runAnalysis('smart')" class="btn btn-sm btn-primary" style="margin-top: 4px;">Run Smart Re-analysis (${data.rerun_count} docs)</button>`;
+            } else {
+                summaryHtml += '<div style="color: #22c55e;">All documents have good extraction results. No re-run needed.</div>';
+            }
+            summary.innerHTML = summaryHtml;
+
+            // Group docs by status
+            let docsHtml = '<table style="width: 100%; border-collapse: collapse; margin-top: 8px;">';
+            docsHtml += '<tr style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border);">';
+            docsHtml += '<th style="text-align: left; padding: 4px 8px;">Status</th><th style="text-align: left; padding: 4px 8px;">Type</th><th style="text-align: left; padding: 4px 8px;">Filename</th><th style="text-align: left; padding: 4px 8px;">Reason</th></tr>';
+
+            const sortOrder = {needs_rerun: 0, new: 1, good: 2, skip: 3};
+            data.documents.sort((a, b) => (sortOrder[a.status] || 9) - (sortOrder[b.status] || 9));
+
+            for (const doc of data.documents) {
+                const color = statusColors[doc.status] || '#94a3b8';
+                const fname = doc.filename.length > 50 ? doc.filename.substring(0, 47) + '...' : doc.filename;
+                docsHtml += `<tr style="border-bottom: 1px solid var(--border);">`;
+                docsHtml += `<td style="padding: 4px 8px;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color}; margin-right: 4px;"></span>${statusLabels[doc.status] || doc.status}</td>`;
+                docsHtml += `<td style="padding: 4px 8px; color: var(--text-secondary);">${doc.document_type}</td>`;
+                docsHtml += `<td style="padding: 4px 8px;" title="${doc.filename}">${fname}</td>`;
+                docsHtml += `<td style="padding: 4px 8px; color: var(--text-muted);">${doc.reason}</td>`;
+                docsHtml += `</tr>`;
+            }
+            docsHtml += '</table>';
+            docsDiv.innerHTML = docsHtml;
+        })
+        .catch(err => {
+            summary.innerHTML = '<span style="color: var(--text-error);">Failed: ' + err + '</span>';
+        });
 }
 </script>
 {% endblock %}
