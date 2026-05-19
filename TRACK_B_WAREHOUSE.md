@@ -21,16 +21,23 @@ Wire the sales comp pipeline into the platform with query UI.
 - Query UI for comp search by market/property/date
 - Register as `modules/sales_comps/`
 
-### 3. Submarket Scorecard
-- Partner code: `outputs/scorecard/`
-- **NOTE:** All 14 files are mislabeled (shifted by one filename). Z-score functions merged into tilt_engine code.
-- Depends on inventory module
+### 3. Submarket Scorecard ✅
+- Module: `modules/scorecard/` — registered in INSTALLED_MODULES
+- `tilt_engine.py`: Full 11-step scoring pipeline ported from partner's code (ScorecardConfig, asymmetric adjustments, bounded multipliers, 3-category model: D&S/Occ/Rent, momentum decay, duration-weighted aggregation, batch scoring, rankings)
+- `engine.py`: Warehouse-backed query + scoring layer (score_from_warehouse, market metrics builder, score storage, drill-down explanations, scenario comparison)
+- `routes.py`: Flask blueprint at `/scorecard` — dashboard with rankings, market detail pages, config explorer, 8 API endpoints (rankings, market, explain, history, config, score, scenario)
+- New warehouse table: `fact_market_score` (market scores with period/tier breakdown)
+- Successfully scored 217 markets from warehouse data (cap rates + pricing + transactions)
+- **Partner file mapping:** All 16 files had content shifted by one filename position (e.g., `minneapolis.json` contains `tilt_engine.py`, `submarket_orchestrator.py` contains `run_scorecard.py`, etc.)
+- **Note:** Occupancy signals require CoStar quarterly exports (not yet loaded). D&S and Rent scoring work from existing warehouse data.
 
-### 4. Lease Analysis
-- Partner code: `outputs/lease_analysis_tool/`
-- 7 modules missing from partner
-- Hedonic intrinsic model can run on 883 Larking leases
-- Depends on inventory
+### 4. Lease Analysis ✅
+- Module: `modules/lease_analysis/` — registered in INSTALLED_MODULES
+- `models.py`: Reconstructed all 8 missing partner modules (1,100+ lines) — LeaseRecord, Assumption, downtime_table, BreakevenAssumptions/Result, breakeven_for_unit_type, AvailabilitySnapshot, snapshot_from_counts, ForwardExposureSnapshot, effective_exposure_pct, build_forward_exposure, VelocitySnapshot, compute_velocity, portfolio_velocity, AskingAchievedGap, compute_gap, SeasonalIndex, build_seasonality_table, PricingResult, PricingAssumptions, price_unit_type, price_all
+- `engine.py`: SQLite-backed query layer — LeaseAnalysisEngine loads rent roll + financial terms, builds LeaseRecords, computes break-even floors, runs full 7-layer pricing pipeline (floor → scarcity → velocity → gap → seasonality → combine → cap)
+- `routes.py`: Flask blueprint at `/leases` — dashboard with property summaries, property detail page, full pricing analysis page, 4 API endpoints (properties, summary, pricing, rent_roll)
+- 7-layer pricing model: break-even floor + weighted scarcity/velocity/gap/seasonality signals → capped premium (±6%) → posture recommendation (push/hold/concede)
+- **Note:** Hedonic intrinsic model (layer 7b) reserved for future — requires CoStar hedonic exports not yet loaded. Current pipeline uses 6 active layers.
 
 ### 5. Market Intelligence
 - Partner code: `outputs/brokerage/warehouse/market_intel/`
