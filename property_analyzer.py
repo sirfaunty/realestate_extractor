@@ -168,6 +168,108 @@ class PropertyAnalyzer:
 
         return summary
 
+    def analyze_documents(self, property_id: int, doc_ids: List[int]) -> Dict:
+        """
+        Run analysis on a specific set of documents (selective re-run).
+
+        Same logic as analyze_property but only processes the given doc IDs.
+        Callers are responsible for clearing extraction data beforehand.
+        """
+        start = time.time()
+
+        placeholders = ','.join('?' * len(doc_ids))
+        docs = self.db.conn.execute(
+            f"SELECT * FROM documents WHERE id IN ({placeholders}) ORDER BY document_type, id",
+            doc_ids
+        ).fetchall()
+        docs = [dict(d) for d in docs]
+
+        if not docs:
+            return {'error': 'No matching documents found', 'doc_count': 0}
+
+        run_id = self.db.start_analysis_run(property_id, len(docs))
+        self._emit('analyzing', f'Analyzing {len(docs)} documents (selective)...')
+
+        summary = {
+            'doc_count': len(docs),
+            'rent_roll_entries': 0,
+            'operating_items': 0,
+            'financial_terms': 0,
+            'clauses': 0,
+            'by_type': {},
+        }
+
+        try:
+            by_type = {}
+            for doc in docs:
+                dt = doc.get('document_type', 'unknown')
+                by_type.setdefault(dt, []).append(doc)
+
+            for doc_type, type_docs in by_type.items():
+                self._emit('analyzing', f'Processing {len(type_docs)} {doc_type} document(s)...')
+                type_summary = {'count': len(type_docs), 'extracted': 0}
+
+                for doc_record in type_docs:
+                    doc_id = doc_record['id']
+
+                    _conf = 1.0
+                    if doc_record.get('metadata'):
+                        try:
+                            import json
+                            _meta = json.loads(doc_record['metadata']) if isinstance(doc_record['metadata'], str) else doc_record['metadata']
+                            _conf = _meta.get('classification_confidence', 1.0)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+                    if _conf < 0.3 and doc_type in ('rent_roll', 'operating_statement', 'general_ledger'):
+                        logger.info(
+                            f"Skipping {doc_type} extraction for "
+                            f"{doc_record['filename']} — low confidence ({_conf:.2f})"
+                        )
+                        self.db.mark_document_analyzed(doc_id)
+                        continue
+
+                    doc_content = self._reconstruct_document(doc_id, doc_record)
+                    if not doc_content:
+                        continue
+
+                    template = get_template(doc_type)
+
+                    if doc_type == 'rent_roll':
+                        count = self._analyze_rent_roll(doc_id, doc_content, doc_record)
+                        summary['rent_roll_entries'] += count
+                        type_summary['extracted'] += count
+                    elif doc_type == 'operating_statement':
+                        count = self._analyze_operating_statement(doc_id, doc_content, doc_record)
+                        summary['operating_items'] += count
+                        type_summary['extracted'] += count
+                    elif template:
+                        counts = self._analyze_with_engine(doc_id, doc_content, template)
+                        summary['financial_terms'] += counts.get('terms', 0)
+                        summary['clauses'] += counts.get('clauses', 0)
+                        type_summary['extracted'] += counts.get('terms', 0) + counts.get('clauses', 0)
+                    else:
+                        logger.info(
+                            f"No extraction template for type '{doc_type}' — "
+                            f"skipping structured extraction for {doc_record['filename']}"
+                        )
+
+                    self.db.mark_document_analyzed(doc_id)
+
+                summary['by_type'][doc_type] = type_summary
+
+            summary['time'] = round(time.time() - start, 1)
+            self.db.complete_analysis_run(run_id, summary)
+            self._emit('complete', f'Analysis complete — {summary["doc_count"]} documents processed')
+
+        except Exception as e:
+            logger.error(f"Selective analysis failed: {e}", exc_info=True)
+            self.db.fail_analysis_run(run_id, str(e))
+            summary['error'] = str(e)
+            self._emit('failed', str(e))
+
+        return summary
+
     def _reconstruct_document(self, doc_id: int, doc_record: Dict) -> Optional[DocumentContent]:
         """
         Rebuild a DocumentContent object from stored fulltext + tables.
