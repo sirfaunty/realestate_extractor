@@ -18,6 +18,9 @@ INSTALLED_MODULES = [
     'modules.proforma',
     'modules.inventory',
     'modules.sales_comps',
+    'modules.scorecard',
+    'modules.lease_analysis',
+    'modules.market_intel',
 ]
 
 
