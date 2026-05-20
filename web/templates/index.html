@@ -31,15 +31,33 @@
         <div class="stat-label">Properties</div>
     </div>
     <div class="stat-card">
+        {% if d.unit_count > 0 %}
         <div class="stat-value">{{ d.unit_count }}</div>
+        {% elif d.extracted and d.extracted.total_units %}
+        <div class="stat-value">{{ d.extracted.total_units }}</div>
+        {% else %}
+        <div class="stat-value">0</div>
+        {% endif %}
         <div class="stat-label">Units</div>
     </div>
     <div class="stat-card">
+        {% if d.unit_count > 0 %}
         <div class="stat-value">{{ d.occupancy_rate }}%</div>
+        {% elif d.extracted and d.extracted.occupancy_rate %}
+        <div class="stat-value">{{ d.extracted.occupancy_rate }}%</div>
+        {% else %}
+        <div class="stat-value">0%</div>
+        {% endif %}
         <div class="stat-label">Occupancy</div>
     </div>
     <div class="stat-card">
+        {% if d.total_monthly_rent > 0 %}
         <div class="stat-value">${{ '{:,.0f}'.format(d.total_monthly_rent) }}</div>
+        {% elif d.extracted and d.extracted.monthly_gpr %}
+        <div class="stat-value">${{ '{:,.0f}'.format(d.extracted.monthly_gpr) }}</div>
+        {% else %}
+        <div class="stat-value">$0</div>
+        {% endif %}
         <div class="stat-label">Monthly Rent</div>
     </div>
     <div class="stat-card">
@@ -150,8 +168,8 @@
                 <div class="stat-label">Rent Roll Entries</div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-                <div class="stat-value" style="font-size: 20px;">{{ d.approved_docs }}</div>
-                <div class="stat-label">Docs Linked</div>
+                <div class="stat-value" style="font-size: 20px;">{{ '{:,}'.format(d.extracted.os_items) if d.extracted else 0 }}</div>
+                <div class="stat-label">OS Line Items</div>
             </div>
         </div>
 
@@ -168,26 +186,57 @@
     </div>
 </div>
 
-<!-- ═══ OCCUPANCY BAR (if units exist) ═══ -->
-{% if d.unit_count > 0 %}
+<!-- ═══ OCCUPANCY BAR (if units or extracted data exist) ═══ -->
+{% set show_occ = d.unit_count > 0 or (d.extracted and d.extracted.occupancy_rate) %}
+{% if show_occ %}
+{% set occ_rate = d.occupancy_rate if d.unit_count > 0 else (d.extracted.occupancy_rate if d.extracted else 0) %}
+{% set m_rent = d.total_monthly_rent if d.total_monthly_rent > 0 else (d.extracted.monthly_gpr if d.extracted and d.extracted.monthly_gpr else 0) %}
+{% set ann_noi = d.extracted.annual_noi if d.extracted and d.extracted.annual_noi else None %}
 <div class="card" style="margin-bottom: 20px;">
     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span>Occupancy Overview</span>
+        {% if d.unit_count > 0 %}
         <span style="font-size: 13px; color: var(--text-muted);">
             {{ d.occupied_units }} occupied / {{ d.vacant_units }} vacant
         </span>
+        {% elif d.extracted and d.extracted.total_units %}
+        <span style="font-size: 13px; color: var(--text-muted);">
+            {{ d.extracted.total_units }} units (from monthly reports)
+        </span>
+        {% endif %}
     </div>
     <div style="display: flex; gap: 20px; align-items: center;">
         <div style="flex: 1;">
             <div style="height: 24px; background: var(--border-subtle); border-radius: 12px; overflow: hidden; position: relative;">
-                <div style="height: 100%; width: {{ d.occupancy_rate }}%; background: linear-gradient(90deg, var(--cap-primary), var(--cap-signal)); border-radius: 12px; transition: width 0.5s;"></div>
+                <div style="height: 100%; width: {{ occ_rate }}%; background: linear-gradient(90deg, var(--cap-primary), var(--cap-signal)); border-radius: 12px; transition: width 0.5s;"></div>
             </div>
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--cap-navy); min-width: 70px; text-align: right;">
-            {{ d.occupancy_rate }}%
+            {{ occ_rate }}%
         </div>
     </div>
-    {% if d.total_monthly_rent > 0 %}
+    {% if m_rent > 0 or ann_noi %}
+    <div style="display: flex; gap: 24px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px;">
+        {% if m_rent > 0 %}
+        <div>
+            <span style="color: var(--text-muted);">Monthly GPR</span>
+            <strong style="margin-left: 6px; color: var(--cap-navy);">${{ '{:,.0f}'.format(m_rent) }}</strong>
+        </div>
+        {% endif %}
+        {% if ann_noi %}
+        <div>
+            <span style="color: var(--text-muted);">Annual NOI</span>
+            <strong style="margin-left: 6px; color: var(--cap-navy);">${{ '{:,.0f}'.format(ann_noi) }}</strong>
+        </div>
+        {% endif %}
+        {% if d.extracted and d.extracted.avg_monthly_rent %}
+        <div>
+            <span style="color: var(--text-muted);">Avg Unit Rent</span>
+            <strong style="margin-left: 6px; color: var(--cap-navy);">${{ '{:,.0f}'.format(d.extracted.avg_monthly_rent) }}</strong>
+        </div>
+        {% endif %}
+    </div>
+    {% elif d.total_monthly_rent > 0 %}
     <div style="display: flex; gap: 24px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px;">
         <div>
             <span style="color: var(--text-muted);">Monthly Rent</span>

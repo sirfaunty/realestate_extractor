@@ -65,21 +65,23 @@
 </div>
 
 <!-- Quick Stats -->
+{% set ext = operations.extracted %}
+{% set has_manual = (operations.units.total_units or 0) > 0 %}
 <div class="card-grid" style="margin-bottom: 20px;">
     <div class="stat-card">
-        <div class="stat-value">{{ operations.units.total_units or 0 }}</div>
+        <div class="stat-value">{{ operations.units.total_units if has_manual else (ext.total_units or 0) }}</div>
         <div class="stat-label">Units</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ operations.occupancy_rate }}%</div>
+        <div class="stat-value">{{ operations.occupancy_rate if has_manual else (ext.occupancy_rate or 0) }}%</div>
         <div class="stat-label">Occupancy</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">${{ '{:,.0f}'.format(operations.units.total_monthly_rent or 0) }}</div>
-        <div class="stat-label">Monthly Rent</div>
+        <div class="stat-value">${{ '{:,.0f}'.format(operations.units.total_monthly_rent or 0) if has_manual else '{:,.0f}'.format(ext.monthly_gpr or 0) }}</div>
+        <div class="stat-label">{{ 'Monthly Rent' if has_manual else 'Monthly GPR' }}</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">${{ '{:,.0f}'.format(valuation.calculated_noi or 0) }}</div>
+        <div class="stat-value">${{ '{:,.0f}'.format(valuation.calculated_noi or 0) if valuation.calculated_noi else '{:,.0f}'.format(ext.annual_noi or 0) }}</div>
         <div class="stat-label">NOI</div>
     </div>
     <div class="stat-card">
@@ -166,6 +168,7 @@
     <div class="card">
         <div class="card-header">Occupancy</div>
         {% set occ = operations.units %}
+        {% if has_manual %}
         <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
             <div class="stat-card" style="padding: 12px;">
                 <div class="stat-value" style="font-size: 22px;">{{ occ.occupied or 0 }}</div>
@@ -188,36 +191,256 @@
                 <div class="stat-label">Market Rent Total</div>
             </div>
         </div>
+        {% else %}
+        <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">{{ ext.occupied or '—' }}</div>
+                <div class="stat-label">Occupied</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">{{ ext.vacant or '—' }}</div>
+                <div class="stat-label">Vacant</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">{{ ext.occupancy_rate or 0 }}%</div>
+                <div class="stat-label">Occupancy Rate</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">${{ '{:,.0f}'.format(ext.avg_monthly_rent or 0) }}</div>
+                <div class="stat-label">Avg Rent</div>
+            </div>
+            <div class="stat-card" style="padding: 12px;">
+                <div class="stat-value" style="font-size: 22px;">${{ '{:,.0f}'.format(ext.monthly_gpr or 0) }}</div>
+                <div class="stat-label">Monthly GPR</div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Rent Roll -->
-    {% if operations.rent_roll %}
+    {% set segs = operations.rent_roll_segments %}
+    {% if segs.has_segments %}
+    <!-- Segment Summary Cards -->
     <div class="card">
-        <div class="card-header">Rent Roll</div>
+        <div class="card-header">Unit Mix by Segment</div>
+        <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            {% for seg in segs.segments %}
+            <div class="stat-card" style="padding: 14px;">
+                <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">{{ seg.name }}</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px;">
+                    <div><span style="color: var(--text-muted);">Units</span></div>
+                    <div style="text-align: right; font-weight: 500;">{{ seg.summary.total_units }}</div>
+                    <div><span style="color: var(--text-muted);">Occupied</span></div>
+                    <div style="text-align: right; font-weight: 500;">{{ seg.summary.occupied }}</div>
+                    <div><span style="color: var(--text-muted);">Occupancy</span></div>
+                    <div style="text-align: right; font-weight: 500;">{{ seg.summary.occupancy_rate }}%</div>
+                    <div><span style="color: var(--text-muted);">Avg Rent</span></div>
+                    <div style="text-align: right; font-weight: 500;">${{ '{:,.0f}'.format(seg.summary.avg_rent) }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Segmented Rent Roll Table -->
+    <div class="card">
+        <div class="card-header">Rent Roll — Unit Mix</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Style</th>
+                    <th>Size</th>
+                    <th style="text-align: right;">Avg Rent</th>
+                    <th style="text-align: right;">Qty</th>
+                    <th style="text-align: right;">Occupied</th>
+                    <th style="text-align: right;">Vacant</th>
+                    <th style="text-align: right;">Occupancy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for seg in segs.segments %}
+                <tr style="background: var(--bg-secondary);">
+                    <td colspan="7" style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 8px 10px;">{{ seg.name }}</td>
+                </tr>
+                {% for rr in seg.entries %}
+                <tr>
+                    <td style="font-weight: 500; padding-left: 20px;">{{ rr.unit_number or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ rr._meta.size or '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(rr.monthly_rent) if rr.monthly_rent else '—' }}</td>
+                    <td style="text-align: right;">{{ rr._meta.quantity or '—' }}</td>
+                    <td style="text-align: right;">{{ rr._meta.occupied or 0 }}</td>
+                    <td style="text-align: right;">{{ rr._meta.vacant or 0 }}</td>
+                    <td style="text-align: right;">{{ rr._meta.pct_occupied or '—' }}{% if rr._meta.pct_occupied %}%{% endif %}</td>
+                </tr>
+                {% endfor %}
+                <!-- Segment subtotal -->
+                <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                    <td style="padding-left: 20px;">{{ seg.name }} Total</td>
+                    <td>{{ seg.summary.styles }} styles</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(seg.summary.avg_rent) }}</td>
+                    <td style="text-align: right;">{{ seg.summary.total_units }}</td>
+                    <td style="text-align: right;">{{ seg.summary.occupied }}</td>
+                    <td style="text-align: right;">{{ seg.summary.vacant }}</td>
+                    <td style="text-align: right;">{{ seg.summary.occupancy_rate }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif segs.segments %}
+    <!-- Non-segmented: grouped by bedroom/unit type -->
+    <div class="card">
+        <div class="card-header">Unit Mix by Type</div>
+        <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            {% for seg in segs.segments %}
+            <div class="stat-card" style="padding: 14px;">
+                <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">{{ seg.name }}</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px;">
+                    <div><span style="color: var(--text-muted);">Units</span></div>
+                    <div style="text-align: right; font-weight: 500;">{{ seg.summary.total_units }}</div>
+                    <div><span style="color: var(--text-muted);">Occupancy</span></div>
+                    <div style="text-align: right; font-weight: 500;">{{ seg.summary.occupancy_rate }}%</div>
+                    <div><span style="color: var(--text-muted);">Avg Rent</span></div>
+                    <div style="text-align: right; font-weight: 500;">${{ '{:,.0f}'.format(seg.summary.avg_rent) }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">Rent Roll — Unit Mix</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Style</th>
+                    <th>Size</th>
+                    <th style="text-align: right;">Avg Rent</th>
+                    <th style="text-align: right;">Qty</th>
+                    <th style="text-align: right;">Occupied</th>
+                    <th style="text-align: right;">Vacant</th>
+                    <th style="text-align: right;">Occupancy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for seg in segs.segments %}
+                <tr style="background: var(--bg-secondary);">
+                    <td colspan="7" style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 8px 10px;">{{ seg.name }}</td>
+                </tr>
+                {% for rr in seg.entries %}
+                <tr>
+                    <td style="font-weight: 500; padding-left: 20px;">{{ rr.unit_number or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ rr._meta.size or '—' }}</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(rr.monthly_rent) if rr.monthly_rent else '—' }}</td>
+                    <td style="text-align: right;">{{ rr._meta.quantity or '—' }}</td>
+                    <td style="text-align: right;">{{ rr._meta.occupied or 0 }}</td>
+                    <td style="text-align: right;">{{ rr._meta.vacant or 0 }}</td>
+                    <td style="text-align: right;">{{ rr._meta.pct_occupied or '—' }}{% if rr._meta.pct_occupied %}%{% endif %}</td>
+                </tr>
+                {% endfor %}
+                <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                    <td style="padding-left: 20px;">{{ seg.name }} Total</td>
+                    <td>{{ seg.summary.styles }} styles</td>
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(seg.summary.avg_rent) }}</td>
+                    <td style="text-align: right;">{{ seg.summary.total_units }}</td>
+                    <td style="text-align: right;">{{ seg.summary.occupied }}</td>
+                    <td style="text-align: right;">{{ seg.summary.vacant }}</td>
+                    <td style="text-align: right;">{{ seg.summary.occupancy_rate }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Renewals -->
+    {% if segs.renewals %}
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Renewals</span>
+            <span style="font-size: 12px; color: var(--text-muted);">
+                {{ segs.renewals_summary.total }} units —
+                {{ segs.renewals_summary.renewed }} renewed,
+                {{ segs.renewals_summary.move_out }} move-out,
+                {{ segs.renewals_summary.pending }} pending
+            </span>
+        </div>
         <table class="data-table">
             <thead>
                 <tr>
                     <th>Unit</th>
                     <th>Tenant</th>
-                    <th>SF</th>
-                    <th style="text-align: right;">Monthly Rent</th>
-                    <th style="text-align: right;">Rent/SF</th>
-                    <th>Lease Start</th>
+                    <th style="text-align: right;">Current Rent</th>
+                    <th style="text-align: right;">New Rent</th>
+                    <th style="text-align: right;">Increase</th>
                     <th>Lease End</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
-                {% for rr in operations.rent_roll %}
+                {% for status_key in ['occupied', 'move_out', 'unknown'] %}
+                {% set group = segs.renewals_grouped.get(status_key, []) %}
+                {% if group %}
+                <tr style="background: var(--bg-secondary);">
+                    <td colspan="7" style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 8px 10px;">
+                        {% if status_key == 'occupied' %}Renewed{% elif status_key == 'move_out' %}Move-Out{% else %}Pending{% endif %}
+                        ({{ group|length }})
+                    </td>
+                </tr>
+                {% for rr in group %}
                 <tr>
-                    <td style="font-weight: 500;">{{ rr.unit_number or rr.suite or '—' }}</td>
+                    <td style="font-weight: 500; padding-left: 20px;">{{ rr.unit_number or '—' }}</td>
                     <td>{{ rr.tenant_name or '—' }}</td>
-                    <td>{{ '{:,.0f}'.format(rr.square_footage) if rr.square_footage else '—' }}</td>
-                    <td style="text-align: right;">${{ '{:,.0f}'.format(rr.monthly_rent) if rr.monthly_rent else '—' }}</td>
-                    <td style="text-align: right;">{{ '${:,.2f}'.format(rr.rent_psf) if rr.rent_psf else '—' }}</td>
-                    <td style="font-size: 12px;">{{ rr.lease_start or '—' }}</td>
+                    <td style="text-align: right;">{{ '${:,.0f}'.format(rr.monthly_rent) if rr.monthly_rent else '—' }}</td>
+                    <td style="text-align: right;">{{ '${:,.0f}'.format(rr._meta.new_rent) if rr._meta.get('new_rent') else '—' }}</td>
+                    <td style="text-align: right;">
+                        {% if rr._meta.get('increase_pct') %}
+                        <span style="color: {% if rr._meta.increase_pct > 0 %}var(--success){% elif rr._meta.increase_pct < 0 %}var(--error){% else %}var(--text-muted){% endif %};">
+                            {{ '{:+.1f}'.format(rr._meta.increase_pct) }}%
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
                     <td style="font-size: 12px;">{{ rr.lease_end or '—' }}</td>
-                    <td><span class="badge badge-{% if rr.status == 'occupied' %}success{% elif rr.status == 'vacant' %}error{% else %}processing{% endif %}">{{ rr.status or '—' }}</span></td>
+                    <td>
+                        <span class="badge badge-{% if rr.status == 'occupied' %}success{% elif rr.status == 'move_out' %}error{% else %}processing{% endif %}">
+                            {% if rr.status == 'occupied' %}renewed{% else %}{{ rr.status or '—' }}{% endif %}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Notice to Vacate -->
+    {% if segs.ntv %}
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Notice to Vacate</span>
+            <span style="font-size: 12px; color: var(--text-muted);">
+                {{ segs.ntv_summary.total }} units — avg rent ${{ '{:,.0f}'.format(segs.ntv_summary.avg_rent) }}
+            </span>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Unit</th>
+                    <th>Tenant</th>
+                    <th style="text-align: right;">Rent</th>
+                    <th>Move-Out Date</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rr in segs.ntv %}
+                <tr>
+                    <td style="font-weight: 500;">{{ rr.unit_number or '—' }}</td>
+                    <td>{{ rr.tenant_name or '—' }}</td>
+                    <td style="text-align: right;">{{ '${:,.0f}'.format(rr.monthly_rent) if rr.monthly_rent else '—' }}</td>
+                    <td style="font-size: 12px;">{{ rr.lease_end or rr._meta.get('move_out_date', '—') }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ rr._meta.get('reason', '—') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -269,7 +492,7 @@
     </div>
     {% endif %}
 
-    {% if not operations.rent_roll and not operations.lease_expirations and not operations.operating_expenses %}
+    {% if not operations.rent_roll and not operations.lease_expirations and not operations.operating_expenses and not ext.total_units %}
     <div class="card">
         <div class="empty-state">
             <p>No operations data yet. Link rent rolls, operating statements, and leases to this property to populate this view.</p>

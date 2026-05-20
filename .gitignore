@@ -54,3 +54,6 @@ test_*.db
 
 # Logs
 *.log
+
+# Large ZIP uploads (stage locally, don't push)
+*.zip
