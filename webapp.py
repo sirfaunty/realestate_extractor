@@ -31,6 +31,7 @@ from .financial_synthesis import FinancialSynthesizer
 from .extractors.llm_client import LocalLLMClient
 from .extractors.extraction_engine import DocumentClassifier
 from .templates.document_templates import list_templates, TEMPLATES
+from .reconciliation import reconcile_terms
 from .config import ConfigStore, PLAN_FEATURES
 from .licensing import (
     generate_org_key, generate_user_key, validate_org_key,
@@ -2378,6 +2379,23 @@ def api_assess_property(property_id):
             'rerun_count': rerun_count,
             'documents': results,
         })
+    finally:
+        db.close()
+
+
+@app.route('/api/property/<int:property_id>/reconcile')
+@login_required
+def api_reconcile_terms(property_id):
+    """Return cross-document term reconciliation for a property."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            return jsonify({'error': 'Property not found'}), 404
+
+        result = reconcile_terms(db.conn, property_id)
+        return jsonify(result)
     finally:
         db.close()
 

@@ -10,6 +10,7 @@ Usage:
     python3 run_analysis.py --property-id 1 --new-only  # only process never-analyzed docs
     python3 run_analysis.py --property-id 1 --doc-type closing loan  # filter to specific types
     python3 run_analysis.py --all                      # full re-run on all properties
+    python3 run_analysis.py --property-id 1 --reconcile  # cross-document term reconciliation
 
 Requires Ollama running with llama3.1:8b for LLM gap-fill.
 Rule-based extraction + columnar parser work without Ollama.
@@ -413,6 +414,8 @@ def main():
                         help='Show extraction health report (no changes)')
     parser.add_argument('--doc-type', nargs='+',
                         help='Filter to specific document type(s)')
+    parser.add_argument('--reconcile', action='store_true',
+                        help='Run cross-document term reconciliation')
 
     args = parser.parse_args()
 
@@ -438,6 +441,23 @@ def main():
                 print_assessment(db, pid)
         else:
             print("Specify --property-id or --all with --assess")
+        db.close()
+        return
+
+    if args.reconcile:
+        from realestate_extractor.reconciliation import reconcile_terms, print_reconciliation
+        if args.property_id:
+            result = reconcile_terms(db.conn, args.property_id)
+            print_reconciliation(result)
+        elif args.all:
+            rows = db.conn.execute(
+                "SELECT id FROM properties ORDER BY id"
+            ).fetchall()
+            for (pid,) in rows:
+                result = reconcile_terms(db.conn, pid)
+                print_reconciliation(result)
+        else:
+            print("Specify --property-id or --all with --reconcile")
         db.close()
         return
 
