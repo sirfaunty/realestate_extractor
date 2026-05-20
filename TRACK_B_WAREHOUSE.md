@@ -1,54 +1,55 @@
 # Track B: Analytical Warehouse — Module integration in build order
 
 ## Status
-Phase 1 DONE: DuckDB warehouse loaded with 8.4M rows (188K properties, 5.6M z-scores, 23K sales, 27K cap rates, 37K ownership). Flask blueprint live at `/warehouse` with 11 API endpoints + dashboard.
+**Phase 2 COMPLETE.** All 5 modules built and registered. DuckDB warehouse fully loaded: 815M rows (189K properties, 607M z-scores, 207M peer stats, 23K sales, 27K cap rates, 4.8K pricing, 37K ownership). 371 markets across all tables. Flask blueprints live for all modules.
 
-**Stale WAL fix:** Delete `data/warehouse.duckdb` + `data/warehouse.duckdb.wal`, then run `python3 warehouse/load_initial_data.py` to rebuild (~15s).
+**Stale WAL fix:** Delete `data/warehouse.duckdb` + `data/warehouse.duckdb.wal`, then run `python3 warehouse/load_initial_data.py` to rebuild.
 
 ## Build Order
 
-### 1. Inventory Module
-Wire the national inventory z-score engine as a platform module.
-- Partner code: `outputs/national_inventory/US National Inventory (Market sample)/`
-- Key files: `zscore_engine.py`, `micro_market_zscores.py`
+### 1. Inventory Module ✅
+- Module: `modules/inventory/` — `__init__.py`, `engine.py`, `routes.py`
+- Blueprint at `/inventory` with property z-score lookup, peer group explorer
 - Data: 189K properties, 21 peer cuts, ~150-265 metrics per property
-- Register as `modules/inventory/` using AbstractModule pattern
+- Backed by 607M z-score rows + 207M peer stats in warehouse
 
-### 2. Sales Comps Module
-Wire the sales comp pipeline into the platform with query UI.
-- Partner code: `outputs/sales_comps/package/handoff/`
-- 9 pipeline scripts, 23K pre-computed transactions
-- Query UI for comp search by market/property/date
-- Register as `modules/sales_comps/`
+### 2. Sales Comps Module ✅
+- Module: `modules/sales_comps/` — `__init__.py`, `engine.py`, `routes.py`
+- Blueprint at `/comps` with transaction search, comp finder
+- 23K pre-computed transactions, cap rate data
 
-### 3. Submarket Scorecard
-- Partner code: `outputs/scorecard/`
-- **NOTE:** All 14 files are mislabeled (shifted by one filename). Z-score functions merged into tilt_engine code.
-- Depends on inventory module
+### 3. Submarket Scorecard ✅
+- Module: `modules/scorecard/` — `__init__.py`, `engine.py`, `tilt_engine.py`, `routes.py`
+- Blueprint at `/scorecard` — 11-step tilt engine scoring pipeline
+- Scoring CLI: `python3 warehouse/score_markets.py` (run once to populate fact_market_score)
+- 359 scoreable markets (cap rates ∩ sales)
 
-### 4. Lease Analysis
-- Partner code: `outputs/lease_analysis_tool/`
-- 7 modules missing from partner
-- Hedonic intrinsic model can run on 883 Larking leases
-- Depends on inventory
+### 4. Lease Analysis ✅
+- Module: `modules/lease_analysis/` — `__init__.py`, `engine.py`, `models.py`, `routes.py`
+- Blueprint at `/leases` — 7-layer pricing model
+- Break-even floor → scarcity/velocity/gap/seasonality → capped premium → posture
+- PricingResult + PricingAssumptions dataclasses in models.py
 
 ### 5. Market Intelligence ✅
-- Module: `modules/market_intel/` — registered in INSTALLED_MODULES
-- `engine.py`: MarketIntelEngine queries warehouse + scorecard to build structured briefs
-  - 9 data surfaces: market overview, cap rate trends, sales activity, pricing trends, scorecard context, top owners, market list, full brief, market comparison
-  - Market name resolution: auto-maps dim_property bare names ("New York") to fact-table names ("New York, NY")
-  - Signal generation engine: auto-derives narrative signals (cap rate direction, pricing momentum, volume trends, scorecard rank, spread analysis)
-- `routes.py`: Flask blueprint at `/market-intel` — dashboard with 371 markets, market detail brief, market comparison page, 6 API endpoints
-- Tested against live warehouse: New York (17K props, 838 deals, $52.8B volume, 129yr cap rate history), Atlanta, Dallas-Fort Worth comparison working
-- **Note:** Partner code (8 scripts, 18 PDFs, PPTX template) was not available in repo — module built from warehouse/scorecard APIs directly
+- Module: `modules/market_intel/` — `__init__.py`, `engine.py`, `routes.py`
+- Blueprint at `/market-intel` — dashboard with 371 markets, market brief, comparison
+- 9 data surfaces, signal generation engine, market name resolution
+- Integrates with scorecard when scores exist (gracefully handles un-scored state)
 
 ## Architecture
 - **Module pattern:** `modules/` dir, `AbstractModule` base class, `ModuleRegistry` auto-discovery
-- **INSTALLED_MODULES** list in `modules/__init__.py`
+- **INSTALLED_MODULES** list in `modules/__init__.py` (6 modules: proforma, inventory, sales_comps, scorecard, lease_analysis, market_intel)
 - **Warehouse engine:** `warehouse/engine.py` — `WarehouseEngine` class with bulk loaders + query API
 - **Property identity bridge:** `MD5(address+city+state)` links SQLite ↔ CoStar ↔ warehouse
 - **Bitemporal Zone A/B/C:** Every fact row has `knowledge_date` + `ingestion_id` provenance
 
+## Data Loading
+- **Full load:** `python3 warehouse/load_initial_data.py` — loads everything (~15min for 350+ markets)
+- **Supplement missing tables:** `python3 warehouse/load_missing_data.py` — fills dim_property, sales, cap rates, pricing, ownership without re-running z-scores
+- **Score markets:** `python3 warehouse/score_markets.py` — run tilt engine across all 359 markets
+- Data files: `data/multifamily_properties.parquet` (189K), `data/sales_comps_outputs/` (transactions, cap rates, pricing, ownership)
+
 ## Dev Commands
 - `CAPACTIVE_DEV_MODE=1 python3 run.py --port 8080`
 - Always use `python3` not `python`
+- Clear stale pyc: `find modules/ -name __pycache__ -exec rm -rf {} +`

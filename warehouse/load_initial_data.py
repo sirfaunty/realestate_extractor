@@ -4,17 +4,23 @@ Initial data load for the Capactive analytical warehouse.
 
 Loads:
   1. National inventory master parquet → dim_property (189K properties)
-  2. 5 sample market z-scores → fact_property_zscore
-  3. 5 sample market peer stats → fact_peer_group_stats
+  2. All discovered market z-scores → fact_property_zscore
+  3. All discovered market peer stats → fact_peer_group_stats
   4. Sales comp transactions → fact_sales_transaction
   5. Cap rate aggregates (clean + all) → fact_cap_rate_aggregate
   6. Pricing aggregates → fact_pricing_aggregate
   7. Ownership history → fact_ownership
 
 Usage:
-    python3 warehouse/load_initial_data.py [--data-dir outputs/national_inventory/...]
+    python3 warehouse/load_initial_data.py [--inventory-dir /path/to/markets]
+
+Environment variables:
+    INVENTORY_DIR   Path to inventory market folders (each with zscores_long.parquet)
+    SALES_DIR       Path to sales comps outputs
+    WAREHOUSE_DB    Override warehouse DB path
 """
 
+import argparse
 import os
 import sys
 import glob
@@ -31,27 +37,68 @@ logger = logging.getLogger('load_initial_data')
 # ─── Paths ─────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# National inventory sample
-INVENTORY_DIR = os.environ.get(
-    'INVENTORY_DIR',
+# National inventory — auto-detect from common locations
+_INVENTORY_CANDIDATES = [
+    os.path.join(os.path.expanduser('~'), 'Documents', 'realestate_extractor',
+                 'US Inventory Analysis', 'output'),
     os.path.join(PROJECT_ROOT, 'outputs', 'national_inventory',
-                 'US National Inventory (Market sample)')
-)
+                 'US National Inventory (Market sample)'),
+]
 
-# Sales comps outputs
-SALES_DIR = os.environ.get(
-    'SALES_DIR',
+def _find_inventory_dir():
+    env = os.environ.get('INVENTORY_DIR')
+    if env and os.path.isdir(env):
+        return env
+    for p in _INVENTORY_CANDIDATES:
+        if os.path.isdir(p):
+            return p
+    return _INVENTORY_CANDIDATES[0]  # fallback
+
+INVENTORY_DIR = _find_inventory_dir()
+
+# Sales comps outputs — check data/ first, then legacy path
+_SALES_CANDIDATES = [
+    os.path.join(PROJECT_ROOT, 'data', 'sales_comps_outputs'),
     os.path.join(PROJECT_ROOT, 'outputs', 'sales_comps',
-                 'package', 'handoff', 'outputs')
-)
+                 'package', 'handoff', 'outputs'),
+]
+
+def _find_sales_dir():
+    env = os.environ.get('SALES_DIR')
+    if env and os.path.isdir(env):
+        return env
+    for p in _SALES_CANDIDATES:
+        if os.path.isdir(p):
+            return p
+    return _SALES_CANDIDATES[0]
+
+SALES_DIR = _find_sales_dir()
 
 KNOWLEDGE_DATE = '2024-08-31'  # Aug 2024 vintage
 SALES_KNOWLEDGE_DATE = '2025-05-01'  # Sales comps pipeline date
 
-SAMPLE_MARKETS = ['Abilene', 'Akron', 'Albany', 'Albuquerque', 'Alexandria']
+
+def discover_markets(inventory_dir: str) -> list:
+    """Auto-discover all market folders that contain zscore parquet files."""
+    markets = []
+    if not os.path.isdir(inventory_dir):
+        return markets
+    for entry in sorted(os.listdir(inventory_dir)):
+        market_dir = os.path.join(inventory_dir, entry)
+        if not os.path.isdir(market_dir):
+            continue
+        # A market folder has zscores_long.parquet or peer_group_stats.parquet
+        has_zscores = os.path.exists(os.path.join(market_dir, 'zscores_long.parquet'))
+        has_peers = os.path.exists(os.path.join(market_dir, 'peer_group_stats.parquet'))
+        if has_zscores or has_peers:
+            markets.append(entry)
+    return markets
 
 
-def load_all():
+def load_all(inventory_dir: str = None):
+    inv_dir = inventory_dir or INVENTORY_DIR
+    logger.info(f"Inventory directory: {inv_dir}")
+
     db_path = os.environ.get('WAREHOUSE_DB', None)
     wh = WarehouseEngine(db_path=db_path) if db_path else WarehouseEngine()
     wh.connect()
@@ -74,32 +121,49 @@ def load_all():
             pass
 
     # ─── 1. Master inventory parquet ─────────────────────────────────
-    master_parquet = os.path.join(INVENTORY_DIR, 'multifamily_properties.parquet')
-    if os.path.exists(master_parquet):
+    master_candidates = [
+        os.path.join(inv_dir, 'multifamily_properties.parquet'),
+        os.path.join(PROJECT_ROOT, 'data', 'multifamily_properties.parquet'),
+    ]
+    master_parquet = None
+    for mp in master_candidates:
+        if os.path.exists(mp):
+            master_parquet = mp
+            break
+
+    if master_parquet:
         logger.info(f"Loading master inventory: {master_parquet}")
         n = wh.load_inventory_parquet(master_parquet, KNOWLEDGE_DATE, 'Aug 2024')
         logger.info(f"  → {n:,} properties loaded into dim_property")
     else:
-        logger.warning(f"Master parquet not found: {master_parquet}")
+        logger.warning(f"Master parquet not found. Checked: {master_candidates}")
 
-    # ─── 2. Z-scores by market ───────────────────────────────────────
+    # ─── 2. Auto-discover markets ────────────────────────────────────
+    markets = discover_markets(inv_dir)
+    logger.info(f"Discovered {len(markets)} markets with parquet data")
+
+    # ─── 3. Z-scores by market ───────────────────────────────────────
     total_zscores = 0
-    for market in SAMPLE_MARKETS:
-        zpath = os.path.join(INVENTORY_DIR, market, 'zscores_long.parquet')
+    for i, market in enumerate(markets, 1):
+        zpath = os.path.join(inv_dir, market, 'zscores_long.parquet')
         if os.path.exists(zpath):
             n = wh.load_zscore_parquet(zpath, KNOWLEDGE_DATE)
             total_zscores += n
-            logger.info(f"  {market}: {n:,} z-score rows")
+            if i % 25 == 0 or i == len(markets):
+                logger.info(f"  [{i}/{len(markets)}] {market}: {n:,} z-score rows (running total: {total_zscores:,})")
+            else:
+                logger.info(f"  [{i}/{len(markets)}] {market}: {n:,} z-score rows")
     logger.info(f"  → Total z-scores: {total_zscores:,}")
 
-    # ─── 3. Peer group stats ────────────────────────────────────────
+    # ─── 4. Peer group stats ────────────────────────────────────────
     total_peers = 0
-    for market in SAMPLE_MARKETS:
-        ppath = os.path.join(INVENTORY_DIR, market, 'peer_group_stats.parquet')
+    for i, market in enumerate(markets, 1):
+        ppath = os.path.join(inv_dir, market, 'peer_group_stats.parquet')
         if os.path.exists(ppath):
             n = wh.load_peer_stats_parquet(ppath, KNOWLEDGE_DATE)
             total_peers += n
-            logger.info(f"  {market}: {n:,} peer stat rows")
+            if i % 25 == 0 or i == len(markets):
+                logger.info(f"  [{i}/{len(markets)}] {market}: {n:,} peer stat rows")
     logger.info(f"  → Total peer stats: {total_peers:,}")
 
     # ─── 4. Sales transactions ──────────────────────────────────────
@@ -249,4 +313,8 @@ def load_all():
 
 
 if __name__ == '__main__':
-    load_all()
+    parser = argparse.ArgumentParser(description='Load data into Capactive warehouse')
+    parser.add_argument('--inventory-dir', '-i', type=str, default=None,
+                        help='Path to inventory market folders (default: auto-detect)')
+    args = parser.parse_args()
+    load_all(inventory_dir=args.inventory_dir)

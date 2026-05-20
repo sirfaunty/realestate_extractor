@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRE Fundamentals — Capactive Learning Module</title>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1419; --surface: #1a1f2e; --surface2: #222939;
+  --border: #30363d; --accent: #58a6ff; --accent2: #3fb950;
+  --warn: #d29922; --danger: #f85149; --text: #f0f6fc;
+  --muted: #8b949e; --radius: 8px; --shadow: 0 2px 12px rgba(0,0,0,.4);
+}
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.65;
+  display: flex; min-height: 100vh; overflow-x: hidden;
+}
+
+/* ===== SIDEBAR NAV ===== */
+.sidebar {
+  width: 260px; min-width: 260px; background: var(--surface);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+  transition: transform .3s ease;
+}
+.sidebar-header {
+  padding: 20px; border-bottom: 1px solid var(--border);
+}
+.sidebar-header h1 { font-size: 1.1rem; color: var(--accent); letter-spacing: .5px; }
+.sidebar-header p { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+  cursor: pointer; color: var(--muted); font-size: .875rem;
+  transition: all .2s; border-left: 3px solid transparent;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(88,166,255,.08); }
+.nav-item.completed .nav-icon { background: var(--accent2); color: #fff; }
+.nav-icon {
+  width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: .75rem; font-weight: 700;
+  background: var(--surface2); border: 1px solid var(--border); flex-shrink: 0;
+}
+.nav-label { flex: 1; }
+.nav-score { font-size: .7rem; color: var(--accent2); font-weight: 600; }
+
+/* Progress bar */
+.progress-wrap { padding: 16px 20px; border-top: 1px solid var(--border); }
+.progress-label { font-size: .7rem; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.progress-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0; transition: width .5s ease; }
+
+/* Bottom buttons */
+.sidebar-actions { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.btn-glossary, .btn-calc {
+  flex: 1; padding: 8px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text); font-size: .8rem; cursor: pointer;
+  transition: all .2s; text-align: center;
+}
+.btn-glossary:hover, .btn-calc:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Mobile hamburger */
+.hamburger {
+  display: none; position: fixed; top: 12px; left: 12px; z-index: 200;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 10px; cursor: pointer; color: var(--text); font-size: 1.2rem;
+}
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
+
+/* ===== MAIN CONTENT ===== */
+.main { margin-left: 260px; flex: 1; padding: 40px; max-width: 900px; }
+
+/* Module pages */
+.page { display: none; animation: fadeIn .4s ease; }
+.page.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Typography */
+.page h2 { font-size: 1.6rem; margin-bottom: 4px; color: var(--text); }
+.page .subtitle { color: var(--muted); font-size: .9rem; margin-bottom: 28px; }
+.page h3 { font-size: 1.15rem; margin: 28px 0 12px; color: var(--accent); }
+.page h4 { font-size: 1rem; margin: 20px 0 8px; color: var(--text); }
+.page p { margin-bottom: 14px; color: var(--text); }
+
+/* Cards */
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; margin-bottom: 16px;
+}
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.term-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.term-card .term-name { font-weight: 700; color: var(--accent); font-size: .95rem; margin-bottom: 6px; }
+.term-card .term-def { color: var(--muted); font-size: .85rem; line-height: 1.5; }
+.term-card .term-example { margin-top: 8px; padding: 8px 10px; background: var(--surface2); border-radius: 4px; font-size: .8rem; color: var(--text); font-family: monospace; }
+
+/* Platform connection callout */
+.platform-callout {
+  background: rgba(88,166,255,.06); border: 1px solid rgba(88,166,255,.25);
+  border-left: 3px solid var(--accent); border-radius: var(--radius);
+  padding: 14px 16px; margin: 20px 0; font-size: .85rem;
+}
+.platform-callout .callout-label { font-weight: 700; color: var(--accent); font-size: .75rem; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+
+/* Formula boxes */
+.formula {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px 20px; margin: 14px 0; text-align: center; font-family: 'Courier New', monospace;
+  font-size: 1.05rem; color: var(--accent); letter-spacing: 1px;
+}
+
+/* Tables */
+.data-table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .85rem; }
+.data-table th { text-align: left; padding: 10px 12px; background: var(--surface2); color: var(--accent); border-bottom: 2px solid var(--border); font-weight: 600; }
+.data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+.data-table tr:hover td { background: rgba(88,166,255,.04); }
+
+/* Interactive calculator */
+.calculator {
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 20px; margin: 20px 0;
+}
+.calculator h4 { color: var(--accent); margin: 0 0 14px; font-size: .95rem; }
+.calc-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.calc-row label { min-width: 120px; font-size: .85rem; color: var(--muted); }
+.calc-row input {
+  flex: 1; min-width: 100px; padding: 8px 10px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 4px; color: var(--text);
+  font-size: .9rem; font-family: monospace;
+}
+.calc-row input:focus { outline: none; border-color: var(--accent); }
+.calc-result {
+  margin-top: 12px; padding: 12px 16px; background: rgba(63,185,80,.08);
+  border: 1px solid rgba(63,185,80,.3); border-radius: var(--radius);
+  font-size: .95rem; color: var(--accent2); font-weight: 600;
+}
+
+/* Quiz */
+.quiz { margin-top: 30px; padding-top: 20px; border-top: 2px solid var(--border); }
+.quiz h3 { color: var(--warn); }
+.quiz-q { margin-bottom: 20px; }
+.quiz-q p { font-weight: 600; margin-bottom: 8px; }
+.quiz-options { display: flex; flex-direction: column; gap: 6px; }
+.quiz-opt {
+  padding: 10px 14px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; font-size: .875rem;
+  transition: all .2s;
+}
+.quiz-opt:hover { border-color: var(--accent); background: var(--surface2); }
+.quiz-opt.selected { border-color: var(--accent); background: rgba(88,166,255,.1); }
+.quiz-opt.correct { border-color: var(--accent2); background: rgba(63,185,80,.12); color: var(--accent2); }
+.quiz-opt.wrong { border-color: var(--danger); background: rgba(248,81,73,.08); color: var(--danger); }
+.quiz-opt.disabled { pointer-events: none; opacity: .7; }
+.quiz-feedback { margin-top: 6px; font-size: .8rem; padding: 8px 10px; border-radius: 4px; display: none; }
+.quiz-feedback.show { display: block; }
+.quiz-feedback.correct { background: rgba(63,185,80,.08); color: var(--accent2); }
+.quiz-feedback.wrong { background: rgba(248,81,73,.06); color: var(--danger); }
+.quiz-score { margin-top: 16px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; font-size: 1rem; display: none; }
+
+.btn-next {
+  margin-top: 24px; padding: 10px 28px; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius); font-size: .9rem; cursor: pointer;
+  font-weight: 600; transition: all .2s;
+}
+.btn-next:hover { filter: brightness(1.15); }
+
+/* Glossary panel */
+.glossary-panel {
+  position: fixed; top: 0; right: -380px; width: 380px; height: 100%; background: var(--surface);
+  border-left: 1px solid var(--border); z-index: 150; transition: right .3s ease;
+  display: flex; flex-direction: column;
+}
+.glossary-panel.open { right: 0; }
+.glossary-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.glossary-header h3 { font-size: 1rem; color: var(--accent); }
+.glossary-close { background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; }
+.glossary-search { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.glossary-search input {
+  width: 100%; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text); font-size: .85rem;
+}
+.glossary-search input:focus { outline: none; border-color: var(--accent); }
+.glossary-list { flex: 1; overflow-y: auto; padding: 12px 20px; }
+.glossary-item { margin-bottom: 14px; }
+.glossary-item .g-term { font-weight: 700; color: var(--accent); font-size: .85rem; }
+.glossary-item .g-def { color: var(--muted); font-size: .8rem; margin-top: 2px; line-height: 1.5; }
+
+/* Dashboard cards */
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
+.dash-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; cursor: pointer; transition: all .25s;
+}
+.dash-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.dash-card .dc-num { font-size: 2rem; font-weight: 800; color: var(--accent); }
+.dash-card .dc-title { font-weight: 700; margin: 6px 0 4px; font-size: .95rem; }
+.dash-card .dc-desc { color: var(--muted); font-size: .8rem; line-height: 1.4; }
+.dash-card .dc-status { margin-top: 10px; font-size: .75rem; font-weight: 600; }
+.dc-status.not-started { color: var(--muted); }
+.dc-status.in-progress { color: var(--warn); }
+.dc-status.completed { color: var(--accent2); }
+.dash-stat { text-align: center; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.dash-stat .ds-val { font-size: 2.5rem; font-weight: 800; color: var(--accent2); }
+.dash-stat .ds-label { color: var(--muted); font-size: .8rem; margin-top: 4px; }
+
+/* Lists */
+.page ul, .page ol { margin: 10px 0 14px 20px; }
+.page li { margin-bottom: 6px; font-size: .9rem; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .hamburger { display: block; }
+  .overlay.show { display: block; }
+  .main { margin-left: 0; padding: 60px 20px 40px; }
+  .glossary-panel { width: 100%; right: -100%; }
+  .card-grid { grid-template-columns: 1fr; }
+  .dash-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Hamburger (mobile) -->
+<button class="hamburger" onclick="toggleSidebar()">☰</button>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h1>⬡ CRE FUNDAMENTALS</h1>
+    <p>Capactive Learning Module</p>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-page="dashboard" onclick="goTo('dashboard')">
+      <div class="nav-icon">⬡</div>
+      <span class="nav-label">Dashboard</span>
+    </div>
+    <div class="nav-item" data-page="mod1" onclick="goTo('mod1')">
+      <div class="nav-icon">1</div>
+      <span class="nav-label">The Language</span>
+      <span class="nav-score" id="score1"></span>
+    </div>
+    <div class="nav-item" data-page="mod2" onclick="goTo('mod2')">
+      <div class="nav-icon">2</div>
+      <span class="nav-label">The Property</span>
+      <span class="nav-score" id="score2"></span>
+    </div>
+    <div class="nav-item" data-page="mod3" onclick="goTo('mod3')">
+      <div class="nav-icon">3</div>
+      <span class="nav-label">The Money</span>
+      <span class="nav-score" id="score3"></span>
+    </div>
+    <div class="nav-item" data-page="mod4" onclick="goTo('mod4')">
+      <div class="nav-icon">4</div>
+      <span class="nav-label">The Rent Roll</span>
+      <span class="nav-score" id="score4"></span>
+    </div>
+    <div class="nav-item" data-page="mod5" onclick="goTo('mod5')">
+      <div class="nav-icon">5</div>
+      <span class="nav-label">The Deal</span>
+      <span class="nav-score" id="score5"></span>
+    </div>
+    <div class="nav-item" data-page="mod6" onclick="goTo('mod6')">
+      <div class="nav-icon">6</div>
+      <span class="nav-label">The Market</span>
+      <span class="nav-score" id="score6"></span>
+    </div>
+  </nav>
+  <div class="progress-wrap">
+    <div class="progress-label"><span>Overall Progress</span><span id="progressPct">0%</span></div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+  <div class="sidebar-actions">
+    <button class="btn-glossary" onclick="toggleGlossary()">📖 Glossary</button>
+  </div>
+</aside>
+
+<!-- Glossary Panel -->
+<div class="glossary-panel" id="glossaryPanel">
+  <div class="glossary-header">
+    <h3>📖 CRE Glossary</h3>
+    <button class="glossary-close" onclick="toggleGlossary()">✕</button>
+  </div>
+  <div class="glossary-search">
+    <input type="text" placeholder="Search terms..." oninput="filterGlossary(this.value)" />
+  </div>
+  <div class="glossary-list" id="glossaryList"></div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+<!-- ==================== DASHBOARD ==================== -->
+<div class="page active" id="page-dashboard">
+  <h2>Welcome, Patrick</h2>
+  <p class="subtitle">Your path to CRE fluency — 6 modules, zero jargon fog.</p>
+
+  <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-bottom:24px;">
+    <div class="dash-stat"><div class="ds-val" id="dashCompleted">0</div><div class="ds-label">Modules Completed</div></div>
+    <div class="dash-stat"><div class="ds-val" id="dashAvgScore">—</div><div class="ds-label">Avg Quiz Score</div></div>
+    <div class="dash-stat"><div class="ds-val" id="dashTerms">62</div><div class="ds-label">Terms in Glossary</div></div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="dash-card" onclick="goTo('mod1')">
+      <div class="dc-num">01</div>
+      <div class="dc-title">The Language — Core Vocabulary</div>
+      <div class="dc-desc">NOI, cap rate, bps, T-12, PPU, DSCR — the words that make the industry go.</div>
+      <div class="dc-status not-started" id="dash-s1">Not Started</div>
+    </div>
+    <div class="dash-card" onclick="goTo('mod2')">
+      <div class="dc-num">02</div>
+      <div class="dc-title">The Property — Anatomy of a Multifamily Asset</div>
+      <div class="dc-desc">Classes A through D, unit mix, vintage, submarkets, and what drives value.</div>
+      <div class="dc-status not-started" id="dash-s2">Not Started</div>
+    </div>
+    <div class="dash-card" onclick="goTo('mod3')">
+      <div class="dc-num">03</div>
+      <div class="dc-title">The Money — How Deals Get Valued</div>
+      <div class="dc-desc">Income approach, cap rate math, spread analysis, comparable sales.</div>
+      <div class="dc-status not-started" id="dash-s3">Not Started</div>
+    </div>
+    <div class="dash-card" onclick="goTo('mod4')">
+      <div class="dc-num">04</div>
+      <div class="dc-title">The Rent Roll — Reading the Revenue Engine</div>
+      <div class="dc-desc">Occupancy, mark-to-market, loss-to-lease, concessions, and retention.</div>
+      <div class="dc-status not-started" id="dash-s4">Not Started</div>
+    </div>
+    <div class="dash-card" onclick="goTo('mod5')">
+      <div class="dc-num">05</div>
+      <div class="dc-title">The Deal — Lifecycle of an Acquisition</div>
+      <div class="dc-desc">Sourcing, underwriting, LOI, capital stack, financing, and exit.</div>
+      <div class="dc-status not-started" id="dash-s5">Not Started</div>
+    </div>
+    <div class="dash-card" onclick="goTo('mod6')">
+      <div class="dc-num">06</div>
+      <div class="dc-title">The Market — How to Sound Smart</div>
+      <div class="dc-desc">Supply/demand, absorption, deliveries, rent growth, and market signals.</div>
+      <div class="dc-status not-started" id="dash-s6">Not Started</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODULE 1: THE LANGUAGE ==================== -->
+<div class="page" id="page-mod1">
+  <h2>Module 1: The Language</h2>
+  <p class="subtitle">Core vocabulary — the words you need before anything else makes sense.</p>
+
+  <h3>The Revenue Stack</h3>
+  <p>Every multifamily property generates revenue in layers. Understanding these layers is how you read a property's financial health at a glance.</p>
+
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">GPR — Gross Potential Rent</div>
+      <div class="term-def">Total rent if every unit were leased at market rate with zero vacancy. The theoretical maximum.</div>
+      <div class="term-example">200 units × $1,500/mo = $300,000 GPR/mo</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Vacancy Loss</div>
+      <div class="term-def">Revenue lost from unoccupied units. Typically 3-8% of GPR for stabilized properties.</div>
+      <div class="term-example">5% vacancy → $300K × 0.05 = $15K/mo lost</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Concessions</div>
+      <div class="term-def">Discounts given to attract tenants — free months, reduced rent, waived fees. Reduces effective rent below face rent.</div>
+      <div class="term-example">"1 month free on a 13-month lease" = ~7.7% concession</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">EGI — Effective Gross Income</div>
+      <div class="term-def">GPR minus vacancy and concessions, plus other income (parking, laundry, pet fees, late fees).</div>
+      <div class="term-example">$300K - $15K - $5K + $8K = $288K EGI</div>
+    </div>
+  </div>
+
+  <h3>The Expense Side</h3>
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">OpEx — Operating Expenses</div>
+      <div class="term-def">Day-to-day costs to run the property: payroll, utilities, insurance, property taxes, maintenance, management fees. Does NOT include debt service or capital improvements.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">CapEx — Capital Expenditures</div>
+      <div class="term-def">Big-ticket improvements that add value or extend useful life: new roof, HVAC replacement, unit renovations. Treated differently from OpEx in valuations.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">NOI — Net Operating Income</div>
+      <div class="term-def">The single most important number in CRE. Revenue minus operating expenses. The income the property generates before debt service.</div>
+      <div class="term-example">$288K EGI - $130K OpEx = $158K NOI/mo</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Expense Ratio</div>
+      <div class="term-def">OpEx as a percentage of EGI. Typical multifamily: 40-55%. Lower = more efficient.</div>
+      <div class="term-example">$130K / $288K = 45.1% expense ratio</div>
+    </div>
+  </div>
+
+  <div class="formula">NOI = EGI − Operating Expenses</div>
+  <p>This is the formula you'll hear a hundred times. NOI is "unlevered" — it doesn't care how the deal is financed. That's what makes it the universal comparison metric.</p>
+
+  <h3>The Yield Metrics</h3>
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">Cap Rate (Capitalization Rate)</div>
+      <div class="term-def">Annual NOI divided by purchase price. The "yield" of the property if you paid all cash. Lower cap = higher price = "safer" market. Higher cap = cheaper = more risk or upside.</div>
+      <div class="term-example">$1.9M NOI / $38M price = 5.0% cap</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Basis Points (bps)</div>
+      <div class="term-def">1/100th of a percent. Used constantly when discussing cap rate changes and spreads. "Cap rates compressed 50 bps" = they dropped 0.50%.</div>
+      <div class="term-example">100 bps = 1% &nbsp;|&nbsp; 25 bps = 0.25%</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Cash-on-Cash Return</div>
+      <div class="term-def">Annual pre-tax cash flow divided by total equity invested. Unlike cap rate, this factors in leverage (debt). The return you actually feel in your bank account.</div>
+      <div class="term-example">$350K cash flow / $5M equity = 7.0% CoC</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">IRR — Internal Rate of Return</div>
+      <div class="term-def">The time-weighted return across the entire hold period, including cash flow AND sale proceeds. The "gold standard" return metric for investors.</div>
+      <div class="term-example">Typical value-add target: 15-20% IRR</div>
+    </div>
+  </div>
+
+  <h3>The Financing Terms</h3>
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">LTV — Loan-to-Value</div>
+      <div class="term-def">Loan amount divided by property value. Lenders typically cap at 65-80% LTV. Higher LTV = more leverage = more risk.</div>
+      <div class="term-example">$28M loan / $38M value = 73.7% LTV</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Debt Service</div>
+      <div class="term-def">Total annual mortgage payments (principal + interest). This is what NOI has to cover before equity holders see a dime.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">DSCR — Debt Service Coverage Ratio</div>
+      <div class="term-def">NOI divided by annual debt service. Lenders require 1.20-1.35x minimum. Below 1.0x = the property can't cover its mortgage.</div>
+      <div class="term-example">$1.9M NOI / $1.4M debt svc = 1.36x DSCR ✓</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Equity Multiple</div>
+      <div class="term-def">Total distributions / total equity invested. A 2.0x multiple means you doubled your money over the hold period.</div>
+      <div class="term-example">$10M returned / $5M invested = 2.0x</div>
+    </div>
+  </div>
+
+  <h3>Time References</h3>
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">T-12</div>
+      <div class="term-def">Trailing 12 months of actual financial performance. The most commonly referenced historical period. "What does the T-12 show?" = "What did this property actually earn?"</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">T-3</div>
+      <div class="term-def">Trailing 3 months, annualized. Used to see recent momentum — is performance improving or declining vs the full T-12?</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">PPU / PPSF</div>
+      <div class="term-def">Per-unit and per-square-foot normalization. Lets you compare a 50-unit building to a 300-unit building on equal footing. "$150K per unit" and "$180 per square foot" are typical deal-size expressions.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Pro Forma</div>
+      <div class="term-def">Projected future performance based on assumptions. The business plan in numbers. Buyers use pro forma to justify purchase price; sellers use T-12 to prove actual performance.</div>
+    </div>
+  </div>
+
+  <div class="platform-callout">
+    <div class="callout-label">Capactive Platform Connection</div>
+    Your document extractor pulls T-12 operating statements, rent rolls, and financial terms from uploaded PDFs. The lease analysis engine then computes NOI, expense ratios, and break-even floors automatically from this extracted data.
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz" id="quiz1">
+    <h3>Knowledge Check — Module 1</h3>
+    <div class="quiz-q" data-mod="1" data-q="0" data-answer="2">
+      <p>1. A property has $3.6M EGI and $1.8M in operating expenses. What is the NOI?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(1,0,0)">$3.6M</div>
+        <div class="quiz-opt" onclick="answer(1,0,1)">$5.4M</div>
+        <div class="quiz-opt" onclick="answer(1,0,2)">$1.8M</div>
+        <div class="quiz-opt" onclick="answer(1,0,3)">$1.2M</div>
+      </div>
+      <div class="quiz-feedback" id="fb-1-0"></div>
+    </div>
+    <div class="quiz-q" data-mod="1" data-q="1" data-answer="1">
+      <p>2. Cap rates in a market dropped from 5.5% to 5.0%. How would you describe this in bps?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(1,1,0)">Cap rates expanded by 50 bps</div>
+        <div class="quiz-opt" onclick="answer(1,1,1)">Cap rates compressed by 50 bps</div>
+        <div class="quiz-opt" onclick="answer(1,1,2)">Cap rates compressed by 5 bps</div>
+        <div class="quiz-opt" onclick="answer(1,1,3)">Cap rates expanded by 500 bps</div>
+      </div>
+      <div class="quiz-feedback" id="fb-1-1"></div>
+    </div>
+    <div class="quiz-q" data-mod="1" data-q="2" data-answer="3">
+      <p>3. A property generates $2M NOI annually and sold for $40M. What is the cap rate?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(1,2,0)">20%</div>
+        <div class="quiz-opt" onclick="answer(1,2,1)">2%</div>
+        <div class="quiz-opt" onclick="answer(1,2,2)">4%</div>
+        <div class="quiz-opt" onclick="answer(1,2,3)">5%</div>
+      </div>
+      <div class="quiz-feedback" id="fb-1-2"></div>
+    </div>
+    <div class="quiz-q" data-mod="1" data-q="3" data-answer="0">
+      <p>4. A lender requires a 1.25x DSCR. NOI is $1.5M. What's the max annual debt service?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(1,3,0)">$1.2M</div>
+        <div class="quiz-opt" onclick="answer(1,3,1)">$1.5M</div>
+        <div class="quiz-opt" onclick="answer(1,3,2)">$1.875M</div>
+        <div class="quiz-opt" onclick="answer(1,3,3)">$1.25M</div>
+      </div>
+      <div class="quiz-feedback" id="fb-1-3"></div>
+    </div>
+    <div class="quiz-score" id="quizScore1"></div>
+  </div>
+  <button class="btn-next" onclick="goTo('mod2')">Next: The Property →</button>
+</div>
+
+<!-- ==================== MODULE 2: THE PROPERTY ==================== -->
+<div class="page" id="page-mod2">
+  <h2>Module 2: The Property</h2>
+  <p class="subtitle">Anatomy of a multifamily asset — what you're looking at and why it matters.</p>
+
+  <h3>Property Classes</h3>
+  <p>Multifamily properties are classified A through D based on quality, age, location, and amenities. This isn't an official rating — it's market convention, but everyone uses it.</p>
+
+  <table class="data-table">
+    <thead>
+      <tr><th>Class</th><th>Typical Age</th><th>Finish Level</th><th>Location</th><th>Tenants</th><th>Cap Rate Range</th></tr>
+    </thead>
+    <tbody>
+      <tr><td style="color:var(--accent);font-weight:700">A</td><td>&lt;10 years</td><td>Luxury finishes, smart-home, resort amenities</td><td>Prime urban/suburban</td><td>High income, choice renters</td><td>3.5 – 5.0%</td></tr>
+      <tr><td style="color:var(--accent2);font-weight:700">B</td><td>10-25 years</td><td>Good condition, standard amenities</td><td>Solid neighborhoods</td><td>Middle income, workforce</td><td>4.5 – 6.0%</td></tr>
+      <tr><td style="color:var(--warn);font-weight:700">C</td><td>25-40+ years</td><td>Dated but functional, deferred maintenance</td><td>Working-class areas</td><td>Cost-conscious renters</td><td>5.5 – 7.5%</td></tr>
+      <tr><td style="color:var(--danger);font-weight:700">D</td><td>40+ years</td><td>Significant deferred maintenance</td><td>Distressed areas</td><td>Subsidized / low-income</td><td>7.0 – 10%+</td></tr>
+    </tbody>
+  </table>
+
+  <p>Notice the relationship: as property quality decreases, cap rates increase. Investors demand more yield for more risk. This is a fundamental principle you'll see everywhere in CRE.</p>
+
+  <h3>Value-Add: Where the Money Is Made</h3>
+  <p>The most common investment strategy in multifamily is "value-add" — buying a B or C property, investing capital to improve it, and raising rents toward the next class up. The playbook:</p>
+  <div class="card">
+    <ol>
+      <li><strong>Acquire</strong> a Class B- or C+ property at a 5.5-6.5% cap rate</li>
+      <li><strong>Renovate</strong> unit interiors ($8-15K per unit) — countertops, fixtures, flooring, appliances</li>
+      <li><strong>Upgrade</strong> common areas — lobby, fitness center, pool, landscaping</li>
+      <li><strong>Push rents</strong> $100-300/unit/month as units turn over and get renovated</li>
+      <li><strong>Improve operations</strong> — better management, utility billing, ancillary income</li>
+      <li><strong>Refinance or sell</strong> at a lower cap rate (4.5-5.5%) based on higher NOI</li>
+    </ol>
+    <p style="margin-top:12px;color:var(--accent);">The magic: you increase NOI AND the market applies a lower cap rate to the improved asset. Both effects push value up.</p>
+  </div>
+
+  <h3>Unit Mix</h3>
+  <p>The distribution of unit types in a property matters for both revenue stability and tenant demographics.</p>
+  <table class="data-table">
+    <thead><tr><th>Unit Type</th><th>Typical SF</th><th>Tenant Profile</th><th>Turnover</th><th>Rent Premium vs Studio</th></tr></thead>
+    <tbody>
+      <tr><td>Studio</td><td>350-500</td><td>Young professionals, students</td><td>High</td><td>Baseline</td></tr>
+      <tr><td>1BR</td><td>550-750</td><td>Singles, young couples</td><td>Moderate</td><td>+20-35%</td></tr>
+      <tr><td>2BR</td><td>800-1,100</td><td>Couples, roommates, small families</td><td>Lower</td><td>+40-70%</td></tr>
+      <tr><td>3BR</td><td>1,100-1,400</td><td>Families</td><td>Lowest</td><td>+60-100%</td></tr>
+    </tbody>
+  </table>
+  <p>More bedrooms = longer average tenancy = lower turnover costs. But studios and 1BRs often have the highest rent per square foot. Most institutional investors prefer a mix weighted toward 1BR and 2BR units.</p>
+
+  <h3>Submarkets</h3>
+  <p>A metro area (MSA) contains dozens of submarkets, each with its own supply/demand dynamics. "Dallas" is an MSA; "Uptown Dallas," "Las Colinas," and "Frisco" are submarkets. Two properties five miles apart can have completely different performance profiles because they're in different submarkets.</p>
+
+  <div class="platform-callout">
+    <div class="callout-label">Capactive Platform Connection</div>
+    Your Inventory module tracks 189K properties with z-scores across 265 metrics, organized into 21 peer group cuts. The warehouse normalizes performance at both MSA and submarket level, so you can compare any property against its true competitive set.
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz" id="quiz2">
+    <h3>Knowledge Check — Module 2</h3>
+    <div class="quiz-q" data-mod="2" data-q="0" data-answer="1">
+      <p>1. You're looking at a 1985 property with original kitchens, a dated clubhouse, and rents 20% below nearby renovated communities. What class is it most likely?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(2,0,0)">Class A</div>
+        <div class="quiz-opt" onclick="answer(2,0,1)">Class C</div>
+        <div class="quiz-opt" onclick="answer(2,0,2)">Class B</div>
+        <div class="quiz-opt" onclick="answer(2,0,3)">Class D</div>
+      </div>
+      <div class="quiz-feedback" id="fb-2-0"></div>
+    </div>
+    <div class="quiz-q" data-mod="2" data-q="1" data-answer="2">
+      <p>2. In a value-add deal, where does the value creation come from?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(2,1,0)">Waiting for market cap rates to compress</div>
+        <div class="quiz-opt" onclick="answer(2,1,1)">Reducing the number of units</div>
+        <div class="quiz-opt" onclick="answer(2,1,2)">Increasing NOI through renovations and operational improvements</div>
+        <div class="quiz-opt" onclick="answer(2,1,3)">Refinancing at higher interest rates</div>
+      </div>
+      <div class="quiz-feedback" id="fb-2-1"></div>
+    </div>
+    <div class="quiz-q" data-mod="2" data-q="2" data-answer="3">
+      <p>3. Which unit type typically has the highest rent per square foot?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(2,2,0)">3BR</div>
+        <div class="quiz-opt" onclick="answer(2,2,1)">2BR</div>
+        <div class="quiz-opt" onclick="answer(2,2,2)">1BR</div>
+        <div class="quiz-opt" onclick="answer(2,2,3)">Studio</div>
+      </div>
+      <div class="quiz-feedback" id="fb-2-2"></div>
+    </div>
+    <div class="quiz-score" id="quizScore2"></div>
+  </div>
+  <button class="btn-next" onclick="goTo('mod3')">Next: The Money →</button>
+</div>
+
+<!-- ==================== MODULE 3: THE MONEY ==================== -->
+<div class="page" id="page-mod3">
+  <h2>Module 3: The Money</h2>
+  <p class="subtitle">How multifamily deals get valued — and why cap rates rule everything around you.</p>
+
+  <h3>The Income Approach</h3>
+  <p>Unlike residential real estate (where you compare sale prices of similar homes), commercial real estate is valued based on income. The property is a cash-flow machine, and the price is a function of how much cash it produces.</p>
+  <div class="formula">Value = NOI ÷ Cap Rate</div>
+  <p>This simple formula drives billions of dollars in transactions. Two knobs control value: NOI (what the property earns) and cap rate (what yield the market demands).</p>
+
+  <div class="card">
+    <h4>Why this formula is so powerful</h4>
+    <p>Say you buy a property with $1M NOI at a 6.0% cap rate. The value is $16.67M. Over two years you increase NOI to $1.2M through renovations. If the market cap rate compresses to 5.5%, the new value is:</p>
+    <div class="formula">$1.2M ÷ 0.055 = $21.82M</div>
+    <p>That's a $5.15M value increase — a 31% gain — from a 20% NOI increase plus 50 bps of cap rate compression. This is the value-add math investors obsess over.</p>
+  </div>
+
+  <h3>Interactive: Cap Rate Calculator</h3>
+  <div class="calculator">
+    <h4>Property Valuation Calculator</h4>
+    <div class="calc-row">
+      <label>Annual NOI ($)</label>
+      <input type="number" id="calcNOI" value="1200000" oninput="calcCapRate()">
+    </div>
+    <div class="calc-row">
+      <label>Cap Rate (%)</label>
+      <input type="number" id="calcCap" value="5.5" step="0.1" oninput="calcCapRate()">
+    </div>
+    <div class="calc-result" id="calcResult">Property Value: $21,818,182 &nbsp;|&nbsp; Per Unit (200 units): $109,091</div>
+    <div class="calc-row" style="margin-top:10px;">
+      <label>Total Units</label>
+      <input type="number" id="calcUnits" value="200" oninput="calcCapRate()">
+    </div>
+  </div>
+
+  <h3>Cap Rate Spreads</h3>
+  <p>Cap rates don't exist in a vacuum — they're always discussed relative to the risk-free rate, typically the 10-Year US Treasury yield. The "spread" is the gap between them.</p>
+  <table class="data-table">
+    <thead><tr><th>Scenario</th><th>10Y Treasury</th><th>Cap Rate</th><th>Spread</th><th>Signal</th></tr></thead>
+    <tbody>
+      <tr><td>Normal</td><td>4.0%</td><td>5.5%</td><td>150 bps</td><td>Healthy risk premium</td></tr>
+      <tr><td>Tight</td><td>4.0%</td><td>4.5%</td><td>50 bps</td><td>Possible overheating — buyers accepting thin premium</td></tr>
+      <tr><td>Wide</td><td>4.0%</td><td>7.0%</td><td>300 bps</td><td>Distress or high perceived risk — potential opportunity</td></tr>
+    </tbody>
+  </table>
+  <p>In conversations, you might hear: "Spreads are too tight for us to underwrite — we need at least 150 over the 10-year to pencil." This means the buyer won't pay a price that puts the cap rate less than 150 bps above Treasuries.</p>
+
+  <h3>Comparable Sales</h3>
+  <p>While the income approach is primary, it's validated by looking at what similar properties ("comps") actually sold for. Comps are normalized on a per-unit (PPU) or per-square-foot (PPSF) basis.</p>
+  <p>Good comp criteria: same submarket, similar class/vintage, within 12-18 months, similar unit count range. "I see three Class B comps in this submarket at $125-140K per door" means recent B properties sold for $125K-$140K per unit.</p>
+
+  <div class="platform-callout">
+    <div class="callout-label">Capactive Platform Connection</div>
+    Your Sales Comps module holds 23K pre-computed transactions and 27K cap rate aggregates across 371 markets. The system can match comparable sales by geography, class, vintage, and unit count — exactly the analysis buyers do manually today.
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz" id="quiz3">
+    <h3>Knowledge Check — Module 3</h3>
+    <div class="quiz-q" data-mod="3" data-q="0" data-answer="1">
+      <p>1. A property produces $800K NOI and the market cap rate is 5.0%. What is the value?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(3,0,0)">$4M</div>
+        <div class="quiz-opt" onclick="answer(3,0,1)">$16M</div>
+        <div class="quiz-opt" onclick="answer(3,0,2)">$8M</div>
+        <div class="quiz-opt" onclick="answer(3,0,3)">$40M</div>
+      </div>
+      <div class="quiz-feedback" id="fb-3-0"></div>
+    </div>
+    <div class="quiz-q" data-mod="3" data-q="1" data-answer="0">
+      <p>2. If cap rates increase from 5.0% to 6.0%, what happens to property values (assuming constant NOI)?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(3,1,0)">Values decrease by ~17%</div>
+        <div class="quiz-opt" onclick="answer(3,1,1)">Values increase by 20%</div>
+        <div class="quiz-opt" onclick="answer(3,1,2)">Values stay the same</div>
+        <div class="quiz-opt" onclick="answer(3,1,3)">Values decrease by 1%</div>
+      </div>
+      <div class="quiz-feedback" id="fb-3-1"></div>
+    </div>
+    <div class="quiz-q" data-mod="3" data-q="2" data-answer="2">
+      <p>3. The 10-Year Treasury is at 4.5% and a deal is priced at a 5.0% cap. What is the spread and what does it signal?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(3,2,0)">450 bps — very wide, distressed</div>
+        <div class="quiz-opt" onclick="answer(3,2,1)">100 bps — healthy</div>
+        <div class="quiz-opt" onclick="answer(3,2,2)">50 bps — very tight, possibly overheated</div>
+        <div class="quiz-opt" onclick="answer(3,2,3)">500 bps — wide spread</div>
+      </div>
+      <div class="quiz-feedback" id="fb-3-2"></div>
+    </div>
+    <div class="quiz-score" id="quizScore3"></div>
+  </div>
+  <button class="btn-next" onclick="goTo('mod4')">Next: The Rent Roll →</button>
+</div>
+
+<!-- ==================== MODULE 4: THE RENT ROLL ==================== -->
+<div class="page" id="page-mod4">
+  <h2>Module 4: The Rent Roll</h2>
+  <p class="subtitle">The revenue engine — how to read the most important document in any deal.</p>
+
+  <h3>What Is a Rent Roll?</h3>
+  <p>A rent roll is a snapshot of every unit in a property: who's in it, what they pay, and when their lease ends. It's the source of truth for current revenue and the starting point for underwriting future performance.</p>
+
+  <h3>Sample Rent Roll</h3>
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead><tr><th>Unit</th><th>Type</th><th>SF</th><th>Status</th><th>Tenant</th><th>Lease Start</th><th>Lease End</th><th>Market Rent</th><th>In-Place Rent</th><th>Δ to Mkt</th></tr></thead>
+      <tbody>
+        <tr><td>101</td><td>1BR</td><td>680</td><td style="color:var(--accent2)">Occupied</td><td>Smith, J.</td><td>03/2025</td><td>02/2026</td><td>$1,450</td><td>$1,350</td><td style="color:var(--danger)">-$100</td></tr>
+        <tr><td>102</td><td>2BR</td><td>950</td><td style="color:var(--accent2)">Occupied</td><td>Garcia, M.</td><td>08/2024</td><td>07/2025</td><td>$1,800</td><td>$1,650</td><td style="color:var(--danger)">-$150</td></tr>
+        <tr><td>103</td><td>Studio</td><td>420</td><td style="color:var(--danger)">Vacant</td><td>—</td><td>—</td><td>—</td><td>$1,150</td><td>—</td><td>—</td></tr>
+        <tr><td>104</td><td>1BR</td><td>710</td><td style="color:var(--accent2)">Occupied</td><td>Chen, W.</td><td>01/2025</td><td>12/2025</td><td>$1,450</td><td>$1,425</td><td style="color:var(--warn)">-$25</td></tr>
+        <tr><td>105</td><td>2BR</td><td>980</td><td style="color:var(--warn)">Notice</td><td>Patel, R.</td><td>06/2024</td><td>05/2025</td><td>$1,800</td><td>$1,550</td><td style="color:var(--danger)">-$250</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Key Concepts When Reading Rent Rolls</h3>
+
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">Loss-to-Lease (LTL)</div>
+      <div class="term-def">The difference between market rent and in-place rent, summed across all units. Shows how much revenue you're "leaving on the table." High LTL = organic rent growth opportunity.</div>
+      <div class="term-example">Mkt $1,450 - In-place $1,350 = $100 LTL on Unit 101</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Mark-to-Market</div>
+      <div class="term-def">The analysis of bringing every lease to current market rent. If total mark-to-market is +8%, that means in-place rents are 8% below market — significant upside at renewal.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Physical Occupancy</div>
+      <div class="term-def">Occupied units ÷ total units. Simple headcount. Above: 3 occupied + 1 notice / 5 total = 60-80% depending on how you count notice.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Economic Occupancy</div>
+      <div class="term-def">Actual collected rent ÷ gross potential rent. Always lower than physical occupancy because it captures concessions, bad debt, and vacancy. This is the number that matters for underwriting.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Lease Expiration Schedule</div>
+      <div class="term-def">When leases roll — you want them staggered, not all expiring the same month. Concentrated expirations in winter months = higher vacancy risk.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Renewal Rate</div>
+      <div class="term-def">Percentage of expiring leases that renew. Typical stabilized: 50-60%. Renewals are cheaper than new leases (no turnover cost, no downtime, lower commission).</div>
+    </div>
+  </div>
+
+  <h3>Interactive: Occupancy & LTL Calculator</h3>
+  <div class="calculator">
+    <h4>Quick Rent Roll Analysis</h4>
+    <div class="calc-row">
+      <label>Total Units</label>
+      <input type="number" id="rrUnits" value="200" oninput="calcRR()">
+    </div>
+    <div class="calc-row">
+      <label>Occupied Units</label>
+      <input type="number" id="rrOcc" value="186" oninput="calcRR()">
+    </div>
+    <div class="calc-row">
+      <label>Avg In-Place Rent</label>
+      <input type="number" id="rrInPlace" value="1350" oninput="calcRR()">
+    </div>
+    <div class="calc-row">
+      <label>Avg Market Rent</label>
+      <input type="number" id="rrMarket" value="1475" oninput="calcRR()">
+    </div>
+    <div class="calc-result" id="rrResult">Physical Occupancy: 93.0% | LTL/unit: $125 | Annual LTL: $300,000 | Mark-to-Market: +9.3%</div>
+  </div>
+
+  <div class="platform-callout">
+    <div class="callout-label">Capactive Platform Connection</div>
+    Your Lease Analysis module runs a 7-layer pricing pipeline on each property's rent roll: break-even floor calculation → scarcity weighting → velocity measurement → asking-vs-achieved gap → seasonality adjustment → capped premium → posture recommendation (push / hold / concede). This automates the analysis an asset manager does manually each month.
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz" id="quiz4">
+    <h3>Knowledge Check — Module 4</h3>
+    <div class="quiz-q" data-mod="4" data-q="0" data-answer="1">
+      <p>1. A 150-unit property has 140 occupied units and collects $185,000/month against a GPR of $217,500. What is the economic occupancy?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(4,0,0)">93.3% (physical)</div>
+        <div class="quiz-opt" onclick="answer(4,0,1)">85.1%</div>
+        <div class="quiz-opt" onclick="answer(4,0,2)">88.0%</div>
+        <div class="quiz-opt" onclick="answer(4,0,3)">91.5%</div>
+      </div>
+      <div class="quiz-feedback" id="fb-4-0"></div>
+    </div>
+    <div class="quiz-q" data-mod="4" data-q="1" data-answer="2">
+      <p>2. A property's T-12 shows avg in-place rent of $1,200 and current market rent is $1,350. What is the loss-to-lease percentage?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(4,1,0)">12.5%</div>
+        <div class="quiz-opt" onclick="answer(4,1,1)">88.9%</div>
+        <div class="quiz-opt" onclick="answer(4,1,2)">11.1%</div>
+        <div class="quiz-opt" onclick="answer(4,1,3)">15.0%</div>
+      </div>
+      <div class="quiz-feedback" id="fb-4-1"></div>
+    </div>
+    <div class="quiz-q" data-mod="4" data-q="2" data-answer="0">
+      <p>3. Why is economic occupancy always lower than physical occupancy?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(4,2,0)">Because it accounts for concessions, bad debt, and vacant unit rent loss</div>
+        <div class="quiz-opt" onclick="answer(4,2,1)">Because it uses a different denominator</div>
+        <div class="quiz-opt" onclick="answer(4,2,2)">Because some tenants live there but don't count</div>
+        <div class="quiz-opt" onclick="answer(4,2,3)">It isn't — they're always the same</div>
+      </div>
+      <div class="quiz-feedback" id="fb-4-2"></div>
+    </div>
+    <div class="quiz-score" id="quizScore4"></div>
+  </div>
+  <button class="btn-next" onclick="goTo('mod5')">Next: The Deal →</button>
+</div>
+
+<!-- ==================== MODULE 5: THE DEAL ==================== -->
+<div class="page" id="page-mod5">
+  <h2>Module 5: The Deal</h2>
+  <p class="subtitle">Lifecycle of a multifamily acquisition — from first look to exit.</p>
+
+  <h3>Deal Stages</h3>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Stage</th><th>Duration</th><th>What Happens</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--accent);font-weight:600">1. Sourcing</td><td>Ongoing</td><td>Identify deals through broker relationships, off-market networks, auction platforms. Screen against investment criteria (market, size, class, return targets).</td></tr>
+        <tr><td style="color:var(--accent);font-weight:600">2. Underwriting</td><td>1-2 weeks</td><td>Build a pro forma: model income, expenses, renovations, financing, and projected returns. Decide on offer price.</td></tr>
+        <tr><td style="color:var(--accent);font-weight:600">3. LOI</td><td>3-7 days</td><td>Letter of Intent — non-binding offer with key terms: price, deposit, due diligence period, closing timeline. Seller may counter.</td></tr>
+        <tr><td style="color:var(--accent);font-weight:600">4. PSA</td><td>1-2 weeks</td><td>Purchase & Sale Agreement — binding contract. Defines reps/warranties, contingencies, and earnest money (usually 1-3% of price).</td></tr>
+        <tr><td style="color:var(--accent);font-weight:600">5. Due Diligence</td><td>30-60 days</td><td>Deep dive: physical inspections, environmental (Phase I/II), title search, lease audit, financial verification, insurance review. This is where deals die or get re-traded.</td></tr>
+        <tr><td style="color:var(--accent);font-weight:600">6. Financing</td><td>45-60 days</td><td>Secure debt: agency (Fannie/Freddie), bridge loan, bank loan, or CMBS. Lender does their own appraisal and underwriting.</td></tr>
+        <tr><td style="color:var(--accent);font-weight:600">7. Closing</td><td>1 day</td><td>Wire funds, transfer deed, record documents. Property changes hands.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;font-size:.85rem;color:var(--muted);">Total timeline from LOI to close: typically 60-90 days for conventional deals, 30-45 for bridge/all-cash.</p>
+  </div>
+
+  <h3>The Capital Stack</h3>
+  <p>How a deal gets funded — who puts in money and who gets paid first.</p>
+
+  <div class="card" style="text-align:center;padding:24px;">
+    <div style="display:flex;flex-direction:column;gap:2px;max-width:400px;margin:0 auto;">
+      <div style="background:rgba(248,81,73,.15);border:1px solid var(--danger);padding:12px;border-radius:4px 4px 0 0;">
+        <div style="font-weight:700;color:var(--danger);">GP Equity (5-20%)</div>
+        <div style="font-size:.75rem;color:var(--muted);">Highest risk, highest return. The operators.</div>
+      </div>
+      <div style="background:rgba(210,153,34,.12);border:1px solid var(--warn);padding:12px;">
+        <div style="font-weight:700;color:var(--warn);">LP Equity (15-30%)</div>
+        <div style="font-size:.75rem;color:var(--muted);">Limited Partners — passive investors. Get preferred return + profit split.</div>
+      </div>
+      <div style="background:rgba(88,166,255,.1);border:1px solid var(--accent);padding:12px;">
+        <div style="font-weight:700;color:var(--accent);">Mezzanine / Pref Equity (0-15%)</div>
+        <div style="font-size:.75rem;color:var(--muted);">Optional middle layer. Higher cost than senior debt, lower priority than equity.</div>
+      </div>
+      <div style="background:rgba(63,185,80,.1);border:1px solid var(--accent2);padding:12px;border-radius:0 0 4px 4px;">
+        <div style="font-weight:700;color:var(--accent2);">Senior Debt (60-75%)</div>
+        <div style="font-size:.75rem;color:var(--muted);">First priority — gets paid first. Lowest cost, lowest risk.</div>
+      </div>
+    </div>
+    <p style="margin-top:16px;font-size:.85rem;color:var(--muted);">↑ Higher risk / return &nbsp;&nbsp;&nbsp; ↓ Lower risk / return. Payments flow bottom-up: debt first, then mezz, then LP, then GP.</p>
+  </div>
+
+  <h3>Key Financing Types</h3>
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">Agency Debt (Fannie Mae / Freddie Mac)</div>
+      <div class="term-def">Government-backed loans for stabilized multifamily (90%+ occupancy). Best rates, longest terms (7-12 years), but strict requirements. The gold standard.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Bridge Loan</div>
+      <div class="term-def">Short-term (1-3 years) floating-rate loan for transitional assets. Higher rate but allows interest-only payments during renovation. The value-add workhorse.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">CMBS</div>
+      <div class="term-def">Commercial Mortgage-Backed Securities — loans bundled and sold to bond investors. Competitive rates but inflexible terms and difficult to modify. "Securitized" debt.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">GP / LP Structure</div>
+      <div class="term-def">GP (General Partner) operates the deal and earns fees + promote. LP (Limited Partner) contributes capital passively. Typical split: LP gets 8% preferred return, then profits split 70/30 or 80/20 (LP/GP).</div>
+    </div>
+  </div>
+
+  <h3>Business Plan Types</h3>
+  <table class="data-table">
+    <thead><tr><th>Strategy</th><th>Risk</th><th>Target IRR</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td style="font-weight:600">Core</td><td>Low</td><td>6-9%</td><td>Stabilized Class A in top markets. Cash flow play, minimal upside.</td></tr>
+      <tr><td style="font-weight:600">Core-Plus</td><td>Low-Med</td><td>8-12%</td><td>Stable with light value-add (amenity upgrades, operational improvements).</td></tr>
+      <tr><td style="font-weight:600">Value-Add</td><td>Medium</td><td>13-18%</td><td>Renovate + push rents. The most common institutional strategy.</td></tr>
+      <tr><td style="font-weight:600">Opportunistic</td><td>High</td><td>18-25%+</td><td>Ground-up development, distressed turnaround, or major repositioning.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Quiz -->
+  <div class="quiz" id="quiz5">
+    <h3>Knowledge Check — Module 5</h3>
+    <div class="quiz-q" data-mod="5" data-q="0" data-answer="3">
+      <p>1. Put these in order: PSA → Due Diligence → LOI → Closing</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(5,0,0)">PSA → LOI → Due Diligence → Closing</div>
+        <div class="quiz-opt" onclick="answer(5,0,1)">Due Diligence → LOI → PSA → Closing</div>
+        <div class="quiz-opt" onclick="answer(5,0,2)">LOI → Due Diligence → PSA → Closing</div>
+        <div class="quiz-opt" onclick="answer(5,0,3)">LOI → PSA → Due Diligence → Closing</div>
+      </div>
+      <div class="quiz-feedback" id="fb-5-0"></div>
+    </div>
+    <div class="quiz-q" data-mod="5" data-q="1" data-answer="1">
+      <p>2. In the capital stack, who gets paid first?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(5,1,0)">GP equity</div>
+        <div class="quiz-opt" onclick="answer(5,1,1)">Senior debt holders</div>
+        <div class="quiz-opt" onclick="answer(5,1,2)">LP equity</div>
+        <div class="quiz-opt" onclick="answer(5,1,3)">Mezzanine lenders</div>
+      </div>
+      <div class="quiz-feedback" id="fb-5-1"></div>
+    </div>
+    <div class="quiz-q" data-mod="5" data-q="2" data-answer="2">
+      <p>3. Which financing type is best for a value-add deal requiring renovations during a 2-year hold?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(5,2,0)">Agency (Fannie Mae)</div>
+        <div class="quiz-opt" onclick="answer(5,2,1)">CMBS</div>
+        <div class="quiz-opt" onclick="answer(5,2,2)">Bridge loan</div>
+        <div class="quiz-opt" onclick="answer(5,2,3)">HUD</div>
+      </div>
+      <div class="quiz-feedback" id="fb-5-2"></div>
+    </div>
+    <div class="quiz-score" id="quizScore5"></div>
+  </div>
+  <button class="btn-next" onclick="goTo('mod6')">Next: The Market →</button>
+</div>
+
+<!-- ==================== MODULE 6: THE MARKET ==================== -->
+<div class="page" id="page-mod6">
+  <h2>Module 6: The Market</h2>
+  <p class="subtitle">How to read, analyze, and sound smart about multifamily markets.</p>
+
+  <h3>The Big Four Indicators</h3>
+  <p>Every market conversation comes down to four forces. Master these and you can discuss any market intelligently.</p>
+
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">1. Absorption</div>
+      <div class="term-def">Net new units occupied over a period. Positive absorption = demand outpacing supply. The primary demand signal. "Dallas absorbed 12,000 units in the last 12 months" = strong demand.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">2. Deliveries (New Supply)</div>
+      <div class="term-def">Units completed and available for occupancy. When deliveries exceed absorption, occupancy drops and rents soften. "Phoenix has 25,000 units delivering this year" = supply headwind.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">3. Occupancy</div>
+      <div class="term-def">The equilibrium between supply and demand. 95%+ = "tight" market favoring landlords. Below 92% = softening. Below 88% = distress. Watch the trend, not just the number.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">4. Rent Growth</div>
+      <div class="term-def">Year-over-year change in effective rents. The lagging indicator — rent growth follows occupancy trends with a 2-6 month delay. Negative rent growth signals oversupply.</div>
+    </div>
+  </div>
+
+  <h3>Supply-Demand Framework</h3>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Scenario</th><th>Absorption vs Deliveries</th><th>Occupancy Trend</th><th>Rent Growth</th><th>Posture</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--accent2);font-weight:600">Bullish</td><td>Absorption &gt; Deliveries</td><td>Rising / Stable &gt;95%</td><td>Positive 3-5%+</td><td>Push rents, invest</td></tr>
+        <tr><td style="color:var(--warn);font-weight:600">Neutral</td><td>Roughly balanced</td><td>Stable 93-95%</td><td>Flat to low single digits</td><td>Hold, selective invest</td></tr>
+        <tr><td style="color:var(--danger);font-weight:600">Bearish</td><td>Deliveries &gt; Absorption</td><td>Falling below 93%</td><td>Negative or flat</td><td>Concede on rents, wait</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Pipeline & Forward Supply</h3>
+  <p>Deliveries tell you what's happening now. The construction pipeline tells you what's coming. In multifamily, it takes 18-24 months from groundbreaking to delivery. So today's "under construction" number = next year's supply.</p>
+  <p>When someone says "Nashville has 3 years of pipeline," they mean that at the current pace of absorption, it would take 3 years to absorb all planned and under-construction units. That's a lot of supply.</p>
+
+  <h3>Reading the Signals</h3>
+  <div class="card-grid">
+    <div class="term-card">
+      <div class="term-name">Concession Trends</div>
+      <div class="term-def">Rising concessions = softening market. Landlords are competing for tenants. Watch for "6-8 weeks free" — that signals meaningful oversupply.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Permit Activity</div>
+      <div class="term-def">Leading indicator of future supply. High permits today = deliveries in 18-24 months. If permits are dropping, the supply pipeline is slowing — potentially bullish for existing owners.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Job Growth</div>
+      <div class="term-def">The fundamental driver of housing demand. Markets with strong, diversified employment bases absorb supply more easily. Tech-heavy markets can swing sharply with layoff cycles.</div>
+    </div>
+    <div class="term-card">
+      <div class="term-name">Migration Patterns</div>
+      <div class="term-def">Domestic in-migration drives demand in Sun Belt markets. Remote work has amplified this — people moving from high-cost coastal metros to lower-cost Sun Belt cities.</div>
+    </div>
+  </div>
+
+  <h3>Conversation Phrases You Should Know</h3>
+  <div class="card">
+    <ul style="list-style:none;padding:0;">
+      <li style="margin-bottom:10px;"><strong>"The market is in a supply trough"</strong> — Few new units coming online. Good for existing owners — less competition.</li>
+      <li style="margin-bottom:10px;"><strong>"Cap rates are widening in secondary markets"</strong> — Buyers are demanding higher yields (lower prices) in smaller cities. Risk premium increasing.</li>
+      <li style="margin-bottom:10px;"><strong>"We're seeing negative leverage"</strong> — The cap rate is below the interest rate on debt. Dangerous: you're paying more for debt than the property yields.</li>
+      <li style="margin-bottom:10px;"><strong>"Rent growth is reverting to mean"</strong> — After an abnormal period (COVID-era spikes), growth is returning to the long-term average (2-4% annually).</li>
+      <li style="margin-bottom:10px;"><strong>"The bid-ask spread is still wide"</strong> — Sellers want higher prices than buyers will pay. Deals aren't getting done. Transaction volume is low.</li>
+      <li style="margin-bottom:10px;"><strong>"We're penciling a 5-year exit at a 25 bps compression"</strong> — Their financial model assumes cap rates will be 0.25% lower when they sell in 5 years.</li>
+    </ul>
+  </div>
+
+  <div class="platform-callout">
+    <div class="callout-label">Capactive Platform Connection</div>
+    Your Market Scorecard runs an 11-step tilt engine scoring 359 markets across demand/supply, occupancy, and rent growth dimensions. It computes z-scores, applies asymmetric adjustments, and generates a single composite score that ranks markets from strongest to weakest fundamentals. The Market Intelligence module provides dashboards across 371 markets with signal generation and comparison tools.
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz" id="quiz6">
+    <h3>Knowledge Check — Module 6</h3>
+    <div class="quiz-q" data-mod="6" data-q="0" data-answer="0">
+      <p>1. A market absorbed 5,000 units last year but 8,000 new units were delivered. What is the likely outcome?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(6,0,0)">Occupancy drops, rent growth slows or turns negative</div>
+        <div class="quiz-opt" onclick="answer(6,0,1)">Rents increase because there are more units available</div>
+        <div class="quiz-opt" onclick="answer(6,0,2)">No impact — supply and demand are always balanced</div>
+        <div class="quiz-opt" onclick="answer(6,0,3)">Cap rates compress</div>
+      </div>
+      <div class="quiz-feedback" id="fb-6-0"></div>
+    </div>
+    <div class="quiz-q" data-mod="6" data-q="1" data-answer="2">
+      <p>2. "Negative leverage" means:</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(6,1,0)">The property has no debt</div>
+        <div class="quiz-opt" onclick="answer(6,1,1)">The LTV is above 80%</div>
+        <div class="quiz-opt" onclick="answer(6,1,2)">The cap rate is below the interest rate on the loan</div>
+        <div class="quiz-opt" onclick="answer(6,1,3)">The property is losing money</div>
+      </div>
+      <div class="quiz-feedback" id="fb-6-1"></div>
+    </div>
+    <div class="quiz-q" data-mod="6" data-q="2" data-answer="1">
+      <p>3. Construction permits in a submarket dropped 40% year-over-year. What signal does this send?</p>
+      <div class="quiz-options">
+        <div class="quiz-opt" onclick="answer(6,2,0)">Bearish — the market is weakening</div>
+        <div class="quiz-opt" onclick="answer(6,2,1)">Potentially bullish — future supply pipeline is shrinking</div>
+        <div class="quiz-opt" onclick="answer(6,2,2)">Neutral — permits don't affect anything</div>
+        <div class="quiz-opt" onclick="answer(6,2,3)">Bearish — less construction means fewer jobs</div>
+      </div>
+      <div class="quiz-feedback" id="fb-6-2"></div>
+    </div>
+    <div class="quiz-score" id="quizScore6"></div>
+  </div>
+  <button class="btn-next" onclick="goTo('dashboard')">← Back to Dashboard</button>
+</div>
+
+</div><!-- end .main -->
+
+<script>
+// ===== STATE (no localStorage) =====
+var state = {
+  currentPage: 'dashboard',
+  quizAnswers: {},  // {mod: {q: chosen}}
+  quizScores: {},   // {mod: {correct, total}}
+  modulesCompleted: new Set(),
+  visited: new Set(['dashboard'])
+};
+
+// ===== GLOSSARY DATA =====
+var glossary = [
+  {term:"NOI",def:"Net Operating Income. Revenue minus operating expenses, before debt service. The most important number in CRE."},
+  {term:"Cap Rate",def:"Capitalization Rate. NOI ÷ Price. The unlevered yield of a property. Lower cap = higher price."},
+  {term:"Basis Points (bps)",def:"1/100th of a percent. 100 bps = 1%. Used for cap rate and spread discussions."},
+  {term:"GPR",def:"Gross Potential Rent. Maximum rent if 100% occupied at market rates."},
+  {term:"EGI",def:"Effective Gross Income. GPR minus vacancy and concessions, plus other income."},
+  {term:"Vacancy Loss",def:"Revenue lost from unoccupied units. Typically 3-8% for stabilized properties."},
+  {term:"Concessions",def:"Discounts to attract tenants — free months, reduced rent. Reduces effective rent below face rent."},
+  {term:"OpEx",def:"Operating Expenses. Day-to-day costs: payroll, utilities, insurance, taxes, maintenance."},
+  {term:"CapEx",def:"Capital Expenditures. Major improvements: new roof, HVAC, unit renovations."},
+  {term:"Expense Ratio",def:"OpEx as a percentage of EGI. Typical multifamily: 40-55%."},
+  {term:"T-12",def:"Trailing 12 months of actual financial performance."},
+  {term:"T-3",def:"Trailing 3 months, annualized. Shows recent momentum."},
+  {term:"PPU",def:"Per-unit normalization. Allows comparison across different property sizes."},
+  {term:"PPSF",def:"Per-square-foot normalization. Common for pricing and expense analysis."},
+  {term:"Pro Forma",def:"Projected future performance based on assumptions. The business plan in numbers."},
+  {term:"LTV",def:"Loan-to-Value. Loan amount ÷ property value. Lenders typically cap at 65-80%."},
+  {term:"Debt Service",def:"Total annual mortgage payments (principal + interest)."},
+  {term:"DSCR",def:"Debt Service Coverage Ratio. NOI ÷ debt service. Lenders require 1.20-1.35x minimum."},
+  {term:"Cash-on-Cash",def:"Annual pre-tax cash flow ÷ total equity invested. The return you feel in your bank account."},
+  {term:"IRR",def:"Internal Rate of Return. Time-weighted return across the entire hold period including exit."},
+  {term:"Equity Multiple",def:"Total distributions ÷ total equity invested. 2.0x = you doubled your money."},
+  {term:"Class A/B/C/D",def:"Property quality classification. A=luxury/new, B=good/mid-age, C=older/dated, D=distressed."},
+  {term:"Value-Add",def:"Investment strategy: buy, renovate, raise rents, sell at higher value. The most common institutional approach."},
+  {term:"Unit Mix",def:"Distribution of unit types (studio, 1BR, 2BR, 3BR) in a property."},
+  {term:"Submarket",def:"A sub-area within an MSA with distinct supply/demand dynamics."},
+  {term:"MSA",def:"Metropolitan Statistical Area. The full metro region (e.g., 'Dallas-Fort Worth')."},
+  {term:"Income Approach",def:"CRE valuation method: Value = NOI ÷ Cap Rate. The primary method for multifamily."},
+  {term:"Spread",def:"Difference between cap rate and risk-free rate (usually 10-Year Treasury)."},
+  {term:"Comparable Sales (Comps)",def:"Recent sales of similar properties used to validate pricing."},
+  {term:"Loss-to-Lease (LTL)",def:"Market rent minus in-place rent. Shows organic rent growth opportunity."},
+  {term:"Mark-to-Market",def:"Analysis of bringing every lease to current market rent."},
+  {term:"Physical Occupancy",def:"Occupied units ÷ total units. Simple headcount."},
+  {term:"Economic Occupancy",def:"Collected rent ÷ gross potential rent. Always ≤ physical occupancy."},
+  {term:"Lease Expiration Schedule",def:"When leases roll. Staggered = less risk than concentrated expirations."},
+  {term:"Renewal Rate",def:"% of expiring leases that renew. Typical stabilized: 50-60%."},
+  {term:"LOI",def:"Letter of Intent. Non-binding offer outlining key deal terms."},
+  {term:"PSA",def:"Purchase & Sale Agreement. Binding contract with all deal terms."},
+  {term:"Due Diligence",def:"30-60 day investigation: inspections, title, lease audit, financials."},
+  {term:"Capital Stack",def:"The layers of funding: senior debt, mezzanine, LP equity, GP equity."},
+  {term:"GP",def:"General Partner. The operator who manages the deal and earns fees + promote."},
+  {term:"LP",def:"Limited Partner. Passive investor who contributes capital."},
+  {term:"Preferred Return",def:"LP's minimum return before GP receives profit split. Typically 6-8%."},
+  {term:"Promote / Carried Interest",def:"GP's share of profits above the preferred return. The operator's upside incentive."},
+  {term:"Agency Debt",def:"Government-backed loans (Fannie/Freddie) for stabilized multifamily. Best rates."},
+  {term:"Bridge Loan",def:"Short-term floating-rate loan for transitional assets. The value-add workhorse."},
+  {term:"CMBS",def:"Commercial Mortgage-Backed Securities. Securitized debt with competitive rates but inflexible terms."},
+  {term:"Core",def:"Low-risk strategy: stabilized Class A, top markets. Cash flow play, 6-9% target IRR."},
+  {term:"Core-Plus",def:"Low-medium risk: stable with light value-add. 8-12% target IRR."},
+  {term:"Opportunistic",def:"High-risk: ground-up development, distressed turnaround. 18-25%+ target IRR."},
+  {term:"Absorption",def:"Net new units occupied over a period. The primary demand signal."},
+  {term:"Deliveries",def:"New construction units completed and available for occupancy."},
+  {term:"Pipeline",def:"Units under construction or permitted but not yet delivered."},
+  {term:"Negative Leverage",def:"When cap rate is below the interest rate on debt. Dangerous — paying more for debt than property yields."},
+  {term:"Bid-Ask Spread",def:"Gap between seller's asking price and buyer's offer. Wide = deals not getting done."},
+  {term:"Rent Growth",def:"Year-over-year change in effective rents. Lagging indicator following occupancy trends."},
+  {term:"RevPAU",def:"Revenue Per Available Unit. Total revenue ÷ total units. Captures occupancy + rent together."},
+  {term:"Phase I ESA",def:"Environmental Site Assessment. Desktop + site visit to identify contamination risk. Required for financing."},
+  {term:"Stabilized",def:"Property operating at market occupancy (93%+) with consistent cash flow. Opposite of transitional."},
+  {term:"Repositioning",def:"Changing a property's market positioning — e.g., converting Class C to Class B through renovations."},
+  {term:"Make-Ready",def:"Cost to prepare a vacant unit for a new tenant: cleaning, painting, minor repairs. Typically $1,000-3,000."},
+  {term:"Turnover Cost",def:"Total cost when a tenant leaves: make-ready + vacancy days + leasing commission + marketing."},
+  {term:"Waterfall",def:"Distribution hierarchy defining how cash flow and profits are split among capital stack participants."},
+  {term:"Downtime",def:"Days a unit sits vacant between tenants. Directly reduces economic occupancy and revenue."},
+  {term:"Break-Even Rent",def:"Minimum rent needed to cover operating costs and debt service for a unit. Floor for pricing."},
+];
+
+glossary.sort((a,b) => a.term.localeCompare(b.term));
+
+function buildGlossary() {
+  var el = document.getElementById('glossaryList');
+  el.innerHTML = glossary.map(g =>
+    '<div class="glossary-item" data-term="'+g.term.toLowerCase()+'">'+
+    '<div class="g-term">'+g.term+'</div>'+
+    '<div class="g-def">'+g.def+'</div></div>'
+  ).join('');
+}
+
+function filterGlossary(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.glossary-item').forEach(function(el) {
+    el.style.display = (el.dataset.term.includes(q) || el.querySelector('.g-def').textContent.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+
+function toggleGlossary() {
+  document.getElementById('glossaryPanel').classList.toggle('open');
+}
+
+// ===== NAVIGATION =====
+function goTo(page) {
+  state.currentPage = page;
+  state.visited.add(page);
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(n) {
+    n.classList.toggle('active', n.dataset.page === page);
+  });
+  window.scrollTo(0, 0);
+  // close sidebar on mobile
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+  updateProgress();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
+
+// ===== QUIZ ENGINE =====
+var quizFeedback = {
+  '1-0': {correct:'Correct! NOI = EGI - OpEx = $3.6M - $1.8M = $1.8M.', wrong:'Not quite. NOI = EGI minus Operating Expenses. $3.6M - $1.8M = $1.8M.'},
+  '1-1': {correct:'Right! A decrease = compression. 5.5% to 5.0% = 50 bps compressed.', wrong:'When cap rates decrease, we say they "compressed." 5.5% - 5.0% = 0.5% = 50 bps of compression.'},
+  '1-2': {correct:'Correct! $2M ÷ $40M = 0.05 = 5.0% cap rate.', wrong:'Cap Rate = NOI ÷ Price. $2,000,000 ÷ $40,000,000 = 0.05 = 5.0%.'},
+  '1-3': {correct:'Correct! DSCR = NOI ÷ Debt Service → Debt Service = NOI ÷ DSCR = $1.5M ÷ 1.25 = $1.2M.', wrong:'DSCR = NOI ÷ Debt Service. Rearranging: Max Debt Service = $1.5M ÷ 1.25 = $1.2M.'},
+  '2-0': {correct:'Right! 1985 build, original kitchens, dated clubhouse, 20% below market = classic Class C.', wrong:'A 40-year-old property with dated finishes and below-market rents is Class C — prime value-add candidate.'},
+  '2-1': {correct:'Exactly! Value-add creates value by increasing NOI through physical and operational improvements.', wrong:'Value-add is all about increasing NOI — renovating units to push rents and improving operations to cut expenses.'},
+  '2-2': {correct:'Right! Studios have the smallest SF but command the highest rent per square foot.', wrong:'Studios typically have the highest rent per square foot because their small size commands a premium per SF.'},
+  '3-0': {correct:'Correct! Value = $800K ÷ 0.05 = $16,000,000.', wrong:'Value = NOI ÷ Cap Rate = $800,000 ÷ 0.05 = $16,000,000.'},
+  '3-1': {correct:'Right! At 5%: $NOI/0.05. At 6%: $NOI/0.06. The value drops ~16.7%.', wrong:'Higher cap rate = lower value. Value at 5%: NOI/0.05. At 6%: NOI/0.06 = ~17% decrease.'},
+  '3-2': {correct:'Correct! 5.0% - 4.5% = 50 bps. That is very tight — minimal risk premium.', wrong:'Spread = Cap Rate - Treasury = 5.0% - 4.5% = 50 bps. That is historically tight, suggesting possible overheating.'},
+  '4-0': {correct:'Correct! Economic occupancy = $185K ÷ $217.5K = 85.1%.', wrong:'Economic occupancy = actual collected rent ÷ GPR = $185,000 ÷ $217,500 = 85.1%. Lower than the 93.3% physical occupancy.'},
+  '4-1': {correct:'Right! LTL% = ($1,350 - $1,200) ÷ $1,350 = 11.1%.', wrong:'Loss-to-Lease = (Market - In-Place) ÷ Market = ($1,350 - $1,200) ÷ $1,350 = 11.1%.'},
+  '4-2': {correct:'Exactly! Economic occupancy captures all revenue leakage, not just empty units.', wrong:'Economic occupancy is lower because it captures concessions and bad debt on top of vacancy — the true revenue picture.'},
+  '5-0': {correct:'Correct! LOI (non-binding offer) → PSA (binding contract) → Due Diligence (investigation) → Closing.', wrong:'The correct order: LOI → PSA → Due Diligence → Closing. The LOI comes first as a non-binding offer.'},
+  '5-1': {correct:'Right! Debt is at the bottom of the capital stack — first in line to be repaid.', wrong:'Senior debt holders get paid first. Payments flow bottom-up through the capital stack.'},
+  '5-2': {correct:'Correct! Bridge loans are designed for transitional assets — short-term, interest-only during renovations.', wrong:'Bridge loans are the value-add workhorse: short-term, floating rate, interest-only during renovation.'},
+  '6-0': {correct:'Right! Deliveries > absorption = excess supply → lower occupancy → rent pressure.', wrong:'When supply outpaces demand (deliveries > absorption), occupancy drops and rents soften or go negative.'},
+  '6-1': {correct:'Correct! Negative leverage means debt costs more than the property yields — very dangerous.', wrong:'Negative leverage = cap rate < interest rate. You are paying more for debt than the property earns unlevered.'},
+  '6-2': {correct:'Right! Fewer permits now = less supply in 18-24 months = potentially tighter market ahead.', wrong:'Permits are a leading indicator. Fewer permits today means less future supply, which is bullish for existing owners.'},
+};
+
+function answer(mod, q, chosen) {
+  var key = mod + '-' + q;
+  if (state.quizAnswers[key] !== undefined) return; // already answered
+  state.quizAnswers[key] = chosen;
+
+  var qEl = document.querySelector('[data-mod="'+mod+'"][data-q="'+q+'"]');
+  var correct = parseInt(qEl.dataset.answer);
+  var opts = qEl.querySelectorAll('.quiz-opt');
+  var fb = document.getElementById('fb-' + key);
+
+  opts.forEach(function(o, i) {
+    o.classList.add('disabled');
+    if (i === correct) o.classList.add('correct');
+    if (i === chosen && chosen !== correct) o.classList.add('wrong');
+  });
+
+  var isCorrect = chosen === correct;
+  fb.textContent = isCorrect ? quizFeedback[key].correct : quizFeedback[key].wrong;
+  fb.className = 'quiz-feedback show ' + (isCorrect ? 'correct' : 'wrong');
+
+  // check if all questions in module answered
+  checkModuleComplete(mod);
+}
+
+function checkModuleComplete(mod) {
+  var qs = document.querySelectorAll('[data-mod="'+mod+'"]');
+  var answered = 0, correct = 0;
+  qs.forEach(function(q) {
+    var key = mod + '-' + q.dataset.q;
+    if (state.quizAnswers[key] !== undefined) {
+      answered++;
+      if (state.quizAnswers[key] === parseInt(q.dataset.answer)) correct++;
+    }
+  });
+  if (answered === qs.length) {
+    state.quizScores[mod] = {correct: correct, total: qs.length};
+    state.modulesCompleted.add(mod);
+    var scoreEl = document.getElementById('quizScore' + mod);
+    scoreEl.style.display = 'block';
+    scoreEl.textContent = 'Score: ' + correct + ' / ' + qs.length + ' (' + Math.round(correct/qs.length*100) + '%)';
+    scoreEl.style.color = correct === qs.length ? 'var(--accent2)' : (correct >= qs.length/2 ? 'var(--warn)' : 'var(--danger)');
+
+    // update nav
+    var navScore = document.getElementById('score' + mod);
+    if (navScore) navScore.textContent = correct + '/' + qs.length;
+    var navItem = document.querySelector('[data-page="mod'+mod+'"]');
+    if (navItem && correct === qs.length) navItem.classList.add('completed');
+
+    updateProgress();
+  }
+}
+
+function updateProgress() {
+  var total = 6;
+  var done = state.modulesCompleted.size;
+  var pct = Math.round(done / total * 100);
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('dashCompleted').textContent = done;
+
+  // avg score
+  var scores = Object.values(state.quizScores);
+  if (scores.length) {
+    var avg = scores.reduce(function(s,v) { return s + v.correct/v.total*100; }, 0) / scores.length;
+    document.getElementById('dashAvgScore').textContent = Math.round(avg) + '%';
+  }
+
+  // dash status
+  for (var i = 1; i <= 6; i++) {
+    var el = document.getElementById('dash-s' + i);
+    if (state.modulesCompleted.has(i)) {
+      el.textContent = 'Completed ✓'; el.className = 'dc-status completed';
+    } else if (state.visited.has('mod' + i)) {
+      el.textContent = 'In Progress'; el.className = 'dc-status in-progress';
+    } else {
+      el.textContent = 'Not Started'; el.className = 'dc-status not-started';
+    }
+  }
+}
+
+// ===== CALCULATORS =====
+function calcCapRate() {
+  var noi = parseFloat(document.getElementById('calcNOI').value) || 0;
+  var cap = parseFloat(document.getElementById('calcCap').value) || 1;
+  var units = parseInt(document.getElementById('calcUnits').value) || 1;
+  var value = noi / (cap / 100);
+  var ppu = value / units;
+  document.getElementById('calcResult').textContent =
+    'Property Value: $' + fmt(value) + '  |  Per Unit (' + units + ' units): $' + fmt(ppu);
+}
+
+function calcRR() {
+  var units = parseInt(document.getElementById('rrUnits').value) || 1;
+  var occ = parseInt(document.getElementById('rrOcc').value) || 0;
+  var inp = parseFloat(document.getElementById('rrInPlace').value) || 0;
+  var mkt = parseFloat(document.getElementById('rrMarket').value) || 1;
+  var physOcc = (occ / units * 100).toFixed(1);
+  var ltlUnit = mkt - inp;
+  var annLTL = ltlUnit * occ * 12;
+  var mtm = ((mkt - inp) / inp * 100).toFixed(1);
+  document.getElementById('rrResult').textContent =
+    'Physical Occupancy: ' + physOcc + '% | LTL/unit: $' + Math.round(ltlUnit) +
+    ' | Annual LTL: $' + fmt(annLTL) + ' | Mark-to-Market: +' + mtm + '%';
+}
+
+function fmt(n) {
+  return Math.round(n).toLocaleString('en-US');
+}
+
+// ===== INIT =====
+buildGlossary();
+calcCapRate();
+calcRR();
+</script>
+</body>
+</html>

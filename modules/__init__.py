@@ -10,6 +10,7 @@ when registered in INSTALLED_MODULES below.
 
 import importlib
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,13 @@ class ModuleRegistry:
         """Import and register all installed modules."""
         for module_path in INSTALLED_MODULES:
             try:
-                mod = importlib.import_module(f'.{module_path}', package='realestate_extractor')
+                # Try relative import first (works when run via run.py),
+                # fall back to absolute (works from project root)
+                try:
+                    mod = importlib.import_module(
+                        f'.{module_path}', package='realestate_extractor')
+                except (ImportError, ModuleNotFoundError):
+                    mod = importlib.import_module(module_path)
                 if hasattr(mod, 'module_instance'):
                     instance = mod.module_instance
                     self._modules[instance.name] = instance
@@ -43,7 +50,14 @@ class ModuleRegistry:
                 else:
                     logger.warning(f'Module {module_path} has no module_instance')
             except Exception as e:
-                logger.warning(f'Failed to load module {module_path}: {e}')
+                logger.error(f'Failed to load module {module_path}: {e}')
+                logger.debug(traceback.format_exc())
+        loaded = len(self._modules)
+        failed = len(INSTALLED_MODULES) - loaded
+        if failed:
+            logger.warning(f'Module discovery: {loaded} loaded, {failed} failed')
+        else:
+            logger.info(f'Module discovery: all {loaded} modules loaded')
         self._loaded = True
 
     def register_routes(self, app):
@@ -55,7 +69,8 @@ class ModuleRegistry:
                 module.register_routes(app)
                 logger.info(f'Registered routes for module: {name}')
             except Exception as e:
-                logger.warning(f'Failed to register routes for {name}: {e}')
+                logger.error(f'Failed to register routes for {name}: {e}')
+                logger.debug(traceback.format_exc())
 
     def get(self, name):
         """Get a module by name."""
