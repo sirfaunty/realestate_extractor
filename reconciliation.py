@@ -57,6 +57,67 @@ def _is_noise(value_raw: str) -> bool:
     return False
 
 
+def _remove_numeric_outliers(entries: List[Dict]) -> List[Dict]:
+    """
+    Remove entries whose numeric value is an extreme outlier.
+    Uses a simple heuristic: if a value is <1% or >100x the median
+    of all numeric values, it's likely an extraction error.
+    Only applies when there are 3+ numeric entries.
+    """
+    numerics = []
+    for e in entries:
+        num = _normalise_numeric(e['value_raw'], e.get('value_numeric'))
+        if num is not None and num > 0:
+            numerics.append(num)
+
+    if len(numerics) < 3:
+        return entries
+
+    numerics.sort()
+    median = numerics[len(numerics) // 2]
+
+    if median == 0:
+        return entries
+
+    kept = []
+    for e in entries:
+        num = _normalise_numeric(e['value_raw'], e.get('value_numeric'))
+        if num is not None and num > 0 and median > 0:
+            ratio = num / median
+            if ratio < 0.01 or ratio > 100:
+                logger.info(
+                    f"Outlier filtered: {e['term_type']} = {e['value_raw']} "
+                    f"(ratio {ratio:.2f}x median) from {e['filename']}"
+                )
+                continue
+        kept.append(e)
+
+    return kept if kept else entries  # never filter everything
+
+
+def _prefer_numeric_format(entries: List[Dict]) -> Dict:
+    """
+    Among entries with equal confidence, prefer values in numeric
+    format (e.g. '2.31%') over written-out form (e.g. 'two%').
+    """
+    if len(entries) <= 1:
+        return entries[0] if entries else {}
+
+    best_conf = max(e['confidence'] for e in entries)
+    top_tier = [e for e in entries if e['confidence'] >= best_conf - 0.01]
+
+    if len(top_tier) <= 1:
+        return top_tier[0] if top_tier else entries[0]
+
+    # Among top confidence, prefer values starting with a digit or $
+    for e in top_tier:
+        raw = (e['value_raw'] or '').strip()
+        if raw and (raw[0].isdigit() or raw[0] == '$'):
+            return e
+
+    return top_tier[0]
+
+
 # ─── Term Type Categorisation ───────────────────────────────────────
 
 # Terms where multiple legitimate values are expected (different instruments)
@@ -76,7 +137,11 @@ _CANONICAL_TERMS = {
 _TIME_VARYING_TERMS = {
     'mortgage_amount', 'escrow_amount', 'mip_rate',
     'replacement_reserves', 'endorsement_date',
-    'managing_member', 'membership_interest_pct',
+}
+
+# Terms with multiple legitimate values per member/party (not conflicts)
+_PER_PARTY_TERMS = {
+    'membership_interest_pct',
 }
 
 # Entity terms that need case-normalised dedup
@@ -252,10 +317,12 @@ def reconcile_terms(db, property_id: int) -> Dict[str, Any]:
 
         # ── Multi-instrument terms → group by instrument, don't merge ──
         if term_type in _MULTI_INSTRUMENT_TERMS:
-            groups = _group_by_instrument(entries, term_type)
+            # Filter outliers before grouping
+            cleaned = _remove_numeric_outliers(entries)
+            groups = _group_by_instrument(cleaned, term_type)
             multi_instrument[term_type] = groups
-            # Also set canonical to the highest-confidence entry
-            best = max(entries, key=lambda e: (e['confidence'], _recency_score(e['filename'], e['doc_type'])))
+            # Pick canonical: prefer numeric format among top confidence
+            best = _prefer_numeric_format(cleaned)
             rt.canonical_value = best['value_raw']
             rt.canonical_numeric = best['value_numeric']
             rt.confidence = best['confidence']
@@ -264,6 +331,29 @@ def reconcile_terms(db, property_id: int) -> Dict[str, Any]:
             rt.source_doc_type = best['doc_type']
             rt.conflict = len(groups) > 1
             rt.notes = f'{len(groups)} instruments'
+            if rt.conflict:
+                conflicts.append(term_type)
+            canonical[term_type] = rt.to_dict()
+            continue
+
+        # ── Per-party terms → keep all, each represents a different member ──
+        if term_type in _PER_PARTY_TERMS:
+            cleaned = _remove_numeric_outliers(entries)
+            groups = _group_by_instrument(cleaned, term_type)
+            multi_instrument[term_type] = groups
+            # Pick the highest value as canonical (majority owner)
+            best = max(cleaned, key=lambda e: (
+                _normalise_numeric(e['value_raw'], e.get('value_numeric')) or 0,
+                e['confidence'],
+            ))
+            rt.canonical_value = best['value_raw']
+            rt.canonical_numeric = best['value_numeric']
+            rt.confidence = best['confidence']
+            rt.source_doc_id = best['doc_id']
+            rt.source_filename = best['filename']
+            rt.source_doc_type = best['doc_type']
+            rt.conflict = len(groups) > 1
+            rt.notes = f'{len(groups)} members'
             if rt.conflict:
                 conflicts.append(term_type)
             canonical[term_type] = rt.to_dict()
@@ -346,8 +436,8 @@ def reconcile_terms(db, property_id: int) -> Dict[str, Any]:
             canonical[term_type] = rt.to_dict()
             continue
 
-        # ── Default: highest confidence wins ──
-        best = max(entries, key=lambda e: (e['confidence'], _recency_score(e['filename'], e['doc_type'])))
+        # ── Default: highest confidence wins, prefer numeric format ──
+        best = _prefer_numeric_format(entries)
         rt.canonical_value = best['value_raw']
         rt.canonical_numeric = best['value_numeric']
         rt.confidence = best['confidence']
