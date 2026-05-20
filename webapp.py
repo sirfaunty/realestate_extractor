@@ -223,17 +223,22 @@ def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_nam
 
 def get_config_store():
     """Get or create a per-request ConfigStore cached in flask.g."""
-    if hasattr(g, '_config_store') and g._config_store is not None:
-        store = g._config_store
-        # Reconnect if a prior caller closed it within this request
-        if store.conn is None:
-            store.connect()
-        else:
-            try:
-                store.conn.execute("SELECT 1")
-            except Exception:
+    # Check if we're in a request context before accessing flask.g
+    try:
+        if hasattr(g, '_config_store') and g._config_store is not None:
+            store = g._config_store
+            # Reconnect if a prior caller closed it within this request
+            if store.conn is None:
                 store.connect()
-        return store
+            else:
+                try:
+                    store.conn.execute("SELECT 1")
+                except Exception:
+                    store.connect()
+            return store
+    except RuntimeError:
+        pass  # Outside request context (background thread) — create fresh
+
     store = ConfigStore(CONFIG_DB, DATA_DIR)
     store.connect()
     try:
@@ -245,8 +250,11 @@ def get_config_store():
 
 def get_usage_tracker():
     """Get or create a per-request UsageTracker cached in flask.g."""
-    if hasattr(g, '_usage_tracker') and g._usage_tracker is not None:
-        return g._usage_tracker
+    try:
+        if hasattr(g, '_usage_tracker') and g._usage_tracker is not None:
+            return g._usage_tracker
+    except RuntimeError:
+        pass
     tracker = UsageTracker(CONFIG_DB)
     tracker.connect()
     try:
@@ -276,16 +284,20 @@ def request_entity_too_large(error):
 
 def get_permission_store():
     """Get or create a per-request PermissionStore cached in flask.g."""
-    if hasattr(g, '_permission_store') and g._permission_store is not None:
-        store = g._permission_store
-        if store.conn is None:
-            store.connect()
-        else:
-            try:
-                store.conn.execute("SELECT 1")
-            except Exception:
+    try:
+        if hasattr(g, '_permission_store') and g._permission_store is not None:
+            store = g._permission_store
+            if store.conn is None:
                 store.connect()
-        return store
+            else:
+                try:
+                    store.conn.execute("SELECT 1")
+                except Exception:
+                    store.connect()
+            return store
+    except RuntimeError:
+        pass  # Outside request context (background thread) — create fresh
+
     store = PermissionStore(CONFIG_DB)
     store.connect()
     try:
@@ -2179,6 +2191,7 @@ def api_reextract(doc_id):
             })
 
         def process_async():
+            db2 = None
             try:
                 db2 = get_org_db(org_id)
                 llm = get_llm()
@@ -2198,7 +2211,8 @@ def api_reextract(doc_id):
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
             finally:
-                db2.close()
+                if db2 is not None:
+                    db2.close()
 
         enqueue_job(job_id, process_async)
 
@@ -2252,6 +2266,7 @@ def api_analyze_property(property_id):
         })
 
     def process_async():
+        db2 = None
         try:
             db2 = get_org_db(org_id)
             llm = get_llm()
@@ -2270,10 +2285,15 @@ def api_analyze_property(property_id):
                 on_step('complete', f'Analysis complete — {summary.get("doc_count", 0)} documents processed')
                 jobs[job_id]['status'] = 'completed'
         except Exception as e:
+            import traceback
+            print(f"[ERROR] Analysis job {job_id} failed: {e}", flush=True)
+            traceback.print_exc()
+            on_step('failed', str(e))
             jobs[job_id]['status'] = 'failed'
             jobs[job_id]['error'] = str(e)
         finally:
-            db2.close()
+            if db2 is not None:
+                db2.close()
 
     enqueue_job(job_id, process_async)
 
@@ -2393,12 +2413,15 @@ def _assess_doc(db, doc):
             if clause_count:
                 parts.append(f'{clause_count} clauses')
             return 'good', ', '.join(parts)
-        # If a dedicated template exists, always flag for re-run —
-        # low classifier confidence shouldn't block types we know
-        # how to extract from.
+        # If a dedicated template exists and doc hasn't been analyzed yet,
+        # flag for re-run.  But if it's already been analyzed and still has
+        # 0 results, accept that — re-running won't help (the content is
+        # genuinely sparse or the file format can't be parsed).
         has_template = doc_type in TEMPLATES
         if conf < 0.5 and not has_template:
             return 'skip', f'Low-confidence {doc_type} ({conf:.0%}), likely misclassified'
+        if analysis_status == 'analyzed':
+            return 'good', f'{doc_type} — analyzed, no extractable content'
         return 'needs_rerun', f'{doc_type} with 0 extraction results'
 
     if total_extracted > 0:
@@ -2680,6 +2703,7 @@ def api_analyze_selective(property_id):
     _mode = mode
 
     def process_async():
+        db2 = None
         try:
             db2 = get_org_db(org_id)
             llm = get_llm()
@@ -2726,10 +2750,15 @@ def api_analyze_selective(property_id):
                         f'{len(_skip_ids)} skipped')
                 jobs[job_id]['status'] = 'completed'
         except Exception as e:
+            import traceback
+            print(f"[ERROR] Analysis job {job_id} failed: {e}", flush=True)
+            traceback.print_exc()
+            on_step('failed', str(e))
             jobs[job_id]['status'] = 'failed'
             jobs[job_id]['error'] = str(e)
         finally:
-            db2.close()
+            if db2 is not None:
+                db2.close()
 
     enqueue_job(job_id, process_async)
 
