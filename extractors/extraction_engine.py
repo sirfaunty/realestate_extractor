@@ -2173,6 +2173,44 @@ class DocumentClassifier:
         # Generic .msg files that didn't match anything more specific above
         # are almost certainly correspondence
         (r'\.msg$', 'correspondence', 0.70),
+        # Balance sheet
+        (r'balance.?sheet', 'balance_sheet', 0.92),
+        (r'statement.?of.?(?:financial\s*)?(?:position|condition)', 'balance_sheet', 0.90),
+        (r'assets.?(?:and|&).?liabilities', 'balance_sheet', 0.88),
+        # Cash flow statement
+        (r'(?:statement.?of\s*)?cash.?flow', 'cash_flow', 0.92),
+        (r'cash.?flow.?statement', 'cash_flow', 0.92),
+        (r'sources.?(?:and|&).?uses.?of.?cash', 'cash_flow', 0.88),
+        # Bank reconciliation
+        (r'bank.?reconciliation|bank.?recon', 'bank_reconciliation', 0.92),
+        (r'reconciliation.?(?:report|statement|summary)', 'bank_reconciliation', 0.88),
+        (r'outstanding.?check.?(?:list|report|register)', 'bank_reconciliation', 0.86),
+        # Security deposit
+        (r'security.?deposit.?(?:ledger|report|schedule|register|list)', 'security_deposit', 0.92),
+        (r'deposit.?(?:ledger|register|accounting)', 'security_deposit', 0.88),
+        (r'tenant.?deposit', 'security_deposit', 0.86),
+        # Outstanding payables (AP aging)
+        (r'(?:accounts?\s*)?payable.?(?:aging|report|detail|register)', 'payables', 0.92),
+        (r'a/?p.?aging', 'payables', 0.90),
+        (r'outstanding.?payable', 'payables', 0.90),
+        (r'vendor.?(?:aging|payable|balance)', 'payables', 0.88),
+        (r'open.?(?:invoices|payables)', 'payables', 0.86),
+        # Outstanding receivables (AR aging)
+        (r'(?:accounts?\s*)?receivable.?(?:aging|report|detail|register)', 'receivables', 0.92),
+        (r'a/?r.?aging', 'receivables', 0.90),
+        (r'outstanding.?receivable', 'receivables', 0.90),
+        (r'tenant.?(?:aging|receivable|balance.?(?:due|report))', 'receivables', 0.88),
+        (r'delinquency.?(?:report|list|detail)', 'receivables', 0.86),
+        # Bad debt
+        (r'bad.?debt.?(?:detail|report|schedule|write.?off)', 'bad_debt', 0.92),
+        (r'write.?off.?(?:report|detail|schedule)', 'bad_debt', 0.90),
+        (r'collection.?(?:report|detail|status)', 'bad_debt', 0.86),
+        (r'allowance.?for.?(?:doubtful|bad)', 'bad_debt', 0.88),
+        # Concession burn off
+        (r'concession.?(?:burn.?off|amortization|schedule|report)', 'concession', 0.92),
+        (r'(?:free\s*)?rent.?(?:concession|abatement).?(?:schedule|report)?', 'concession', 0.88),
+        (r'tenant.?(?:improvement|ti).?(?:amortization|burn)', 'concession', 0.88),
+        (r'concession.?(?:tracking|summary)', 'concession', 0.86),
         # Rent roll
         (r'rent.?roll', 'rent_roll', 0.92),
         # GL — require "general ledger" or "gl detail", not just "cost"
@@ -2442,6 +2480,125 @@ class DocumentClassifier:
                 "proforma", "equity return", "diagnostic memo",
             ],
         },
+        "balance_sheet": {
+            "positive": [
+                "balance sheet", "statement of financial position",
+                "total assets", "total liabilities", "stockholders equity",
+                "current assets", "current liabilities", "fixed assets",
+                "long-term liabilities", "retained earnings",
+                "accounts payable", "accounts receivable",
+                "cash and cash equivalents", "prepaid expenses",
+                "accrued liabilities", "notes payable",
+                "mortgage payable", "net assets",
+                "total equity", "member equity", "partner equity",
+            ],
+            "negative": [
+                "operating statement", "income and expense", "rent roll",
+                "general ledger", "cash flow statement",
+            ],
+        },
+        "cash_flow": {
+            "positive": [
+                "cash flow", "statement of cash flows",
+                "operating activities", "investing activities",
+                "financing activities", "net cash provided",
+                "net cash used", "cash at beginning", "cash at end",
+                "increase in cash", "decrease in cash",
+                "capital expenditures", "proceeds from",
+                "payments on", "cash and equivalents",
+                "net change in cash", "cash flow from operations",
+            ],
+            "negative": [
+                "operating statement", "rent roll", "balance sheet",
+                "general ledger", "surplus cash note",
+            ],
+        },
+        "bank_reconciliation": {
+            "positive": [
+                "bank reconciliation", "bank balance", "book balance",
+                "outstanding checks", "deposits in transit",
+                "reconciling items", "adjusted bank balance",
+                "adjusted book balance", "uncleared checks",
+                "bank statement balance", "per bank", "per books",
+                "reconciliation date", "clearing account",
+                "nsf checks", "bank charges",
+            ],
+            "negative": [
+                "balance sheet", "general ledger", "operating statement",
+            ],
+        },
+        "security_deposit": {
+            "positive": [
+                "security deposit ledger", "security deposit report",
+                "tenant deposits", "deposit held", "deposit refund",
+                "deposit forfeiture", "deposit interest",
+                "security deposit schedule", "deposit accounting",
+                "move-out deposit", "deposit balance",
+                "deposit on hand", "escrow deposit",
+            ],
+            "negative": [
+                "rent roll", "lease agreement", "earnest money",
+                "closing statement",
+            ],
+        },
+        "payables": {
+            "positive": [
+                "accounts payable", "payable aging", "ap aging",
+                "vendor balance", "outstanding payables",
+                "open invoices", "invoice aging", "past due",
+                "vendor aging", "current payables", "payable detail",
+                "30 days", "60 days", "90 days", "over 90",
+                "aging summary", "vendor name", "invoice date",
+                "due date", "amount due",
+            ],
+            "negative": [
+                "accounts receivable", "tenant aging", "rent roll",
+                "operating statement",
+            ],
+        },
+        "receivables": {
+            "positive": [
+                "accounts receivable", "receivable aging", "ar aging",
+                "tenant balance", "outstanding receivables",
+                "tenant aging", "delinquency report", "past due rent",
+                "rent receivable", "charge type", "balance due",
+                "tenant balance due", "receivable detail",
+                "current receivables", "aged receivables",
+                "prepaid rent", "unapplied payments",
+            ],
+            "negative": [
+                "accounts payable", "vendor aging", "rent roll",
+                "operating statement",
+            ],
+        },
+        "bad_debt": {
+            "positive": [
+                "bad debt", "write-off", "write off", "debt write off",
+                "allowance for doubtful", "uncollectible",
+                "collections", "collection agency", "debt recovery",
+                "bad debt expense", "charged off", "charge-off",
+                "recovery amount", "debt detail", "former tenant",
+                "eviction", "skip", "skip balance",
+            ],
+            "negative": [
+                "accounts receivable", "accounts payable",
+                "operating statement",
+            ],
+        },
+        "concession": {
+            "positive": [
+                "concession", "burn off", "burn-off", "amortization",
+                "free rent", "rent abatement", "rent concession",
+                "tenant improvement", "ti allowance", "ti amortization",
+                "move-in credit", "concession schedule",
+                "remaining balance", "monthly burn", "unamortized",
+                "concession tracking", "leasing concession",
+                "straight-line", "net effective rent",
+            ],
+            "negative": [
+                "rent roll", "operating statement", "lease agreement",
+            ],
+        },
     }
 
     # Document types that have extraction templates (Phase 2 analysis)
@@ -2451,6 +2608,10 @@ class DocumentClassifier:
         'proforma', 'equity_waterfall', 'hud_form',
         'partnership_agreement',
         'due_diligence', 'organizational', 'correspondence', 'reference',
+        # Accounting report types (Phase 2 build)
+        'balance_sheet', 'cash_flow', 'bank_reconciliation',
+        'security_deposit', 'payables', 'receivables',
+        'bad_debt', 'concession',
     }
 
     def __init__(self, llm_client: Optional[LocalLLMClient] = None):
