@@ -90,7 +90,7 @@ class ExtractionEngine:
     # Doc types with dedicated parsers that outperform the LLM.
     # LLM gap-fill is skipped for these — their custom parsers run
     # later in _analyze_with_engine and fill the gaps more reliably.
-    _LLM_SKIP_TYPES = {'hud_form', 'equity_waterfall', 'partnership_agreement'}
+    _LLM_SKIP_TYPES = {'hud_form', 'equity_waterfall', 'partnership_agreement', 'closing', 'loan'}
 
     def _extract_financial(self, doc: DocumentContent,
                            template: DocumentTemplate) -> List[Dict]:
