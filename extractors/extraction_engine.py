@@ -2414,7 +2414,7 @@ class DocumentClassifier:
         text_lower = doc.full_text[:5000].lower()
         title_text = doc.full_text[:500].lower()
 
-        scores = {}
+        scores = {}  # raw scores (not normalised)
         for doc_type, kw_config in self.TYPE_KEYWORDS.items():
             positive_kws = kw_config["positive"]
             negative_kws = kw_config["negative"]
@@ -2433,22 +2433,34 @@ class DocumentClassifier:
                 elif neg_kw in text_lower[:1000]:
                     score -= 1  # mild penalty in early body
 
-            # Normalize by positive keyword count, clamp at 0
-            scores[doc_type] = max(0, score) / len(positive_kws) if positive_kws else 0
+            scores[doc_type] = max(0, score)
 
         if not scores or max(scores.values()) == 0:
             if use_llm and self.llm and self.llm.is_available():
                 return self._classify_llm(doc)
             return "unknown", 0.0
 
-        best_type = max(scores, key=scores.get)
-        best_score = scores[best_type]
+        # Sort by score descending
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        best_type, best_raw = ranked[0]
+        second_raw = ranked[1][1] if len(ranked) > 1 else 0
 
-        # If score is very low and LLM is allowed, use LLM for classification
-        if use_llm and best_score < 0.15 and self.llm and self.llm.is_available():
+        # If raw score is very low, fall back to LLM
+        if use_llm and best_raw < 2 and self.llm and self.llm.is_available():
             return self._classify_llm(doc)
 
-        confidence = min(best_score * 2, 1.0)
+        # ── Confidence from signal strength + discrimination ──
+        # Signal strength: how many effective keyword hits (title=3, body=1).
+        # A raw score of 6+ (e.g. 2 title hits, or 1 title + 3 body) is
+        # very strong.  Scale: 3→0.50, 5→0.70, 8→0.85, 12+→0.95.
+        signal_conf = min(0.35 + best_raw * 0.05, 0.95)
+
+        # Discrimination: how far ahead of the runner-up.
+        # If the best type is well separated, we're more confident.
+        margin = best_raw - second_raw
+        margin_bonus = min(margin * 0.03, 0.15)
+
+        confidence = min(signal_conf + margin_bonus, 1.0)
 
         # ── Low-confidence .msg fallback ──
         # Email files that don't strongly match any structured doc type
