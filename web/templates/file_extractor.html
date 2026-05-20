@@ -47,12 +47,23 @@
         margin: 0;
         line-height: 1.4;
     }
+    .extractor-card .drop-hint {
+        font-size: 11px;
+        color: var(--text-muted, #6b7685);
+        margin-top: 10px;
+        opacity: 0.7;
+    }
     .extractor-card input[type="file"] {
         display: none;
     }
     .extractor-card.dragover {
         border-color: var(--cap-blue, #3A8FD4);
         background: rgba(58,143,212,0.04);
+        box-shadow: 0 0 0 3px rgba(58,143,212,0.12);
+    }
+    .extractor-card.dragover .card-icon {
+        transform: scale(1.1);
+        transition: transform 0.15s;
     }
 
     .file-selection-info {
@@ -61,9 +72,18 @@
         border-radius: 8px;
         font-size: 13px;
         display: none;
+        margin-bottom: 20px;
     }
     .file-selection-info.visible {
-        display: block;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .file-selection-info .change-link {
+        font-size: 12px;
+        color: var(--cap-blue, #3A8FD4);
+        white-space: nowrap;
+        margin-left: 16px;
     }
 
     .settings-row {
@@ -95,6 +115,7 @@
             <div class="card-icon">&#128196;</div>
             <h3>Upload Documents</h3>
             <p class="card-desc">Select one or more PDFs, spreadsheets, or other supported files</p>
+            <p class="drop-hint">Click to browse or drag files here</p>
             <input type="file" id="single-input" name="files_single"
                    accept=".pdf,.xlsx,.xls,.docx,.doc,.msg,.png,.jpg,.csv,.txt,.md,.zip" multiple>
         </div>
@@ -103,13 +124,15 @@
             <div class="card-icon">&#128193;</div>
             <h3>Connect a Folder</h3>
             <p class="card-desc">Select an entire folder of documents to process in batch</p>
+            <p class="drop-hint">Click to browse or drag a folder here</p>
             <input type="file" id="folder-input" name="files_folder" webkitdirectory multiple>
         </div>
 
         <div class="extractor-card" id="card-zip" onclick="triggerZip(event)">
             <div class="card-icon">&#128230;</div>
             <h3>Upload ZIP Archive</h3>
-            <p class="card-desc">Drop a ZIP file containing documents to extract and process</p>
+            <p class="card-desc">Upload a ZIP file containing documents to extract and process</p>
+            <p class="drop-hint">Click to browse or drag ZIP files here</p>
             <input type="file" id="zip-input" name="files_zip" accept=".zip" multiple>
         </div>
     </div>
@@ -117,45 +140,43 @@
     <!-- Selection summary -->
     <div class="file-selection-info" id="file-selection-info"></div>
 
-    <!-- Settings + submit — hidden until files are chosen -->
-    <div id="settings-panel" style="display: none;">
-        <div class="card" style="margin-top: 20px;">
-            <div class="card-header">Extraction Settings</div>
+    <!-- Extraction settings — always visible -->
+    <div class="card">
+        <div class="card-header">Extraction Settings</div>
 
-            <div class="settings-row">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="doc_type">Document Type</label>
-                    <select name="doc_type" id="doc_type">
-                        <option value="">Auto-detect</option>
-                        {% for t in templates %}
-                        <option value="{{ t.type }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="hint">Leave as auto-detect to let the system classify each document.</div>
-                </div>
-
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="property_name">Property Name</label>
-                    <div class="autocomplete-wrap">
-                        <input type="text" name="property_name" id="property_name"
-                               placeholder="e.g., 123 Main Street"
-                               autocomplete="off">
-                        <div class="autocomplete-list" id="property-suggestions"></div>
-                    </div>
-                    <div class="hint">Optional. Associates documents with a property for portfolio queries.</div>
-                </div>
+        <div class="settings-row">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="doc_type">Document Type</label>
+                <select name="doc_type" id="doc_type">
+                    <option value="">Auto-detect</option>
+                    {% for t in templates %}
+                    <option value="{{ t.type }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="hint">Leave as auto-detect to let the system classify each document.</div>
             </div>
 
-            <div class="hint" style="margin-top: 14px; padding: 10px 14px; background: var(--cap-cloud, #f4f6f8); border-radius: 6px;">
-                <strong>Scanned documents detected automatically.</strong>
-                If a PDF contains scanned images instead of digital text, the system switches to OCR processing on its own.
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="property_name">Property Name</label>
+                <div class="autocomplete-wrap">
+                    <input type="text" name="property_name" id="property_name"
+                           placeholder="e.g., 123 Main Street or Portfolio A"
+                           autocomplete="off">
+                    <div class="autocomplete-list" id="property-suggestions"></div>
+                </div>
+                <div class="hint">Optional. Associates documents with a property for portfolio queries. Start typing to search existing properties.</div>
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary" id="submit-btn">
-            Process Documents
-        </button>
+        <div class="hint" style="margin-top: 14px; padding: 10px 14px; background: var(--cap-cloud, #f4f6f8); border-radius: 6px;">
+            <strong>Scanned documents detected automatically.</strong>
+            If a PDF contains scanned images instead of digital text, the system switches to OCR processing on its own.
+        </div>
     </div>
+
+    <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
+        Select Files to Process
+    </button>
 </form>
 
 {% endblock %}
@@ -166,7 +187,6 @@ const singleInput = document.getElementById('single-input');
 const folderInput = document.getElementById('folder-input');
 const zipInput = document.getElementById('zip-input');
 const selectionInfo = document.getElementById('file-selection-info');
-const settingsPanel = document.getElementById('settings-panel');
 const submitBtn = document.getElementById('submit-btn');
 const form = document.getElementById('extractor-form');
 
@@ -176,11 +196,15 @@ const cardZip = document.getElementById('card-zip');
 
 const SUPPORTED_EXTS = ['pdf','xlsx','xls','docx','doc','msg','png','jpg','jpeg','csv','txt','md','tsv'];
 
-let activeMode = null;   // 'single', 'folder', or 'zip'
+let activeMode = null;
 
 function isSupported(name) {
     const ext = name.toLowerCase().split('.').pop();
     return SUPPORTED_EXTS.includes(ext) || ext === 'zip';
+}
+
+function isZipFile(name) {
+    return name.toLowerCase().endsWith('.zip');
 }
 
 function triggerSingle(e) { if (e) e.stopPropagation(); singleInput.click(); }
@@ -195,7 +219,6 @@ function setActiveCard(mode) {
     else if (mode === 'zip') cardZip.classList.add('active');
 
     // Set the correct name="files" on the active input, clear others
-    // Both /upload and /batch expect request.files.getlist('files')
     singleInput.name = mode === 'single' ? 'files' : '';
     folderInput.name = mode === 'folder' ? 'files' : '';
     zipInput.name = mode === 'zip' ? 'files' : '';
@@ -216,14 +239,15 @@ function setActiveCard(mode) {
 function showSelection(files, mode) {
     const all = Array.from(files);
     const supported = all.filter(f => isSupported(f.name));
-    const zips = all.filter(f => f.name.toLowerCase().endsWith('.zip'));
-    const docs = supported.filter(f => !f.name.toLowerCase().endsWith('.zip'));
+    const zips = all.filter(f => isZipFile(f.name));
+    const docs = supported.filter(f => !isZipFile(f.name));
     const unsupported = all.length - supported.length;
 
     if (supported.length === 0) {
         selectionInfo.innerHTML = '<span style="color: var(--cap-danger, #d44);">No supported files found in selection.</span>';
         selectionInfo.classList.add('visible');
-        settingsPanel.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Select Files to Process';
         return;
     }
 
@@ -234,18 +258,18 @@ function showSelection(files, mode) {
     if (docs.length) parts.push('<strong>' + docs.length + ' document' + (docs.length !== 1 ? 's' : '') + '</strong>');
     if (zips.length) parts.push('<strong>' + zips.length + ' ZIP archive' + (zips.length !== 1 ? 's' : '') + '</strong>');
 
-    let msg = parts.join(' + ') + ' selected';
+    let msg = '<span>' + parts.join(' + ') + ' ready to process';
     if (mode === 'folder') msg += ' from folder';
     if (unsupported > 0) {
-        msg += ' <span style="color: var(--text-muted, #6b7685);">(' + unsupported + ' unsupported file' + (unsupported !== 1 ? 's' : '') + ' will be skipped)</span>';
+        msg += ' <span style="color: var(--text-muted, #6b7685);">(' + unsupported + ' unsupported will be skipped)</span>';
     }
-    msg += ' &nbsp;<a href="#" onclick="resetSelection(); return false;" style="font-size: 12px;">Change</a>';
+    msg += '</span>';
 
-    selectionInfo.innerHTML = msg;
+    selectionInfo.innerHTML = msg + '<a href="#" class="change-link" onclick="resetSelection(); return false;">Change files</a>';
     selectionInfo.classList.add('visible');
-    settingsPanel.style.display = 'block';
 
-    // Update button text
+    // Enable + update submit button
+    submitBtn.disabled = false;
     const total = supported.length;
     if (total === 1 && !zips.length) {
         submitBtn.textContent = 'Process Document';
@@ -260,7 +284,6 @@ function resetSelection() {
     singleInput.value = '';
     folderInput.value = '';
     zipInput.value = '';
-    // Re-enable all and remove name so nothing submits accidentally
     [singleInput, folderInput, zipInput].forEach(inp => {
         inp.disabled = false;
         inp.name = '';
@@ -268,11 +291,12 @@ function resetSelection() {
     activeMode = null;
     selectionInfo.classList.remove('visible');
     selectionInfo.innerHTML = '';
-    settingsPanel.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Select Files to Process';
     [cardSingle, cardFolder, cardZip].forEach(c => c.classList.remove('active'));
 }
 
-// Initialize — all inputs start with no name (nothing submits by default)
+// Initialize — all inputs start with no name
 singleInput.name = '';
 folderInput.name = '';
 zipInput.name = '';
@@ -288,10 +312,14 @@ zipInput.addEventListener('change', function() {
     if (this.files.length) showSelection(this.files, 'zip');
 });
 
-// Drag-and-drop on the single and zip cards
-[cardSingle, cardZip].forEach(card => {
+// ─── Drag-and-drop on ALL three cards ───
+// Auto-detect: if every dropped file is a .zip → zip mode,
+// otherwise → single document mode. Folder card also accepts drops
+// (browser sends individual files when a folder is dropped).
+[cardSingle, cardFolder, cardZip].forEach(card => {
     card.addEventListener('dragover', function(e) {
         e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
         this.classList.add('dragover');
     });
     card.addEventListener('dragleave', function(e) {
@@ -301,13 +329,54 @@ zipInput.addEventListener('change', function() {
     card.addEventListener('drop', function(e) {
         e.preventDefault();
         this.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-            const isZipCard = card === cardZip;
-            const input = isZipCard ? zipInput : singleInput;
-            input.files = e.dataTransfer.files;
-            showSelection(e.dataTransfer.files, isZipCard ? 'zip' : 'single');
+        const files = e.dataTransfer.files;
+        if (!files.length) return;
+
+        // Determine mode based on which card received the drop
+        let mode;
+        if (card === cardZip) {
+            mode = 'zip';
+        } else if (card === cardFolder) {
+            // Folder drops come through as individual files in most browsers
+            mode = 'folder';
+        } else {
+            // Smart detect: if all files are ZIPs, treat as zip mode
+            const allZip = Array.from(files).every(f => isZipFile(f.name));
+            mode = allZip ? 'zip' : 'single';
         }
+
+        // Assign files to the correct input
+        const inputMap = { single: singleInput, folder: folderInput, zip: zipInput };
+        const input = inputMap[mode];
+        input.files = files;
+        showSelection(files, mode);
     });
+});
+
+// ─── Full-page drag indicator ───
+// When dragging files over the page (not over a card), highlight all cards
+let dragCounter = 0;
+document.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    dragCounter++;
+    if (dragCounter === 1) {
+        [cardSingle, cardFolder, cardZip].forEach(c => c.style.borderStyle = 'dashed');
+    }
+});
+document.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+        [cardSingle, cardFolder, cardZip].forEach(c => c.style.borderStyle = '');
+    }
+});
+document.addEventListener('drop', function(e) {
+    // Reset dashed borders on any drop (card drops are handled above)
+    dragCounter = 0;
+    [cardSingle, cardFolder, cardZip].forEach(c => c.style.borderStyle = '');
+});
+document.addEventListener('dragover', function(e) {
+    e.preventDefault(); // Required so drop fires
 });
 
 // Form submit handler
@@ -320,7 +389,7 @@ form.addEventListener('submit', function(e) {
     submitBtn.textContent = 'Processing...';
 });
 
-// Property name autocomplete
+// ─── Property name autocomplete ───
 (function() {
     const input = document.getElementById('property_name');
     const list = document.getElementById('property-suggestions');
