@@ -1,0 +1,747 @@
+{% extends "base.html" %}
+
+{% block title %}Closing Books — capactive{% endblock %}
+
+{% block content %}
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   CLOSING BOOKS MODULE — Scoped Styles
+   ═══════════════════════════════════════════════════════════════ */
+.cb-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+  --navy: var(--brand-navy);
+  --active: var(--brand-active);
+  --primary: var(--brand-primary);
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --mono: 'SF Mono', Consolas, monospace;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* ── Header ── */
+.cb-root .cb-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.cb-root .cb-header h1 { font-size: 22px; font-weight: 700; margin: 0; }
+.cb-root .cb-header .subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* ── Stats Bar ── */
+.cb-root .stats-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.cb-root .stat-card {
+  flex: 1; min-width: 110px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; text-align: center;
+}
+.cb-root .stat-card .stat-value { font-size: 24px; font-weight: 700; color: var(--navy); }
+.cb-root .stat-card .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+
+/* ── Tabs ── */
+.cb-root .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
+.cb-root .tab-btn {
+  padding: 8px 16px; font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none;
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+}
+.cb-root .tab-btn:hover { color: var(--text); }
+.cb-root .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ── Search ── */
+.cb-root .search-bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.cb-root .search-input {
+  flex: 1; min-width: 200px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; background: var(--panel); outline: none;
+}
+.cb-root .search-input:focus { border-color: var(--active); box-shadow: 0 0 0 2px rgba(58,143,212,0.15); }
+.cb-root .filter-select {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+  background: var(--panel); outline: none; cursor: pointer;
+}
+
+/* ── Table ── */
+.cb-root .data-table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.cb-root .data-table th {
+  text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.3px; background: #f9fafb; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.cb-root .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f1f3; font-size: 12px; vertical-align: top; }
+.cb-root .data-table tr:hover td { background: #f8fafd; }
+.cb-root .data-table .clickable { cursor: pointer; color: var(--primary); }
+.cb-root .data-table .clickable:hover { text-decoration: underline; }
+
+/* ── Badges ── */
+.cb-root .badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.cb-root .badge-extracted { background: #d1fae5; color: #065f46; }
+.cb-root .badge-pending { background: #fef3c7; color: #92400e; }
+.cb-root .badge-inventoried { background: #e0e7ff; color: #3730a3; }
+.cb-root .badge-critical { background: #fee2e2; color: #991b1b; }
+.cb-root .badge-high { background: #fef3c7; color: #92400e; }
+.cb-root .badge-medium { background: #e0e7ff; color: #3730a3; }
+.cb-root .badge-low { background: #f3f4f6; color: #6b7280; }
+.cb-root .badge-module { background: var(--brand-cloud); color: var(--brand-navy); }
+
+/* ── Detail panel ── */
+.cb-root .detail-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.cb-root .detail-panel h2 { font-size: 18px; font-weight: 700; margin: 0 0 4px 0; }
+.cb-root .detail-panel .meta-row { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.cb-root .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.cb-root .detail-field label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; display: block; margin-bottom: 2px; }
+.cb-root .detail-field .val { font-size: 13px; word-break: break-word; }
+
+/* ── Block card ── */
+.cb-root .block-card {
+  background: #fafbfc; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px;
+}
+.cb-root .block-card .block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.cb-root .block-card .block-seq { font-size: 11px; font-weight: 600; color: var(--primary); }
+.cb-root .block-card .block-kind { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.cb-root .block-card .block-text { font-size: 12px; line-height: 1.5; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+.cb-root .block-card .block-meta { font-size: 10px; color: var(--muted); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ── Back button ── */
+.cb-root .back-btn {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--primary);
+  text-decoration: none; margin-bottom: 12px; cursor: pointer; background: none; border: none; padding: 0;
+}
+.cb-root .back-btn:hover { text-decoration: underline; }
+
+/* ── Pagination ── */
+.cb-root .pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; }
+.cb-root .pagination button {
+  padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel);
+  font-size: 12px; cursor: pointer;
+}
+.cb-root .pagination button:disabled { opacity: 0.4; cursor: default; }
+.cb-root .pagination .page-info { font-size: 12px; color: var(--muted); }
+
+/* ── Mapping table ── */
+.cb-root .mapping-row td { font-size: 11px; }
+
+/* ── Learning / Gap cards ── */
+.cb-root .card-list { display: flex; flex-direction: column; gap: 8px; }
+.cb-root .info-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px;
+}
+.cb-root .info-card .card-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.cb-root .info-card .card-body { font-size: 12px; line-height: 1.5; color: #444; }
+.cb-root .info-card .card-meta { font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+/* ── Empty state ── */
+.cb-root .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+
+/* ── Module breakdown chart ── */
+.cb-root .breakdown-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.cb-root .breakdown-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+}
+.cb-root .breakdown-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+</style>
+
+<div class="cb-root" id="cbApp">
+  <!-- Loading state -->
+  <div id="cbLoading" style="text-align:center; padding:60px; color:var(--muted);">Loading warehouse...</div>
+
+  <!-- Main content (hidden until loaded) -->
+  <div id="cbMain" style="display:none;">
+
+    <!-- Header -->
+    <div class="cb-header">
+      <div>
+        <h1>Closing Books Warehouse</h1>
+        <div class="subtitle">Chamberlain Apartments LLC — Document extraction warehouse</div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="cbStats"></div>
+
+    <!-- Detail view (hidden by default) -->
+    <div id="cbDetail" style="display:none;"></div>
+
+    <!-- List view -->
+    <div id="cbList">
+      <!-- Tab bar -->
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="files" onclick="cbSwitchTab('files')">Files</button>
+        <button class="tab-btn" data-tab="blocks" onclick="cbSwitchTab('blocks')">Content Blocks</button>
+        <button class="tab-btn" data-tab="mappings" onclick="cbSwitchTab('mappings')">Module Mappings</button>
+        <button class="tab-btn" data-tab="gaps" onclick="cbSwitchTab('gaps')">Gaps</button>
+        <button class="tab-btn" data-tab="duplicates" onclick="cbSwitchTab('duplicates')">Duplicates</button>
+        <button class="tab-btn" data-tab="queries" onclick="cbSwitchTab('queries')">Search Queries</button>
+        <button class="tab-btn" data-tab="learnings" onclick="cbSwitchTab('learnings')">Learnings</button>
+      </div>
+
+      <!-- Tab content containers -->
+      <div id="cbTabFiles" class="tab-content"></div>
+      <div id="cbTabBlocks" class="tab-content" style="display:none;"></div>
+      <div id="cbTabMappings" class="tab-content" style="display:none;"></div>
+      <div id="cbTabGaps" class="tab-content" style="display:none;"></div>
+      <div id="cbTabDuplicates" class="tab-content" style="display:none;"></div>
+      <div id="cbTabQueries" class="tab-content" style="display:none;"></div>
+      <div id="cbTabLearnings" class="tab-content" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var API = '/closing-books/api';
+  var currentTab = 'files';
+  var filesPage = 0;
+  var blocksPage = 0;
+  var PAGE_SIZE = 50;
+  var filesSearch = '';
+  var filesDocType = '';
+  var filesStatus = '';
+  var blocksSearch = '';
+  var blocksKind = '';
+  var blocksDollars = '';
+  var mappingsModule = '';
+  var statsData = null;
+
+  // ── Init ──────────────────────────────────────────────────────
+  function init() {
+    fetch(API + '/stats')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        statsData = data;
+        renderStats(data);
+        document.getElementById('cbLoading').style.display = 'none';
+        document.getElementById('cbMain').style.display = 'block';
+        {% if detail_file_id %}
+        showFileDetail('{{ detail_file_id }}');
+        {% else %}
+        loadFiles();
+        {% endif %}
+      })
+      .catch(function(err) {
+        document.getElementById('cbLoading').textContent = 'Error loading warehouse: ' + err.message;
+      });
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────
+  function renderStats(s) {
+    var el = document.getElementById('cbStats');
+    var cards = [
+      { v: s.total_files, l: 'Files' },
+      { v: s.extracted_files, l: 'Extracted' },
+      { v: s.total_blocks, l: 'Content Blocks' },
+      { v: s.blocks_with_dollars, l: 'With $ Amounts' },
+      { v: s.total_mappings, l: 'Mappings' },
+      { v: s.total_gaps, l: 'Gaps' },
+      { v: s.total_duplicates, l: 'Duplicates' },
+    ];
+    var h = '';
+    for (var i = 0; i < cards.length; i++) {
+      h += '<div class="stat-card"><div class="stat-value">' + cards[i].v + '</div><div class="stat-label">' + cards[i].l + '</div></div>';
+    }
+    el.innerHTML = h;
+  }
+
+  // ── Tab switching ─────────────────────────────────────────────
+  window.cbSwitchTab = function(tab) {
+    currentTab = tab;
+    var btns = document.querySelectorAll('.cb-root .tab-btn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-tab') === tab);
+    }
+    var contents = document.querySelectorAll('.cb-root .tab-content');
+    for (var i = 0; i < contents.length; i++) {
+      contents[i].style.display = 'none';
+    }
+    var tabMap = {
+      files: 'cbTabFiles', blocks: 'cbTabBlocks', mappings: 'cbTabMappings',
+      gaps: 'cbTabGaps', duplicates: 'cbTabDuplicates', queries: 'cbTabQueries',
+      learnings: 'cbTabLearnings'
+    };
+    document.getElementById(tabMap[tab]).style.display = 'block';
+    document.getElementById('cbDetail').style.display = 'none';
+    document.getElementById('cbList').style.display = 'block';
+
+    if (tab === 'files') loadFiles();
+    else if (tab === 'blocks') loadBlocks();
+    else if (tab === 'mappings') loadMappings();
+    else if (tab === 'gaps') loadGaps();
+    else if (tab === 'duplicates') loadDuplicates();
+    else if (tab === 'queries') loadQueries();
+    else if (tab === 'learnings') loadLearnings();
+  };
+
+  // ── Files tab ─────────────────────────────────────────────────
+  function loadFiles() {
+    var params = '?limit=' + PAGE_SIZE + '&offset=' + (filesPage * PAGE_SIZE);
+    if (filesSearch) params += '&search=' + encodeURIComponent(filesSearch);
+    if (filesDocType) params += '&doc_type=' + encodeURIComponent(filesDocType);
+    if (filesStatus) params += '&status=' + encodeURIComponent(filesStatus);
+
+    fetch(API + '/files' + params)
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderFiles(data); });
+  }
+
+  function renderFiles(data) {
+    var el = document.getElementById('cbTabFiles');
+    // Build doc_type options from stats
+    var dtOpts = '<option value="">All types</option>';
+    if (statsData && statsData.doc_types) {
+      for (var i = 0; i < statsData.doc_types.length; i++) {
+        var dt = statsData.doc_types[i];
+        var sel = (filesDocType === dt.type) ? ' selected' : '';
+        dtOpts += '<option value="' + escH(dt.type) + '"' + sel + '>' + escH(dt.type) + ' (' + dt.count + ')</option>';
+      }
+    }
+
+    var h = '<div class="search-bar">';
+    h += '<input class="search-input" type="text" placeholder="Search filenames..." value="' + escH(filesSearch) + '" onkeyup="if(event.keyCode===13)cbFilesSearch(this.value)" />';
+    h += '<select class="filter-select" onchange="cbFilesDocType(this.value)">' + dtOpts + '</select>';
+    h += '<select class="filter-select" onchange="cbFilesStatus(this.value)">';
+    h += '<option value="">All statuses</option>';
+    h += '<option value="extracted"' + (filesStatus==='extracted'?' selected':'') + '>Extracted</option>';
+    h += '<option value="inventoried_only"' + (filesStatus==='inventoried_only'?' selected':'') + '>Inventoried Only</option>';
+    h += '</select>';
+    h += '</div>';
+
+    h += '<table class="data-table"><thead><tr>';
+    h += '<th>Filename</th><th>Type</th><th>Status</th><th>Authority</th><th>Size</th><th>Date</th>';
+    h += '</tr></thead><tbody>';
+
+    if (data.rows.length === 0) {
+      h += '<tr><td colspan="6" class="empty-state">No files match your filters</td></tr>';
+    }
+
+    for (var i = 0; i < data.rows.length; i++) {
+      var f = data.rows[i];
+      var statusBadge = f.ingest_status === 'extracted'
+        ? '<span class="badge badge-extracted">extracted</span>'
+        : '<span class="badge badge-inventoried">' + escH(f.ingest_status || 'pending') + '</span>';
+      var sizeStr = f.size_bytes ? formatBytes(f.size_bytes) : '-';
+      h += '<tr>';
+      h += '<td class="clickable" onclick="cbShowFile(\'' + escH(f.id) + '\')">' + escH(truncate(f.original_filename, 60)) + '</td>';
+      h += '<td>' + escH(f.doc_type || '-') + '</td>';
+      h += '<td>' + statusBadge + '</td>';
+      h += '<td>' + escH(f.authority_tier || '-') + '</td>';
+      h += '<td>' + sizeStr + '</td>';
+      h += '<td>' + escH(f.document_date || '-') + '</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+
+    // Pagination
+    var totalPages = Math.ceil(data.total / PAGE_SIZE);
+    if (totalPages > 1) {
+      h += '<div class="pagination">';
+      h += '<button onclick="cbFilesPage(-1)"' + (filesPage === 0 ? ' disabled' : '') + '>&laquo; Prev</button>';
+      h += '<span class="page-info">Page ' + (filesPage + 1) + ' of ' + totalPages + ' (' + data.total + ' files)</span>';
+      h += '<button onclick="cbFilesPage(1)"' + (filesPage >= totalPages - 1 ? ' disabled' : '') + '>Next &raquo;</button>';
+      h += '</div>';
+    }
+
+    el.innerHTML = h;
+  }
+
+  window.cbFilesSearch = function(v) { filesSearch = v; filesPage = 0; loadFiles(); };
+  window.cbFilesDocType = function(v) { filesDocType = v; filesPage = 0; loadFiles(); };
+  window.cbFilesStatus = function(v) { filesStatus = v; filesPage = 0; loadFiles(); };
+  window.cbFilesPage = function(dir) { filesPage += dir; loadFiles(); };
+
+  // ── File detail ───────────────────────────────────────────────
+  window.cbShowFile = function(fileId) { showFileDetail(fileId); };
+
+  function showFileDetail(fileId) {
+    document.getElementById('cbList').style.display = 'none';
+    var det = document.getElementById('cbDetail');
+    det.style.display = 'block';
+    det.innerHTML = '<div style="text-align:center; padding:40px; color:var(--muted);">Loading file...</div>';
+
+    fetch(API + '/file/' + encodeURIComponent(fileId))
+      .then(function(r) { return r.json(); })
+      .then(function(f) { renderFileDetail(f); });
+  }
+
+  function renderFileDetail(f) {
+    var det = document.getElementById('cbDetail');
+    var statusBadge = f.ingest_status === 'extracted'
+      ? '<span class="badge badge-extracted">extracted</span>'
+      : '<span class="badge badge-inventoried">' + escH(f.ingest_status || 'pending') + '</span>';
+
+    var h = '<button class="back-btn" onclick="cbBackToList()">&larr; Back to files</button>';
+    h += '<div class="detail-panel">';
+    h += '<h2>' + escH(f.original_filename) + '</h2>';
+    h += '<div class="meta-row">' + statusBadge + ' &middot; ' + escH(f.doc_type || 'unclassified');
+    h += ' &middot; ' + escH(f.authority_tier || 'unknown tier');
+    if (f.size_bytes) h += ' &middot; ' + formatBytes(f.size_bytes);
+    h += '</div>';
+
+    h += '<div class="detail-grid">';
+    var fields = [
+      ['Batch', f.subfolder_batch],
+      ['Document Date', f.document_date],
+      ['Effective Date', f.effective_date],
+      ['Provider', f.provider],
+      ['Source Origin', f.source_origin],
+      ['Asset ID', f.asset_id],
+      ['Entity ID', f.entity_id],
+      ['Relevance', f.relevance],
+      ['File Extension', f.file_ext],
+      ['SHA256', f.sha256 ? f.sha256.substring(0, 16) + '...' : '-'],
+    ];
+    for (var i = 0; i < fields.length; i++) {
+      h += '<div class="detail-field"><label>' + fields[i][0] + '</label><div class="val">' + escH(fields[i][1] || '-') + '</div></div>';
+    }
+    h += '</div>';
+
+    if (f.extraction_notes) {
+      h += '<div class="detail-field" style="margin-bottom:12px;"><label>Extraction Notes</label><div class="val">' + escH(f.extraction_notes) + '</div></div>';
+    }
+    if (f.classification_rationale) {
+      h += '<div class="detail-field" style="margin-bottom:12px;"><label>Classification Rationale</label><div class="val">' + escH(f.classification_rationale) + '</div></div>';
+    }
+    h += '</div>';
+
+    // Content blocks
+    h += '<h3 style="font-size:15px; font-weight:600; margin:16px 0 8px;">Content Blocks (' + f.blocks.length + ')</h3>';
+    if (f.blocks.length === 0) {
+      h += '<div class="empty-state">No content blocks extracted yet</div>';
+    } else {
+      for (var i = 0; i < f.blocks.length; i++) {
+        var b = f.blocks[i];
+        h += '<div class="block-card">';
+        h += '<div class="block-header">';
+        h += '<span class="block-seq">#' + (b.seq != null ? b.seq : i) + '</span>';
+        h += '<span class="block-kind">' + escH(b.kind || 'text') + '</span>';
+        h += '</div>';
+        if (b.text) {
+          h += '<div class="block-text">' + escH(truncate(b.text, 500)) + '</div>';
+        }
+        if (b.verbatim_excerpt) {
+          h += '<div class="block-text" style="font-style:italic; color:#666; margin-top:4px;">' + escH(truncate(b.verbatim_excerpt, 300)) + '</div>';
+        }
+        h += '<div class="block-meta">';
+        if (b.locator_page != null) h += '<span>Page ' + b.locator_page + '</span>';
+        if (b.locator_section) h += '<span>Section: ' + escH(b.locator_section) + '</span>';
+        if (b.contains_dollar_amounts) h += '<span style="color:var(--success);">$ amounts</span>';
+        if (b.contains_dates) h += '<span>dates</span>';
+        if (b.contains_party_names) h += '<span>party names</span>';
+        if (b.confidence != null) h += '<span>confidence: ' + (b.confidence * 100).toFixed(0) + '%</span>';
+        if (b.extraction_method) h += '<span>' + escH(b.extraction_method) + '</span>';
+        h += '</div>';
+        h += '</div>';
+      }
+    }
+
+    // Module mappings
+    h += '<h3 style="font-size:15px; font-weight:600; margin:16px 0 8px;">Module Mappings (' + f.mappings.length + ')</h3>';
+    if (f.mappings.length === 0) {
+      h += '<div class="empty-state">No module mappings for this file</div>';
+    } else {
+      h += '<table class="data-table"><thead><tr><th>Module</th><th>Role</th><th>Target Field</th><th>Authority</th><th>Pull Method</th><th>Notes</th></tr></thead><tbody>';
+      for (var i = 0; i < f.mappings.length; i++) {
+        var m = f.mappings[i];
+        h += '<tr class="mapping-row">';
+        h += '<td><span class="badge badge-module">' + escH(m.module) + '</span></td>';
+        h += '<td>' + escH(m.role || '-') + '</td>';
+        h += '<td>' + escH(m.target_field || '-') + '</td>';
+        h += '<td>' + (m.authority_for_field ? 'Yes' : '-') + '</td>';
+        h += '<td>' + escH(m.pull_method || '-') + '</td>';
+        h += '<td>' + escH(truncate(m.notes || '', 80)) + '</td>';
+        h += '</tr>';
+      }
+      h += '</tbody></table>';
+    }
+
+    // Duplicate verdicts
+    if (f.duplicate_verdicts && f.duplicate_verdicts.length > 0) {
+      h += '<h3 style="font-size:15px; font-weight:600; margin:16px 0 8px;">Duplicate Verdicts (' + f.duplicate_verdicts.length + ')</h3>';
+      for (var i = 0; i < f.duplicate_verdicts.length; i++) {
+        var d = f.duplicate_verdicts[i];
+        h += '<div class="info-card">';
+        h += '<div class="card-title">' + escH(d.relation || 'related') + '</div>';
+        h += '<div class="card-body">' + escH(d.rationale || '') + '</div>';
+        h += '<div class="card-meta">';
+        h += 'Files: ' + escH(d.file_id_a) + ' vs ' + escH(d.file_id_b);
+        if (d.material_difference != null) h += ' &middot; Material diff: ' + (d.material_difference ? 'Yes' : 'No');
+        if (d.canonical_file_id) h += ' &middot; Canonical: ' + escH(d.canonical_file_id);
+        h += '</div></div>';
+      }
+    }
+
+    det.innerHTML = h;
+  }
+
+  window.cbBackToList = function() {
+    document.getElementById('cbDetail').style.display = 'none';
+    document.getElementById('cbList').style.display = 'block';
+  };
+
+  // ── Blocks tab ────────────────────────────────────────────────
+  function loadBlocks() {
+    var params = '?limit=' + PAGE_SIZE + '&offset=' + (blocksPage * PAGE_SIZE);
+    if (blocksSearch) params += '&search=' + encodeURIComponent(blocksSearch);
+    if (blocksKind) params += '&kind=' + encodeURIComponent(blocksKind);
+    if (blocksDollars) params += '&has_dollars=' + blocksDollars;
+
+    fetch(API + '/blocks' + params)
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderBlocks(data); });
+  }
+
+  function renderBlocks(data) {
+    var el = document.getElementById('cbTabBlocks');
+    var h = '<div class="search-bar">';
+    h += '<input class="search-input" type="text" placeholder="Search block text..." value="' + escH(blocksSearch) + '" onkeyup="if(event.keyCode===13)cbBlocksSearch(this.value)" />';
+    h += '<select class="filter-select" onchange="cbBlocksKind(this.value)">';
+    h += '<option value="">All kinds</option>';
+    var kinds = ['narrative', 'table', 'schedule', 'header', 'metadata', 'signature', 'legal_clause', 'financial_schedule'];
+    for (var i = 0; i < kinds.length; i++) {
+      h += '<option value="' + kinds[i] + '"' + (blocksKind===kinds[i]?' selected':'') + '>' + kinds[i] + '</option>';
+    }
+    h += '</select>';
+    h += '<select class="filter-select" onchange="cbBlocksDollars(this.value)">';
+    h += '<option value="">$ filter</option>';
+    h += '<option value="true"' + (blocksDollars==='true'?' selected':'') + '>With $ amounts</option>';
+    h += '<option value="false"' + (blocksDollars==='false'?' selected':'') + '>Without $ amounts</option>';
+    h += '</select>';
+    h += '</div>';
+
+    for (var i = 0; i < data.rows.length; i++) {
+      var b = data.rows[i];
+      h += '<div class="block-card">';
+      h += '<div class="block-header">';
+      h += '<span class="block-seq">#' + (b.seq != null ? b.seq : '?') + ' <span class="clickable" onclick="cbShowFile(\'' + escH(b.file_id) + '\')" style="font-weight:400;">' + escH(truncate(b.file_id, 30)) + '</span></span>';
+      h += '<span class="block-kind">' + escH(b.kind || 'text') + '</span>';
+      h += '</div>';
+      if (b.text) h += '<div class="block-text">' + escH(truncate(b.text, 400)) + '</div>';
+      h += '<div class="block-meta">';
+      if (b.locator_page != null) h += '<span>Page ' + b.locator_page + '</span>';
+      if (b.locator_section) h += '<span>' + escH(b.locator_section) + '</span>';
+      if (b.contains_dollar_amounts) h += '<span style="color:var(--success);">$ amounts</span>';
+      if (b.confidence != null) h += '<span>confidence: ' + (b.confidence * 100).toFixed(0) + '%</span>';
+      h += '</div></div>';
+    }
+
+    if (data.rows.length === 0) {
+      h += '<div class="empty-state">No content blocks match your filters</div>';
+    }
+
+    var totalPages = Math.ceil(data.total / PAGE_SIZE);
+    if (totalPages > 1) {
+      h += '<div class="pagination">';
+      h += '<button onclick="cbBlocksPage(-1)"' + (blocksPage === 0 ? ' disabled' : '') + '>&laquo; Prev</button>';
+      h += '<span class="page-info">Page ' + (blocksPage + 1) + ' of ' + totalPages + ' (' + data.total + ' blocks)</span>';
+      h += '<button onclick="cbBlocksPage(1)"' + (blocksPage >= totalPages - 1 ? ' disabled' : '') + '>Next &raquo;</button>';
+      h += '</div>';
+    }
+
+    el.innerHTML = h;
+  }
+
+  window.cbBlocksSearch = function(v) { blocksSearch = v; blocksPage = 0; loadBlocks(); };
+  window.cbBlocksKind = function(v) { blocksKind = v; blocksPage = 0; loadBlocks(); };
+  window.cbBlocksDollars = function(v) { blocksDollars = v; blocksPage = 0; loadBlocks(); };
+  window.cbBlocksPage = function(dir) { blocksPage += dir; loadBlocks(); };
+
+  // ── Mappings tab ──────────────────────────────────────────────
+  function loadMappings() {
+    var params = '?limit=200';
+    if (mappingsModule) params += '&module=' + encodeURIComponent(mappingsModule);
+    fetch(API + '/mappings' + params)
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderMappings(data); });
+  }
+
+  function renderMappings(data) {
+    var el = document.getElementById('cbTabMappings');
+
+    // Module filter from stats
+    var modOpts = '<option value="">All modules</option>';
+    if (statsData && statsData.modules) {
+      for (var i = 0; i < statsData.modules.length; i++) {
+        var m = statsData.modules[i];
+        var sel = (mappingsModule === m.module) ? ' selected' : '';
+        modOpts += '<option value="' + escH(m.module) + '"' + sel + '>' + escH(m.module) + ' (' + m.count + ')</option>';
+      }
+    }
+
+    var h = '<div class="search-bar">';
+    h += '<select class="filter-select" onchange="cbMappingsModule(this.value)">' + modOpts + '</select>';
+    h += '</div>';
+
+    // Module breakdown
+    if (statsData && statsData.modules && !mappingsModule) {
+      h += '<div class="breakdown-bar">';
+      var colors = ['#3A8FD4','#10B981','#d97706','#dc2626','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+      for (var i = 0; i < statsData.modules.length; i++) {
+        var m = statsData.modules[i];
+        h += '<div class="breakdown-item"><span class="dot" style="background:' + colors[i % colors.length] + '"></span>' + escH(m.module) + ' <strong>' + m.count + '</strong></div>';
+      }
+      h += '</div>';
+    }
+
+    h += '<table class="data-table"><thead><tr><th>Module</th><th>Role</th><th>Target Field</th><th>Authority</th><th>Used</th><th>File</th><th>Notes</th></tr></thead><tbody>';
+    for (var i = 0; i < data.rows.length; i++) {
+      var m = data.rows[i];
+      h += '<tr class="mapping-row">';
+      h += '<td><span class="badge badge-module">' + escH(m.module) + '</span></td>';
+      h += '<td>' + escH(m.role || '-') + '</td>';
+      h += '<td>' + escH(m.target_field || '-') + '</td>';
+      h += '<td>' + (m.authority_for_field ? 'Yes' : '-') + '</td>';
+      h += '<td>' + (m.currently_used ? 'Yes' : '-') + '</td>';
+      h += '<td class="clickable" onclick="cbShowFile(\'' + escH(m.file_id) + '\')">' + escH(truncate(m.file_id, 25)) + '</td>';
+      h += '<td>' + escH(truncate(m.notes || '', 60)) + '</td>';
+      h += '</tr>';
+    }
+    if (data.rows.length === 0) {
+      h += '<tr><td colspan="7" class="empty-state">No mappings</td></tr>';
+    }
+    h += '</tbody></table>';
+
+    el.innerHTML = h;
+  }
+
+  window.cbMappingsModule = function(v) { mappingsModule = v; loadMappings(); };
+
+  // ── Gaps tab ──────────────────────────────────────────────────
+  function loadGaps() {
+    fetch(API + '/gaps')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderGaps(data); });
+  }
+
+  function renderGaps(data) {
+    var el = document.getElementById('cbTabGaps');
+    if (data.length === 0) { el.innerHTML = '<div class="empty-state">No gaps recorded</div>'; return; }
+    var h = '<div class="card-list">';
+    for (var i = 0; i < data.length; i++) {
+      var g = data[i];
+      var sevBadge = '<span class="badge badge-' + (g.severity || 'low').toLowerCase() + '">' + escH(g.severity || 'unknown') + '</span>';
+      h += '<div class="info-card">';
+      h += '<div class="card-title">' + sevBadge + ' ' + escH(g.expected_doc_type || 'Unknown type') + '</div>';
+      h += '<div class="card-body">' + escH(g.description || '') + '</div>';
+      h += '<div class="card-meta">';
+      if (g.why_expected) h += '<span>Why: ' + escH(g.why_expected) + '</span>';
+      if (g.affects_modules) h += ' &middot; <span>Affects: ' + escH(g.affects_modules) + '</span>';
+      if (g.dispute_relevant) h += ' &middot; <span style="color:var(--danger);">Dispute relevant</span>';
+      if (g.resolution_hint) h += '<br>Hint: ' + escH(g.resolution_hint);
+      h += '</div></div>';
+    }
+    h += '</div>';
+    el.innerHTML = h;
+  }
+
+  // ── Duplicates tab ────────────────────────────────────────────
+  function loadDuplicates() {
+    fetch(API + '/duplicates')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderDuplicates(data); });
+  }
+
+  function renderDuplicates(data) {
+    var el = document.getElementById('cbTabDuplicates');
+    if (data.length === 0) { el.innerHTML = '<div class="empty-state">No duplicate verdicts</div>'; return; }
+    var h = '<table class="data-table"><thead><tr><th>Relation</th><th>File A</th><th>File B</th><th>Material Diff</th><th>Keep Both</th><th>Canonical</th><th>Rationale</th></tr></thead><tbody>';
+    for (var i = 0; i < data.length; i++) {
+      var d = data[i];
+      h += '<tr>';
+      h += '<td>' + escH(d.relation || '-') + '</td>';
+      h += '<td class="clickable" onclick="cbShowFile(\'' + escH(d.file_id_a) + '\')">' + escH(truncate(d.file_id_a, 20)) + '</td>';
+      h += '<td class="clickable" onclick="cbShowFile(\'' + escH(d.file_id_b) + '\')">' + escH(truncate(d.file_id_b, 20)) + '</td>';
+      h += '<td>' + (d.material_difference ? 'Yes' : 'No') + '</td>';
+      h += '<td>' + (d.keep_both ? 'Yes' : 'No') + '</td>';
+      h += '<td>' + escH(truncate(d.canonical_file_id || '-', 20)) + '</td>';
+      h += '<td>' + escH(truncate(d.rationale || '', 80)) + '</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+    el.innerHTML = h;
+  }
+
+  // ── Queries tab ───────────────────────────────────────────────
+  function loadQueries() {
+    fetch(API + '/queries')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderQueries(data); });
+  }
+
+  function renderQueries(data) {
+    var el = document.getElementById('cbTabQueries');
+    if (data.length === 0) { el.innerHTML = '<div class="empty-state">No search queries</div>'; return; }
+    var h = '<div class="card-list">';
+    for (var i = 0; i < data.length; i++) {
+      var q = data[i];
+      var disputeBadge = q.dispute_relevant ? ' <span class="badge badge-critical">dispute</span>' : '';
+      h += '<div class="info-card">';
+      h += '<div class="card-title">' + escH(q.name || 'Unnamed') + disputeBadge + '</div>';
+      h += '<div class="card-body">' + escH(q.description || q.intent || '') + '</div>';
+      h += '<div class="card-meta">';
+      if (q.serves_modules) h += 'Modules: ' + escH(q.serves_modules);
+      h += '</div></div>';
+    }
+    h += '</div>';
+    el.innerHTML = h;
+  }
+
+  // ── Learnings tab ─────────────────────────────────────────────
+  function loadLearnings() {
+    fetch(API + '/learnings')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderLearnings(data); });
+  }
+
+  function renderLearnings(data) {
+    var el = document.getElementById('cbTabLearnings');
+    if (data.length === 0) { el.innerHTML = '<div class="empty-state">No learnings recorded</div>'; return; }
+    var h = '<div class="card-list">';
+    for (var i = 0; i < data.length; i++) {
+      var l = data[i];
+      h += '<div class="info-card">';
+      h += '<div class="card-title">Batch: ' + escH(l.batch_id || '-') + ' &middot; #' + (l.seq || i + 1) + '</div>';
+      h += '<div class="card-body">' + escH(l.learning || '') + '</div>';
+      if (l.produced_at) h += '<div class="card-meta">' + escH(l.produced_at) + '</div>';
+      h += '</div>';
+    }
+    h += '</div>';
+    el.innerHTML = h;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function escH(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function truncate(s, n) {
+    if (!s) return '';
+    return s.length > n ? s.substring(0, n) + '...' : s;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    var k = 1024;
+    var sizes = ['B', 'KB', 'MB', 'GB'];
+    var i = Math.floor(Math.log(bytes) / Math.log(k));
+    return (bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0) + ' ' + sizes[i];
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────
+  init();
+})();
+</script>
+{% endblock %}

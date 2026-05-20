@@ -520,6 +520,54 @@ class ScorecardEngine:
 
         return results
 
+    # ─── CoStar Data Cache (mirrors original _engine_cache) ─────────
+
+    _costar_cache_file = None
+    _costar_data = None
+    _costar_classifications = None
+    _costar_detail_results = None
+
+    def _get_costar_cache(self, costar_file: str):
+        """
+        Load and cache CoStar data, classifications, and metric details.
+
+        Mirrors the original standalone webapp's _engine_cache pattern:
+        parse once at first call, reuse on all subsequent calls.
+        The three expensive operations (Excel parse, classify, compute_detail)
+        only run once per server lifetime.
+        """
+        from .data_loader import load_costar_export
+        from .metric_calculator import compute_detail, METRIC_DEFINITIONS
+        from .market_classifier import classify_markets
+
+        if self._costar_data is not None and self._costar_cache_file == costar_file:
+            logger.info("Using cached CoStar data (instant)")
+            return self._costar_detail_results, self._costar_classifications
+
+        logger.info(f"Loading CoStar data from {costar_file} (first call — will cache)")
+        data = load_costar_export(costar_file)
+        classifications = classify_markets(data)
+
+        logger.info("Computing metric details (18 metrics)...")
+        all_detail_results = {}
+        for mk in METRIC_DEFINITIONS:
+            try:
+                all_detail_results[mk] = compute_detail(
+                    data, mk, classifications, half_life=8,
+                )
+            except Exception as e:
+                logger.warning(f"Metric {mk} failed: {e}")
+
+        # Cache everything
+        self._costar_cache_file = costar_file
+        self._costar_data = data
+        self._costar_classifications = classifications
+        self._costar_detail_results = all_detail_results
+
+        logger.info(f"Cached: {len(all_detail_results)} metrics, "
+                    f"{len(classifications)} markets")
+        return all_detail_results, classifications
+
     # ─── CoStar Data Pipeline ───────────────────────────────────────
 
     def score_from_costar(
@@ -549,35 +597,17 @@ class ScorecardEngine:
         dict with keys: markets_scored, rankings (list of dicts),
                         config, data_source
         """
-        from .data_loader import load_costar_export
-        from .metric_calculator import compute_detail, METRIC_DEFINITIONS
         from .z_score_engine import score_tier
-        from .market_classifier import classify_markets
 
         if config is None:
             config = ScorecardConfig()
         if config_overrides:
             config = self._apply_config_overrides(config, config_overrides)
 
-        # Step 1: Load CoStar data
-        logger.info(f"Loading CoStar data from {costar_file}")
-        data = load_costar_export(costar_file)
+        # Steps 1-3: Load data, classify, compute details (cached after first call)
+        all_detail_results, classifications = self._get_costar_cache(costar_file)
 
-        # Step 2: Classify markets
-        classifications = classify_markets(data)
-
-        # Step 3: Compute all detail results
-        logger.info("Computing metric details...")
-        all_detail_results = {}
-        for mk in METRIC_DEFINITIONS:
-            try:
-                all_detail_results[mk] = compute_detail(
-                    data, mk, classifications, half_life=8,
-                )
-            except Exception as e:
-                logger.warning(f"Metric {mk} failed: {e}")
-
-        # Step 4: Build peer group
+        # Step 4: Build peer group for Z-score denominator
         peer_group = None
         if inventory_tier != "All":
             tier_markets = classifications[
@@ -594,44 +624,31 @@ class ScorecardEngine:
             peer_group_markets=peer_group,
         )
 
-        # Step 6: Format results
-        results = []
-        for market_id, ms in scores.items():
-            results.append({
-                'market_id': market_id,
-                'final_score': round(ms.final_score, 4),
-                'ds_score': round(ms.duration_weighted_ds, 4),
-                'occ_score': round(ms.duration_weighted_occ, 4),
-                'rent_score': round(ms.duration_weighted_rent, 4),
-            })
+        # Step 5b: Filter output to only peer group markets (display filter)
+        if peer_group:
+            scores = {m: v for m, v in scores.items() if m in peer_group}
 
-        results.sort(key=lambda x: x['final_score'], reverse=True)
-        for i, r in enumerate(results, 1):
-            r['rank'] = i
+        # Step 6: Format results (rich format for frontend drill-down)
+        results = self._format_scores_rich(scores, config, property_class)
 
         # Step 7: Store in warehouse
         all_tier_data = {property_class: scores}
         import pandas as pd
-        rankings_df = pd.DataFrame(results)
+        simple_results = [
+            {'market_id': r['market'], 'final_score': r['dw_mf'],
+             'ds_score': r['dw_ds'], 'occ_score': r.get('dw_occ', 0),
+             'rent_score': r['dw_rent'], 'rank': r['mf_rank']}
+            for r in results['markets']
+        ]
+        rankings_df = pd.DataFrame(simple_results)
         if not rankings_df.empty:
             self._store_scores(all_tier_data, rankings_df, config)
 
-        logger.info(f"Scored {len(results)} markets from CoStar data")
+        logger.info(f"Scored {results['market_count']} markets from CoStar data")
 
-        return {
-            'markets_scored': len(results),
-            'data_source': 'costar',
-            'property_class': property_class,
-            'inventory_tier': inventory_tier,
-            'rankings': results[:25],
-            'config': {
-                'analysis_duration': config.analysis_duration_years,
-                'ds_weight': config.ds_weight,
-                'occ_weight': config.occ_weight,
-                'rg_weight': config.rg_weight,
-                'period_mode': config.period_mode,
-            },
-        }
+        results['data_source'] = 'costar'
+        results['inventory_tier'] = inventory_tier
+        return results
 
     def score_from_costar_composite(
         self,
@@ -646,9 +663,6 @@ class ScorecardEngine:
         This runs the full multi-tier pipeline: scores each property class
         independently, then tier-weights them into a composite rank.
         """
-        from .data_loader import load_costar_export
-        from .metric_calculator import compute_detail, METRIC_DEFINITIONS
-        from .market_classifier import classify_markets
         from .composite_scorer import compute_composite_scores
 
         if config is None:
@@ -656,21 +670,8 @@ class ScorecardEngine:
         if config_overrides:
             config = self._apply_config_overrides(config, config_overrides)
 
-        # Load and classify
-        logger.info(f"Loading CoStar data from {costar_file}")
-        data = load_costar_export(costar_file)
-        classifications = classify_markets(data)
-
-        # Compute details
-        logger.info("Computing metric details...")
-        all_detail_results = {}
-        for mk in METRIC_DEFINITIONS:
-            try:
-                all_detail_results[mk] = compute_detail(
-                    data, mk, classifications, half_life=8,
-                )
-            except Exception as e:
-                logger.warning(f"Metric {mk} failed: {e}")
+        # Load data from cache (same as score_from_costar)
+        all_detail_results, classifications = self._get_costar_cache(costar_file)
 
         # Peer group
         peer_group = None
@@ -761,6 +762,45 @@ class ScorecardEngine:
             config.total_z_floor = float(overrides["total_z_floor"])
         if "mom_knob" in overrides:
             config.mom_knob = float(overrides["mom_knob"])
+        if "recent_momentum_tilt_multiplier" in overrides:
+            config.recent_momentum_tilt_multiplier = float(overrides["recent_momentum_tilt_multiplier"])
+        if "dispersion_cap" in overrides:
+            config.dispersion_cap = float(overrides["dispersion_cap"])
+        if "dispersion_floor" in overrides:
+            config.dispersion_floor = float(overrides["dispersion_floor"])
+        if "auto_duration_weights" in overrides:
+            val = overrides["auto_duration_weights"]
+            config.auto_duration_weights = val in (True, "true", "True", "1", 1)
+        if "rent_overall_weight" in overrides:
+            config.rent_metric_weights["eff_rent_overall"] = float(overrides["rent_overall_weight"])
+        if "flip_deliveries" in overrides and overrides["flip_deliveries"]:
+            config.direction_overrides = config.direction_overrides or {}
+            config.direction_overrides["net_deliveries"] = True
+
+        # Per-period momentum half-life and max-tilt overrides
+        for period in ["Quarterly", "Annual", "2Yr", "3Yr", "5Yr", "10Yr", "12Yr"]:
+            hl_key = f"momentum_hl_{period}"
+            mt_key = f"momentum_mt_{period}"
+            if hl_key in overrides or mt_key in overrides:
+                existing = config.momentum_config.get(period, (0.0, 0.0, 0))
+                hl = float(overrides.get(hl_key, existing[0]))
+                mt = float(overrides.get(mt_key, existing[1]))
+                hlq = existing[2] if len(existing) > 2 else 0
+                config.momentum_config[period] = (hl, mt, hlq)
+
+        # Duration weight table overrides
+        if "duration_weight_overrides" in overrides:
+            from .tilt_engine import DURATION_WEIGHT_TABLE
+            dwo = overrides["duration_weight_overrides"]
+            for dur_str, period_map in dwo.items():
+                dur = int(dur_str)
+                DURATION_WEIGHT_TABLE[dur] = {k: float(v) for k, v in period_map.items()}
+
+        # Standalone period weights
+        if "standalone_period_weights" in overrides:
+            spw = overrides["standalone_period_weights"]
+            if isinstance(spw, dict):
+                config.standalone_period_weights = {k: float(v) for k, v in spw.items()}
 
         # Per-metric weight overrides
         for mk in list(config.ds_metric_weights.keys()):
@@ -777,3 +817,213 @@ class ScorecardEngine:
                 config.rent_metric_weights[mk] = float(overrides[key])
 
         return config
+
+    @staticmethod
+    def _z_to_percentile(z: float, skew: float = 0.0) -> float:
+        """Convert Z-score to percentile using Cornish-Fisher expansion."""
+        import math
+        z_adj = z + (skew / 6.0) * (z * z - 1.0)
+        a1, a2, a3 = 0.4361836, -0.1201676, 0.9372980
+        p = 0.33267
+        t = 1.0 / (1.0 + p * abs(z_adj))
+        phi = 1.0 - (a1 * t + a2 * t * t + a3 * t * t * t) * math.exp(
+            -z_adj * z_adj / 2.0
+        ) / math.sqrt(2.0 * math.pi)
+        if z_adj < 0:
+            phi = 1.0 - phi
+        return round(min(99.9, max(0.1, phi * 100.0)), 1)
+
+    def _format_scores_rich(
+        self, scores: Dict, config: ScorecardConfig, property_class: str
+    ) -> Dict:
+        """
+        Format MarketScore objects into the rich JSON structure the frontend
+        expects — matches the original webapp's format_scores() output.
+
+        Returns dict with 'markets' (list of rich rows), 'config', 'market_count',
+        'property_class', 'active_periods', etc.
+        """
+        SKEWNESS = {
+            "absorption": 0.3, "deliveries": 0.5, "abs_del": 0.2,
+            "blended_occ": -0.1, "under_construction": 0.6, "yrs_to_stab": 0.8,
+            "eff_rent_overall": 0.1, "eff_rent_1br": 0.1, "eff_rent_studio": 0.2,
+            "eff_rent_2br": 0.1, "eff_rent_3br": 0.2, "_default": 0.0,
+        }
+        EXCLUDED = {"sf_permits_yoy", "renter_weighted_pop_yoy", "pop_20_34_share"}
+        z2p = self._z_to_percentile
+
+        rows = []
+        active_periods = None
+
+        for market, ms in scores.items():
+            # Primary period: Q1 for cumulative, Yr1 for standalone
+            ps = ms.period_scores.get("Q1") or ms.period_scores.get("Yr1")
+            if not ps:
+                continue
+
+            if active_periods is None:
+                active_periods = list(ms.period_scores.keys())
+
+            row = {
+                "market": market,
+                "ds_raw": round(ps.overall_ds_raw, 4),
+                "ds_adj": round(ps.overall_ds_adj, 4),
+                "occ_raw": round(ps.overall_occ_raw, 4),
+                "occ_adj": round(ps.overall_occ_adj, 4),
+                "rent_raw": round(ps.overall_rent_raw, 4),
+                "rent_adj": round(ps.overall_rent_adj, 4),
+                "mf_score": round(ps.overall_mf, 4),
+                "dw_ds": round(ms.duration_weighted_ds, 4),
+                "dw_occ": round(ms.duration_weighted_occ, 4),
+                "dw_rent": round(ms.duration_weighted_rent, 4),
+                "dw_mf": round(ms.duration_weighted_mf, 4),
+                "metrics": {},
+            }
+
+            # Per-metric detail for primary period
+            for mk, mz in ps.ds_metric_z.items():
+                if mk in EXCLUDED:
+                    continue
+                skew = SKEWNESS.get(mk, SKEWNESS["_default"])
+                row["metrics"][mk] = {
+                    "signal_z": round(mz.signal_z, 4),
+                    "vol_z": round(mz.volatility_z, 4),
+                    "cat_z": round(mz.category_z, 4),
+                    "total_z": round(mz.total_z, 4),
+                    "percentile": z2p(mz.total_z, skew),
+                    "group": "S&D",
+                    "weight": config.ds_metric_weights.get(mk, 1.0),
+                }
+            for mk, mz in ps.occ_metric_z.items():
+                skew = SKEWNESS.get(mk, SKEWNESS["_default"])
+                row["metrics"][mk] = {
+                    "signal_z": round(mz.signal_z, 4),
+                    "vol_z": round(mz.volatility_z, 4),
+                    "cat_z": round(mz.category_z, 4),
+                    "total_z": round(mz.total_z, 4),
+                    "percentile": z2p(mz.total_z, skew),
+                    "group": "Occ",
+                    "weight": config.occ_metric_weights.get(mk, 1.0),
+                }
+            for mk, mz in ps.rent_metric_z.items():
+                skew = SKEWNESS.get(mk, SKEWNESS["_default"])
+                row["metrics"][mk] = {
+                    "signal_z": round(mz.signal_z, 4),
+                    "vol_z": round(mz.volatility_z, 4),
+                    "cat_z": round(mz.category_z, 4),
+                    "total_z": round(mz.total_z, 4),
+                    "percentile": z2p(mz.total_z, skew),
+                    "group": "Rent",
+                    "weight": config.rent_metric_weights.get(mk, 1.0),
+                }
+
+            # Per-period breakdown
+            period_detail = {}
+            for period_name, period_ps in ms.period_scores.items():
+                pd_entry = {
+                    "ds_raw": round(period_ps.overall_ds_raw, 4),
+                    "ds_adj": round(period_ps.overall_ds_adj, 4),
+                    "occ_raw": round(period_ps.overall_occ_raw, 4),
+                    "occ_adj": round(period_ps.overall_occ_adj, 4),
+                    "rent_raw": round(period_ps.overall_rent_raw, 4),
+                    "rent_adj": round(period_ps.overall_rent_adj, 4),
+                    "mf_score": round(period_ps.overall_mf, 4),
+                    "tilt_value": round(period_ps.tilt_value, 4),
+                    "metrics": {},
+                }
+                for mk, mz in period_ps.ds_metric_z.items():
+                    if mk in EXCLUDED:
+                        continue
+                    skew = SKEWNESS.get(mk, SKEWNESS["_default"])
+                    pd_entry["metrics"][mk] = {
+                        "signal_z": round(mz.signal_z, 4),
+                        "vol_z": round(mz.volatility_z, 4),
+                        "cat_z": round(mz.category_z, 4),
+                        "total_z": round(mz.total_z, 4),
+                        "percentile": z2p(mz.total_z, skew),
+                        "group": "S&D",
+                    }
+                for mk, mz in period_ps.occ_metric_z.items():
+                    skew = SKEWNESS.get(mk, SKEWNESS["_default"])
+                    pd_entry["metrics"][mk] = {
+                        "signal_z": round(mz.signal_z, 4),
+                        "vol_z": round(mz.volatility_z, 4),
+                        "cat_z": round(mz.category_z, 4),
+                        "total_z": round(mz.total_z, 4),
+                        "percentile": z2p(mz.total_z, skew),
+                        "group": "Occ",
+                    }
+                for mk, mz in period_ps.rent_metric_z.items():
+                    skew = SKEWNESS.get(mk, SKEWNESS["_default"])
+                    pd_entry["metrics"][mk] = {
+                        "signal_z": round(mz.signal_z, 4),
+                        "vol_z": round(mz.volatility_z, 4),
+                        "cat_z": round(mz.category_z, 4),
+                        "total_z": round(mz.total_z, 4),
+                        "percentile": z2p(mz.total_z, skew),
+                        "group": "Rent",
+                    }
+                period_detail[period_name] = pd_entry
+            row["periods"] = period_detail
+            rows.append(row)
+
+        # Sort by duration-weighted MF score
+        rows.sort(key=lambda r: r["dw_mf"], reverse=True)
+
+        # Add ranks and percentiles
+        n = len(rows)
+        for i, r in enumerate(rows):
+            r["mf_rank"] = i + 1
+            r["mf_percentile"] = round((1 - i / max(n - 1, 1)) * 100, 1) if n > 1 else 50.0
+
+        ds_sorted = sorted(rows, key=lambda r: r["dw_ds"], reverse=True)
+        for i, r in enumerate(ds_sorted):
+            r["ds_rank"] = i + 1
+            r["ds_percentile"] = round((1 - i / max(n - 1, 1)) * 100, 1) if n > 1 else 50.0
+
+        rent_sorted = sorted(rows, key=lambda r: r["dw_rent"], reverse=True)
+        for i, r in enumerate(rent_sorted):
+            r["rent_rank"] = i + 1
+            r["rent_percentile"] = round((1 - i / max(n - 1, 1)) * 100, 1) if n > 1 else 50.0
+
+        occ_sorted = sorted(rows, key=lambda r: r.get("dw_occ", 0), reverse=True)
+        for i, r in enumerate(occ_sorted):
+            r["occ_rank"] = i + 1
+            r["occ_percentile"] = round((1 - i / max(n - 1, 1)) * 100, 1) if n > 1 else 50.0
+
+        config_info = {
+            "ds_weight": config.ds_weight,
+            "occ_weight": config.occ_weight,
+            "rg_weight": config.rg_weight,
+            "actual_occ_weight": config.actual_occ_weight,
+            "effective_occ_weight": config.effective_occ_weight,
+            "vol_indicator": list(config.volatility_indicator),
+            "cat_indicator": list(config.category_indicator),
+            "period_indicator": list(config.period_indicator),
+            "dispersion_weight": config.dispersion_weight,
+            "dispersion_cap": config.dispersion_cap,
+            "dispersion_floor": config.dispersion_floor,
+            "analysis_duration_years": config.analysis_duration_years,
+            "auto_duration_weights": config.auto_duration_weights,
+            "period_mode": config.period_mode,
+            "property_class": property_class,
+            "total_z_cap": config.total_z_cap,
+            "total_z_floor": config.total_z_floor,
+            "recent_momentum_tilt_multiplier": config.recent_momentum_tilt_multiplier,
+            "mom_knob": config.mom_knob,
+            "momentum_config": {
+                period: {"hl_steps": hl, "max_tilt": mt}
+                for period, (hl, mt, _) in config.momentum_config.items()
+            },
+            "ds_metric_weights": config.ds_metric_weights,
+            "occ_metric_weights": config.occ_metric_weights,
+            "rent_metric_weights": config.rent_metric_weights,
+        }
+
+        return {
+            "markets": rows,
+            "config": config_info,
+            "market_count": len(rows),
+            "property_class": property_class,
+            "active_periods": active_periods or ["Q1"],
+        }

@@ -1,0 +1,571 @@
+{% extends "base.html" %}
+
+{% block title %}Category Data — capactive{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   SCORECARD CATEGORY DATA — Scoped Styles
+   All classes scoped under .catdata-root to avoid base.html conflicts.
+   ═══════════════════════════════════════════════════════════════ */
+
+.catdata-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+
+  --navy: var(--brand-navy);
+  --active: var(--brand-active);
+  --light-blue: var(--brand-light);
+  --cloud: var(--brand-cloud);
+  --signal: var(--brand-signal);
+  --primary: var(--brand-primary);
+  --sd: #185FA5;
+  --occ: #10B981;
+  --rent: #3A8FD4;
+  --pos: #10B981;
+  --neg: #dc3545;
+  --zero: #6c757d;
+  --text: var(--brand-ink);
+  --muted: #6c757d;
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #dee2e6;
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+.catdata-root {
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.catdata-root .cd-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.catdata-root .cd-header h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+.catdata-root .cd-header .sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.catdata-root .cd-meta {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-size: 12px;
+}
+.catdata-root .cd-meta span b { color: var(--text); }
+.catdata-root .cd-meta span { color: var(--muted); }
+
+.catdata-root .cd-actions {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 8px;
+}
+.catdata-root .cd-actions button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+.catdata-root .cd-actions button:hover {
+  background: var(--cloud);
+}
+
+.catdata-root .cat-block { margin-bottom: 28px; }
+.catdata-root .cat-title {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-left: 4px solid var(--sd);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.catdata-root .cat-title .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--cloud);
+  color: var(--sd);
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.catdata-root .metric-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.catdata-root .metric-block-header {
+  padding: 8px 14px;
+  background: var(--cloud);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.catdata-root .metric-block-header .name {
+  font-weight: 700;
+  font-size: 13px;
+}
+.catdata-root .metric-block-header .key {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+.catdata-root table.cat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.catdata-root table.cat-table th,
+.catdata-root table.cat-table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.catdata-root table.cat-table th {
+  background: var(--cloud);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.catdata-root table.cat-table th:first-child,
+.catdata-root table.cat-table td:first-child {
+  text-align: left;
+}
+.catdata-root table.cat-table td.label {
+  font-weight: 600;
+  color: var(--text);
+}
+.catdata-root table.cat-table td.label .group-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--cloud);
+  color: var(--sd);
+  margin-right: 6px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.catdata-root table.cat-table tbody tr:hover td {
+  background: var(--cloud);
+}
+
+.catdata-root .cd-pos { color: var(--pos); }
+.catdata-root .cd-neg { color: var(--neg); }
+.catdata-root .cd-zero { color: var(--zero); }
+.catdata-root .cd-mono { font-family: var(--mono); }
+
+.catdata-root .cd-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.catdata-root .cd-error-box {
+  background: #fdecea;
+  border: 1px solid #f5c2c7;
+  color: #842029;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.catdata-root .cd-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+.catdata-root .cd-back-link:hover {
+  text-decoration: underline;
+}
+
+@media print {
+  .catdata-root .cd-actions { display: none; }
+  .catdata-root .cd-back-link { display: none; }
+  .catdata-root .metric-block { page-break-inside: avoid; box-shadow: none; }
+}
+</style>
+
+<div class="catdata-root">
+  <a href="{{ url_for('scorecard.scorecard_index') }}" class="cd-back-link">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Back to Scorecard
+  </a>
+
+  <div class="cd-header">
+    <div>
+      <h1 id="page-title">All Category Data</h1>
+      <div class="sub" id="page-sub">Loading...</div>
+    </div>
+  </div>
+
+  <div class="cd-meta" id="meta-bar"></div>
+
+  <div class="cd-actions">
+    <button onclick="window.print()">Print / Save PDF</button>
+    <button onclick="downloadCSV()">Download CSV</button>
+  </div>
+
+  <div id="cd-content">
+    <div class="cd-empty">Loading data...</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  // ----- URL params -----
+  var params = new URLSearchParams(window.location.search);
+  var market         = params.get('market') || '';
+  var durationYears  = parseInt(params.get('duration_years') || '10', 10);
+  var propertyClass  = params.get('property_class') || 'All';
+  var inventoryTier  = params.get('inventory_tier') || 'All';
+  var regionType     = params.get('region_type') || 'general';
+  var region         = params.get('region') || 'All';
+  var module         = params.get('module') || 'mf';
+  var isDemo         = module === 'demo';
+  var flipDeliveries = params.get('flip_deliveries') === '1';
+  var flipInvPop     = params.get('flip_inv_pop') === '1';
+
+  if (!market) {
+    document.getElementById('cd-content').innerHTML =
+      '<div class="cd-error-box">No market specified. Please open this page from the Scorecard drill-down.</div>';
+    document.getElementById('page-sub').textContent = '';
+  } else {
+    var shortName = market.replace(/ - [A-Z]{2} USA$/, '');
+    var moduleLabel = isDemo ? 'Demographics' : 'MF Fundamentals';
+    document.title = shortName + ' — ' + moduleLabel + ' Category Data';
+    document.getElementById('page-title').textContent = shortName + ' — ' + moduleLabel + ' Category Data';
+    document.getElementById('page-sub').textContent = isDemo
+      ? 'Rolling-window detail for every demographic metric feeding the category scores'
+      : 'Rolling-window detail for every metric feeding the sub-category graphs';
+    var metaHtml =
+      '<span>Market: <b>' + escapeHtml(market) + '</b></span>' +
+      '<span>Duration: <b>' + durationYears + 'Y</b></span>';
+    if (!isDemo) {
+      metaHtml +=
+        '<span>Property Class: <b>' + escapeHtml(propertyClass) + '</b></span>' +
+        '<span>Inventory Tier: <b>' + escapeHtml(inventoryTier) + '</b></span>';
+    }
+    metaHtml += '<span>Region: <b>' + escapeHtml(regionType) + ' / ' + escapeHtml(region) + '</b></span>';
+    metaHtml += '<span>Module: <b>' + moduleLabel + '</b></span>';
+    document.getElementById('meta-bar').innerHTML = metaHtml;
+    loadData();
+  }
+
+  var rawResult = null;
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function loadData() {
+    var endpoint = isDemo ? '/scorecard/api/all_demo_metric_detail' : '/scorecard/api/all_metric_detail';
+    var payload = isDemo
+      ? { market: market, duration_years: durationYears, region_type: regionType, region: region,
+          property_class: propertyClass, flip_inv_pop: flipInvPop }
+      : { market: market, duration_years: durationYears, property_class: propertyClass,
+          inventory_tier: inventoryTier, region_type: regionType, region: region,
+          flip_deliveries: flipDeliveries };
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        document.getElementById('cd-content').innerHTML =
+          '<div class="cd-error-box">Error: ' + escapeHtml(data.error) + '</div>';
+        return;
+      }
+      rawResult = data;
+      renderData(data);
+    })
+    .catch(function(err) {
+      document.getElementById('cd-content').innerHTML =
+        '<div class="cd-error-box">Network error: ' + escapeHtml(err.message || err) + '</div>';
+    });
+  }
+
+  function renderData(data) {
+    var categories = data.categories || [];
+    if (!categories.length) {
+      document.getElementById('cd-content').innerHTML = '<div class="cd-empty">No category data available.</div>';
+      return;
+    }
+
+    // If a specific metric was requested, filter to only that metric
+    var focusMetric = params.get('metric');
+    var filteredCategories = categories;
+    if (focusMetric) {
+      filteredCategories = [];
+      for (var ci = 0; ci < categories.length; ci++) {
+        var cat = categories[ci];
+        var matchingMetrics = (cat.metrics || []).filter(function(m) { return m.key === focusMetric; });
+        if (matchingMetrics.length) {
+          filteredCategories.push({ category: cat.category, metrics: matchingMetrics });
+        }
+      }
+      if (!filteredCategories.length) {
+        filteredCategories = categories;
+      }
+    }
+
+    // MF category colors
+    var mfColors = {
+      'Supply & Demand':                { border: 'var(--sd)',   bg: 'var(--cloud)', fg: 'var(--sd)' },
+      'Occupancy & Yrs to Stabilization': { border: 'var(--occ)',  bg: '#d1fae5', fg: 'var(--occ)' },
+      'Rent Growth':                    { border: 'var(--rent)', bg: 'var(--cloud)', fg: 'var(--rent)' },
+    };
+    // Demographics category colors
+    var demoColors = {
+      'Pop/HH Drivers':            { border: 'var(--primary)', bg: 'var(--cloud)', fg: 'var(--primary)' },
+      'Pop/HH Context':            { border: 'var(--active)', bg: 'var(--cloud)', fg: 'var(--active)' },
+      'Affordability — Snapshot':  { border: 'var(--navy)', bg: 'var(--cloud)', fg: 'var(--navy)' },
+      'Affordability — Growth':    { border: 'var(--primary)', bg: 'var(--cloud)', fg: 'var(--primary)' },
+      'Employment Drivers':        { border: 'var(--signal)', bg: '#d1fae5', fg: 'var(--signal)' },
+      'Employment Context':        { border: 'var(--signal)', bg: '#d1fae5', fg: 'var(--signal)' },
+    };
+    var colors = isDemo ? demoColors : mfColors;
+
+    var html = '';
+    for (var i = 0; i < filteredCategories.length; i++) {
+      var cat = filteredCategories[i];
+      var c = colors[cat.category] || { border: 'var(--text)', bg: 'var(--cloud)', fg: 'var(--text)' };
+      html += '<div class="cat-block">';
+      html += '<div class="cat-title" style="border-left-color:' + c.border + ';">';
+      html +=   '<span class="badge" style="background:' + c.bg + ';color:' + c.fg + ';">' + escapeHtml(cat.category) + '</span>';
+      html +=   '<span style="color:var(--muted);font-size:11px;font-weight:500;">' + (cat.metrics || []).length + ' metric' + ((cat.metrics || []).length === 1 ? '' : 's') + '</span>';
+      html += '</div>';
+
+      var metrics = cat.metrics || [];
+      for (var j = 0; j < metrics.length; j++) {
+        html += renderMetricBlock(metrics[j], c);
+      }
+      html += '</div>';
+    }
+
+    document.getElementById('cd-content').innerHTML = html;
+  }
+
+  function renderMetricBlock(m, catColors) {
+    var detail = m.detail || {};
+    var body = '';
+    if (detail.error) {
+      body = '<div class="cd-empty" style="color:var(--neg);">Error: ' + escapeHtml(detail.error) + '</div>';
+    } else if (!detail.windows || !detail.windows.length) {
+      body = '<div class="cd-empty">No rolling-window data available.</div>';
+    } else {
+      var windows = detail.windows;
+      body = '<table class="cat-table">';
+      body += '<thead><tr>';
+      body += '<th>Period</th>';
+      body += '<th>Market Actual</th>';
+      body += '<th>Peer Group Mean</th>';
+      body += '<th>Top Percentile (P90)</th>';
+      body += '<th>Bottom Percentile (P10)</th>';
+      body += '<th>Signal Z-Score</th>';
+      body += '<th>Volatility</th>';
+      body += '<th>Volatility Z-Score</th>';
+      body += '<th>Peer Dispersion</th>';
+      body += '</tr></thead>';
+      body += '<tbody>';
+      for (var k = 0; k < windows.length; k++) {
+        var w = windows[k];
+        body += '<tr>';
+        body += '<td class="label"><span class="group-tag" style="background:' + catColors.bg + ';color:' + catColors.fg + ';">' + escapeHtml(w.group || '') + '</span>' + escapeHtml(w.label || '') + '</td>';
+        body += '<td class="cd-mono">' + formatRawValue(m.key, w.raw_value) + '</td>';
+        body += '<td class="cd-mono cd-zero">' + formatRawValue(m.key, w.peer_mean) + '</td>';
+        body += '<td class="cd-mono cd-pos">'  + formatRawValue(m.key, w.peer_p90)  + '</td>';
+        body += '<td class="cd-mono cd-neg">'  + formatRawValue(m.key, w.peer_p10)  + '</td>';
+        body += '<td class="cd-mono ' + zCls(w.signal_z) + '">' + zFmt(w.signal_z) + '</td>';
+        body += '<td class="cd-mono">' + formatVol(m.key, w.volatility) + '</td>';
+        body += '<td class="cd-mono ' + zCls(w.vol_z)    + '">' + zFmt(w.vol_z)    + '</td>';
+        body += '<td class="cd-mono">' + formatVol(m.key, w.dispersion) + '</td>';
+        body += '</tr>';
+      }
+      body += '</tbody></table>';
+    }
+
+    var h = '<div class="metric-block" id="metric-' + escapeHtml(m.key) + '">';
+    h += '<div class="metric-block-header">';
+    h +=   '<span class="name">' + escapeHtml(m.label || m.key) + '</span>';
+    h +=   '<span class="key">' + escapeHtml(m.key) + '</span>';
+    h += '</div>';
+    h += body;
+    h += '</div>';
+    return h;
+  }
+
+  // ----- Formatters -----
+
+  var demoGrowthKeys = [
+    'pop_growth','hh_growth','hh_formation_trend','income_growth',
+    'mf_inv_pop_growth',
+    'afford_growth_all','afford_growth_studio','afford_growth_1br','afford_growth_2br','afford_growth_3br',
+    'emp_total_growth','emp_office_growth','emp_industrial_growth',
+    'job_support_total_growth','job_support_office_growth','job_support_industrial_growth',
+  ];
+  var demoRatioKeys = [
+    'mf_inv_pop','hh_pop_ratio',
+    'afford_all','afford_studio','afford_1br','afford_2br','afford_3br',
+    'job_support_total','job_support_office','job_support_industrial',
+  ];
+
+  function formatRawValue(key, v) {
+    if (v == null || isNaN(v)) return '--';
+    if (!isDemo) {
+      if (key === 'yrs_to_stab') return Number(v).toFixed(2) + ' yrs';
+      var pctKeys = ['under_construction','absorption','deliveries','abs_del','blended_occ',
+                     'actual_occ','effective_occ','vacancy','net_deliveries'];
+      if (pctKeys.indexOf(key) !== -1) {
+        return (Number(v) * 100).toFixed(2) + '%';
+      }
+      if (key && key.indexOf('eff_rent_') === 0) return (Number(v) * 100).toFixed(2) + '%';
+      return Number(v).toFixed(4);
+    }
+    if (demoGrowthKeys.indexOf(key) !== -1) {
+      return (Number(v) * 100).toFixed(2) + '%';
+    }
+    if (demoRatioKeys.indexOf(key) !== -1) {
+      return Number(v).toFixed(4);
+    }
+    return Number(v).toFixed(4);
+  }
+
+  function formatVol(key, v) {
+    if (v == null || isNaN(v)) return '--';
+    if (!isDemo) {
+      if (key === 'yrs_to_stab') return Number(v).toFixed(2);
+      var pctKeys = ['under_construction','absorption','deliveries','abs_del','blended_occ',
+                     'actual_occ','effective_occ','vacancy','net_deliveries'];
+      if (pctKeys.indexOf(key) !== -1) {
+        return (Number(v) * 100).toFixed(2) + 'pp';
+      }
+      if (key && key.indexOf('eff_rent_') === 0) return (Number(v) * 100).toFixed(2) + 'pp';
+      return Number(v).toFixed(4);
+    }
+    if (demoGrowthKeys.indexOf(key) !== -1) {
+      return (Number(v) * 100).toFixed(2) + 'pp';
+    }
+    return Number(v).toFixed(4);
+  }
+
+  function zFmt(v) {
+    if (v == null || isNaN(v)) return '--';
+    return Number(v).toFixed(4);
+  }
+
+  function zCls(v) {
+    if (v == null || isNaN(v)) return 'cd-zero';
+    return v > 0.01 ? 'cd-pos' : (v < -0.01 ? 'cd-neg' : 'cd-zero');
+  }
+
+  // ----- CSV download -----
+  window.downloadCSV = function() {
+    if (!rawResult) return;
+    var rows = [
+      ['Category','Metric','Metric Key','Period Group','Period Label','Actual','Peer Mean','P90 (Top)','P10 (Bottom)','Signal Z','Volatility','Vol Z','Dispersion']
+    ];
+    var cats = rawResult.categories || [];
+    for (var i = 0; i < cats.length; i++) {
+      var cat = cats[i];
+      var metrics = cat.metrics || [];
+      for (var j = 0; j < metrics.length; j++) {
+        var m = metrics[j];
+        var windows = (m.detail && m.detail.windows) || [];
+        for (var k = 0; k < windows.length; k++) {
+          var w = windows[k];
+          rows.push([
+            cat.category, m.label || m.key, m.key,
+            w.group || '', w.label || '',
+            rawNum(w.raw_value), rawNum(w.peer_mean), rawNum(w.peer_p90), rawNum(w.peer_p10),
+            rawNum(w.signal_z), rawNum(w.volatility), rawNum(w.vol_z), rawNum(w.dispersion),
+          ]);
+        }
+      }
+    }
+    var csv = rows.map(function(r) {
+      return r.map(function(cell) {
+        if (cell == null) return '';
+        var s = String(cell).replace(/[–—]/g, '-');
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',');
+    }).join('\n');
+
+    var BOM = '﻿';
+    var blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var shortName = market.replace(/ - [A-Z]{2} USA$/, '').replace(/[^A-Za-z0-9]+/g, '_');
+    a.href = url;
+    a.download = shortName + (isDemo ? '_demo_category_data.csv' : '_category_data.csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  function rawNum(v) {
+    if (v == null || isNaN(v)) return '';
+    return Number(v);
+  }
+
+})();
+</script>
+{% endblock %}

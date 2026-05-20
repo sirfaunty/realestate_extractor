@@ -2086,6 +2086,16 @@ class DocumentClassifier:
         (r'hud.?final.?endors', 'hud_form', 0.92),
         (r'hud.?max.?insur', 'loan', 0.90),  # HUD mortgage schedule is a loan doc
         (r'hud.?escrow.?release|hud.?offsite|hud.?wc.?escrow', 'hud_form', 0.90),
+        (r'hud.?closing.?checklist', 'hud_form', 0.92),
+        (r'application.?for.?insurance.?of.?advance', 'hud_form', 0.90),
+        (r'request.?for.?(?:final\s*)?endorsement', 'hud_form', 0.90),
+        (r'request.?for.?approval.?of.?advance', 'hud_form', 0.90),
+        (r'lender.?s?.?certification', 'hud_form', 0.88),
+        (r'contractor.?s?.?requisition', 'hud_form', 0.88),
+        (r'maximum.?insurable.?mortgage', 'hud_form', 0.90),
+        (r'certification.?re.?litigation', 'hud_form', 0.88),
+        (r'special.?conditions.?from.?firm', 'hud_form', 0.88),
+        (r'davis.?bacon|labor.?standards.?clearance', 'hud_form', 0.86),
         # Due diligence / environmental / appraisal
         (r'diagnostic.?memo|due.?diligence|forensic.?review', 'due_diligence', 0.90),
         (r'phase.?[i1].?(?:esa|environmental)|environmental.?(?:site|report)', 'due_diligence', 0.90),
@@ -2109,13 +2119,15 @@ class DocumentClassifier:
         (r'sources.?and.?uses|sources.?uses', 'closing', 0.88),
         (r'development.?agreement|contract.{0,20}development', 'closing', 0.88),
         (r'management.?agreement', 'closing', 0.86),
-        (r'title.?(?:commitment|policy|insurance|search|report)', 'closing', 0.88),
+        (r'title.?(?:commitment|policy|insurance|search|report|exception|endorsement)', 'closing', 0.88),
         (r'(?:owner|lender).?s?.?(?:title|affidavit)', 'closing', 0.86),
         (r'subordination.?(?:agreement|nondisturbance)|snda', 'closing', 0.88),
         (r'estoppel.?(?:certificate|letter)', 'closing', 0.88),
         (r'assignment.?(?:of\s*)?(?:lease|rent|collateral)', 'closing', 0.88),
         (r'ucc.?[1-3]|uniform.?commercial', 'closing', 0.86),
         (r'attorney.?opinion|(?:legal|enforceability).?opinion', 'closing', 0.86),
+        (r'alta.?closing.?protection', 'closing', 0.86),
+        (r'certificate.?of.?(?:substantial.?)?completion', 'closing', 0.86),
         # Loan / mortgage / payoff
         (r'surplus.?cash.?note', 'loan', 0.88),
         (r'loan.?interest.?calc|project.?loan', 'loan', 0.88),
@@ -2124,19 +2136,31 @@ class DocumentClassifier:
         (r'mortgage.?(?:note|deed|modification|assumption)', 'loan', 0.90),
         (r'security.?instrument|deed.?of.?trust', 'loan', 0.88),
         (r'regulatory.?agreement', 'loan', 0.86),
+        (r'firm.?commitment(?:.?amendment)?', 'loan', 0.90),
+        (r'endorsed.?note', 'loan', 0.90),
+        (r'escrow.?agreement', 'loan', 0.86),
+        (r'byrd.?amendment', 'loan', 0.84),
         # Guarantee
         (r'guarantee|guaranty', 'guarantee', 0.90),
         # Insurance / tax certificates
-        (r'(?:insurance|flood).?cert', 'closing', 0.86),
+        (r'(?:insurance|flood).?cert', 'due_diligence', 0.86),
+        (r'certificate.?of.?insurance|certificates.?of.?insurance', 'due_diligence', 0.88),
         (r'tax.?(?:certificate|search|clearance)', 'closing', 0.86),
+        # Certificates of occupancy / inspections
+        (r'certificate.?of.?occupancy|certificates.?of.?occupancy', 'due_diligence', 0.88),
+        (r'radon.?(?:report|test|measurement)', 'due_diligence', 0.88),
         # Rent roll
         (r'rent.?roll', 'rent_roll', 0.92),
         # GL
         (r'general.?ledger|gl.?detail', 'general_ledger', 0.90),
-        # Org chart
+        # Org chart / organizational docs
         (r'organizational.?chart|org.?chart|borrower.?org', 'organizational', 0.88),
+        (r'organizational.?(?:documents|certification)', 'organizational', 0.88),
+        (r'managing.?member.?s?.?organizational', 'organizational', 0.88),
+        (r'borrower.?s?.?(?:organizational|managing)', 'organizational', 0.86),
         # Reference / context
         (r'context\.md$|context\.txt$|readme', 'reference', 0.85),
+        (r'contact.?list', 'reference', 0.88),
     ]
 
     # ── Keyword sets for body-text scoring ─────────────────────────
@@ -2206,6 +2230,10 @@ class DocumentClassifier:
                 # Insurance / tax certs
                 "insurance certificate", "flood certificate",
                 "tax certificate", "tax clearance", "tax search",
+                # Title docs
+                "title exception", "recorded document", "county recorder",
+                "registrar of titles", "alta closing protection",
+                "certificate of completion", "substantial completion",
             ],
             "negative": [
                 "llc agreement", "limited liability", "rent roll",
@@ -2300,6 +2328,13 @@ class DocumentClassifier:
                 # Zoning
                 "zoning report", "zoning letter", "zoning compliance",
                 "certificate of occupancy", "building code",
+                # Insurance / inspection
+                "certificate of insurance", "commercial property insurance",
+                "evidence of insurance", "acord", "policy number",
+                # Radon / environmental testing
+                "radon", "radon report", "radon test", "radon measurement",
+                # Trip reports / inspections
+                "trip report", "re-inspection", "inspection report",
             ],
             "negative": [
                 "budget overview", "detailed budget", "proforma",
@@ -2339,6 +2374,12 @@ class DocumentClassifier:
                 "mortgagor's certificate", "cost certification",
                 "final endorsement", "credit instrument",
                 "escrow release", "fha",
+                "application for insurance", "advance of mortgage proceeds",
+                "request for endorsement", "maximum insurable mortgage",
+                "contractor's requisition", "surety consent",
+                "davis-bacon", "labor standards clearance",
+                "hud closing checklist", "lender's certification",
+                "certification regarding litigation",
             ],
             "negative": [],
         },
@@ -2347,6 +2388,10 @@ class DocumentClassifier:
                 "organizational chart", "org chart", "borrower org",
                 "mortgagor organizational", "corporate structure",
                 "entity structure", "ownership chart",
+                "organizational documents", "organizational certification",
+                "certificate of formation", "articles of organization",
+                "certificate of good standing", "operating agreement certification",
+                "managing member certification", "incumbency certificate",
             ],
             "negative": [],
         },
