@@ -1033,7 +1033,9 @@ class ExtractionEngine:
     def _extract_legal(self, doc: DocumentContent,
                        template: DocumentTemplate) -> List[Dict]:
         """Extract legal clauses preserving full language."""
-        if self.llm_available and template.llm_clause_prompt:
+        if (self.llm_available
+                and template.llm_clause_prompt
+                and template.document_type not in self._LLM_SKIP_TYPES):
             return self._extract_legal_llm(doc, template)
         else:
             return self._extract_legal_rules(doc, template)
