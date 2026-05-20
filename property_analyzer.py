@@ -15,6 +15,7 @@ LLM (Ollama) is used only for gap-filling after rule-based extraction.
 
 import json
 import logging
+import os
 import re
 import time
 from typing import List, Dict, Optional, Tuple
@@ -381,9 +382,180 @@ class PropertyAnalyzer:
         )
         return doc
 
+    def _analyze_monthly_report_package(self, doc_id: int, doc_record: Dict) -> Dict[str, int]:
+        """
+        Try to parse a document as a Village Green monthly report package.
+
+        Handles .msg files (extracts Excel attachments) and individual .xlsx files.
+        Returns dict with counts: {'rent_roll': n, 'operating_items': n, 'financial_terms': n}
+        or empty dict if this doesn't look like a monthly report.
+        """
+        from .extractors.monthly_report_parser import (
+            parse_monthly_report_package, extract_msg_attachments
+        )
+        import tempfile
+
+        filename = doc_record.get('filename', '')
+        filepath = doc_record.get('filepath', '')
+        fname_lower = filename.lower()
+
+        # Only try for Excel and MSG files
+        if not (fname_lower.endswith('.xlsx') or fname_lower.endswith('.xls') or
+                fname_lower.endswith('.msg')):
+            return {}
+
+        excel_paths = []
+        temp_dir = None
+
+        try:
+            if fname_lower.endswith('.msg') and os.path.exists(filepath):
+                # Extract Excel attachments from .msg
+                temp_dir = tempfile.mkdtemp(prefix='monthly_report_')
+                attachments = extract_msg_attachments(filepath, temp_dir)
+                excel_paths = [
+                    a['path'] for a in attachments
+                    if a['filename'].lower().endswith(('.xlsx', '.xls'))
+                ]
+                if not excel_paths:
+                    return {}
+                logger.info(f"Monthly report: extracted {len(excel_paths)} Excel files from {filename}")
+
+            elif fname_lower.endswith(('.xlsx', '.xls')) and os.path.exists(filepath):
+                excel_paths = [filepath]
+
+            else:
+                return {}
+
+            # Detect if this looks like a monthly report
+            # Check for VG-style naming: "Executive Summary", "Statement", "Variance"
+            is_monthly_report = False
+            for p in excel_paths:
+                fn = os.path.basename(p).lower()
+                if any(kw in fn for kw in ['executive summary', 'statement', 'variance',
+                                            'monthly report', 'unit mix']):
+                    is_monthly_report = True
+                    break
+
+            # Also check sheet names for multi-sheet Executive Summary
+            if not is_monthly_report:
+                try:
+                    import openpyxl
+                    for p in excel_paths:
+                        wb = openpyxl.load_workbook(p, read_only=True)
+                        sheets_lower = [s.lower() for s in wb.sheetnames]
+                        wb.close()
+                        if any('unit mix' in s or 'exhibit' in s for s in sheets_lower):
+                            is_monthly_report = True
+                            break
+                except Exception:
+                    pass
+
+            if not is_monthly_report:
+                return {}
+
+            # Parse the package
+            property_name = doc_record.get('property_name')
+            pkg = parse_monthly_report_package(excel_paths, property_name=property_name)
+
+            if not pkg.rent_roll_entries and not pkg.operating_items and not pkg.financial_terms:
+                return {}
+
+            counts = {'rent_roll': 0, 'operating_items': 0, 'financial_terms': 0}
+
+            # Store rent roll entries
+            if pkg.rent_roll_entries:
+                self.db.conn.execute(
+                    "DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
+                for entry in pkg.rent_roll_entries:
+                    try:
+                        self.db.insert_rent_roll_entry(
+                            document_id=doc_id,
+                            property_name=pkg.property_name or property_name,
+                            unit_number=entry.get('unit_number'),
+                            tenant_name=entry.get('tenant_name'),
+                            suite=entry.get('suite'),
+                            square_footage=self._safe_float(entry.get('square_footage')),
+                            lease_start=entry.get('lease_start'),
+                            lease_end=entry.get('lease_end'),
+                            monthly_rent=self._safe_float(entry.get('monthly_rent')),
+                            annual_rent=self._safe_float(entry.get('annual_rent')),
+                            rent_psf=self._safe_float(entry.get('rent_psf')),
+                            status=entry.get('status'),
+                            notes=entry.get('notes'),
+                            metadata=entry.get('metadata'),
+                        )
+                        counts['rent_roll'] += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to store monthly report rent roll entry: {e}")
+
+            # Store operating statement items
+            if pkg.operating_items:
+                self.db.conn.execute(
+                    "DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))
+                property_id = doc_record.get('property_id')
+                for item in pkg.operating_items:
+                    try:
+                        self.db.insert_operating_statement_item(
+                            document_id=doc_id,
+                            category=item.get('category', 'unknown'),
+                            line_item=item.get('line_item', ''),
+                            property_id=property_id,
+                            property_name=pkg.property_name or property_name,
+                            period=item.get('period'),
+                            subcategory=item.get('subcategory'),
+                            amount=self._safe_float(item.get('amount')),
+                            is_subtotal=item.get('is_subtotal', False),
+                            is_total=item.get('is_total', False),
+                            metadata=item.get('metadata'),
+                        )
+                        counts['operating_items'] += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to store monthly report OS item: {e}")
+
+            # Store financial terms
+            if pkg.financial_terms:
+                for term in pkg.financial_terms:
+                    try:
+                        self.db.insert_financial_term(
+                            document_id=doc_id,
+                            term_type=term.get('term_type', 'financial_metric'),
+                            term_label=term.get('term_label', ''),
+                            value_raw=term.get('value_raw', ''),
+                            value_numeric=self._safe_float(term.get('value_numeric')),
+                            confidence=0.95,
+                            page_number=None,
+                        )
+                        counts['financial_terms'] += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to store monthly report financial term: {e}")
+
+            logger.info(
+                f"Monthly report package: {counts['rent_roll']} rent roll, "
+                f"{counts['operating_items']} OS items, {counts['financial_terms']} terms "
+                f"from {filename}"
+            )
+            return counts
+
+        except Exception as e:
+            logger.error(f"Monthly report parsing failed for {filename}: {e}", exc_info=True)
+            return {}
+        finally:
+            # Clean up temp directory
+            if temp_dir:
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
+
     def _analyze_rent_roll(self, doc_id: int, doc: DocumentContent,
                            doc_record: Dict) -> int:
         """Extract rent roll data using text-based parsers."""
+        # Try monthly report package parser first for Excel/MSG files
+        pkg_counts = self._analyze_monthly_report_package(doc_id, doc_record)
+        if pkg_counts.get('rent_roll', 0) > 0:
+            return pkg_counts['rent_roll']
+
         # Clear any existing rent roll data for this document
         self.db.conn.execute(
             "DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
@@ -470,11 +642,17 @@ class PropertyAnalyzer:
                                       doc_record: Dict) -> int:
         """Extract operating statement data.
 
-        Tries three strategies in order:
+        Tries four strategies in order:
+          0. Monthly report package parser (VG Excel/MSG format)
           1. Columnar year-table parser (handles XLSX year-column layouts)
           2. Text-based camelCase parser (Yardi/MRI exports)
           3. Template-based tabular mapping
         """
+        # Strategy 0: Monthly report package parser (Excel/MSG monthly reports)
+        pkg_counts = self._analyze_monthly_report_package(doc_id, doc_record)
+        if pkg_counts.get('operating_items', 0) > 0:
+            return pkg_counts['operating_items']
+
         # Clear existing
         self.db.conn.execute(
             "DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))

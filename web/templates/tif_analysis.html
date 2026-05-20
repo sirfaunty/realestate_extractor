@@ -1,0 +1,746 @@
+{% extends "base.html" %}
+
+{% block title %}TIF Analysis — capactive{% endblock %}
+
+{% block content %}
+<script>document.querySelector('.main').classList.add('main-wide');</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   TIF ANALYSIS MODULE — Scoped Styles
+   ═══════════════════════════════════════════════════════════════ */
+.tif-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+  --navy: var(--brand-navy);
+  --active: var(--brand-active);
+  --primary: var(--brand-primary);
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --mono: 'SF Mono', Consolas, monospace;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* ── Header ── */
+.tif-root .tif-header { margin-bottom: 16px; }
+.tif-root .tif-header h1 { font-size: 22px; font-weight: 700; margin: 0; color: var(--navy); }
+.tif-root .tif-header .subtitle { font-size: 14px; color: var(--text); margin-top: 4px; font-weight: 500; }
+.tif-root .tif-header .source-attr { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── Stats Bar ── */
+.tif-root .stats-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.tif-root .stat-card {
+  flex: 1; min-width: 140px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; text-align: center;
+}
+.tif-root .stat-card .stat-value { font-size: 22px; font-weight: 700; color: var(--navy); }
+.tif-root .stat-card .stat-label {
+  font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.4px; margin-top: 2px;
+}
+
+/* ── Section Panels ── */
+.tif-root .panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+}
+.tif-root .panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  background: #f9fafb;
+}
+.tif-root .panel-header h2 {
+  font-size: 15px; font-weight: 700; margin: 0; color: var(--navy);
+}
+.tif-root .panel-body { padding: 0; }
+.tif-root .panel-body-padded { padding: 18px; }
+
+/* ── Tables ── */
+.tif-root .tif-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tif-root .tif-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.tif-root .tif-table th {
+  text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px;
+  background: #f9fafb; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tif-root .tif-table th.text-right,
+.tif-root .tif-table td.text-right { text-align: right; }
+.tif-root .tif-table td {
+  padding: 8px 12px; border-bottom: 1px solid #f0f1f3;
+  vertical-align: top; white-space: nowrap;
+}
+.tif-root .tif-table tr:hover td { background: #f8fafd; }
+
+/* Section header rows in scenario table */
+.tif-root .tif-table .section-header td {
+  background: var(--brand-cloud); font-weight: 700; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.5px; color: var(--navy);
+  padding: 6px 12px; border-bottom: 1px solid var(--border);
+}
+.tif-root .tif-table .section-header:hover td { background: var(--brand-cloud); }
+
+/* Row label column */
+.tif-root .tif-table .row-label {
+  font-weight: 600; color: var(--text); min-width: 200px;
+}
+
+/* Scenario column headers */
+.tif-root .tif-table .col-current { background: #f3f4f6; color: var(--muted); }
+.tif-root .tif-table .col-scenario { background: var(--brand-cloud); color: var(--navy); }
+
+/* Value coloring */
+.tif-root .val-positive { color: var(--success); font-weight: 600; }
+.tif-root .val-negative { color: var(--danger); font-weight: 600; }
+.tif-root .val-neutral { color: var(--muted); }
+.tif-root .val-baseline { color: var(--muted); font-style: italic; }
+
+/* ── Chart Container ── */
+.tif-root .chart-container { padding: 18px; }
+.tif-root .chart-container canvas { width: 100%; height: 320px; display: block; }
+
+/* ── Breakeven Card ── */
+.tif-root .breakeven-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.tif-root .breakeven-item {
+  background: #f9fafb; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; text-align: center;
+}
+.tif-root .breakeven-item .be-value { font-size: 20px; font-weight: 700; color: var(--navy); }
+.tif-root .breakeven-item .be-label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+.tif-root .verdict-banner {
+  background: #d1fae5; border: 1px solid #6ee7b7; border-radius: 8px;
+  padding: 14px 18px; text-align: center; font-weight: 600;
+  font-size: 14px; color: #065f46;
+}
+.tif-root .verdict-banner.verdict-fail {
+  background: #fee2e2; border-color: #fca5a5; color: #991b1b;
+}
+
+/* ── Collapsible Section ── */
+.tif-root .collapsible-header {
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; user-select: none; padding: 14px 18px;
+  background: #f9fafb; border-bottom: 1px solid var(--border);
+}
+.tif-root .collapsible-header h2 { font-size: 15px; font-weight: 700; margin: 0; color: var(--navy); }
+.tif-root .collapsible-chevron {
+  font-size: 12px; color: var(--muted); transition: transform 0.2s;
+}
+.tif-root .collapsible-chevron.open { transform: rotate(90deg); }
+.tif-root .collapsible-body { display: none; }
+.tif-root .collapsible-body.open { display: block; }
+
+/* ── Scenario Selector ── */
+.tif-root .scenario-select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; background: var(--panel); outline: none; cursor: pointer;
+}
+.tif-root .scenario-select:focus { border-color: var(--active); }
+
+/* ── Loading / Error States ── */
+.tif-root .loading-state {
+  text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px;
+}
+.tif-root .loading-spinner {
+  display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: tif-spin 0.6s linear infinite; margin-bottom: 8px;
+}
+@keyframes tif-spin { to { transform: rotate(360deg); } }
+
+.tif-root .error-state {
+  text-align: center; padding: 30px 20px; color: var(--danger);
+  font-size: 13px; background: #fef2f2; border-radius: 8px;
+}
+</style>
+
+<div class="tif-root">
+
+  <!-- ── Header ── -->
+  <div class="tif-header">
+    <h1>TIF / Tax Analysis</h1>
+    <div class="subtitle">Chamberlain Apartments — Tax Increment Financing Scenario Modeling</div>
+    <div class="source-attr">Model: KA Asset Management TIF Model (May 2026) &bull; Methodology: Ehlers</div>
+  </div>
+
+  <!-- ── Stats Bar ── -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-value">$7,269,119</div>
+      <div class="stat-label">Note Balance</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">4.60%</div>
+      <div class="stat-label">Note Rate</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">$43.8M</div>
+      <div class="stat-label">MAA Floor</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">2026–2044</div>
+      <div class="stat-label">TIF Horizon (19 yr)</div>
+    </div>
+  </div>
+
+  <!-- ── Scenario Comparison Table ── -->
+  <div class="panel" id="scenario-panel">
+    <div class="panel-header">
+      <h2>Scenario Comparison</h2>
+    </div>
+    <div class="panel-body">
+      <div id="scenario-loading" class="loading-state">
+        <div class="loading-spinner"></div><br>Loading scenarios...
+      </div>
+      <div id="scenario-error" class="error-state" style="display:none;"></div>
+      <div id="scenario-table-wrap" class="tif-table-wrap" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ── Note Amortization Chart ── -->
+  <div class="panel" id="chart-panel">
+    <div class="panel-header">
+      <h2>Note Amortization — Balance Over Time</h2>
+    </div>
+    <div class="panel-body">
+      <div class="chart-container">
+        <canvas id="amort-chart" width="900" height="320"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sensitivity Sweep ── -->
+  <div class="panel" id="sensitivity-panel">
+    <div class="panel-header">
+      <h2>Sensitivity Sweep — TMV Impact</h2>
+    </div>
+    <div class="panel-body">
+      <div id="sensitivity-loading" class="loading-state">
+        <div class="loading-spinner"></div><br>Loading sensitivity data...
+      </div>
+      <div id="sensitivity-error" class="error-state" style="display:none;"></div>
+      <div id="sensitivity-table-wrap" class="tif-table-wrap" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ── Breakeven Analysis ── -->
+  <div class="panel" id="breakeven-panel">
+    <div class="panel-header">
+      <h2>Breakeven Analysis</h2>
+    </div>
+    <div class="panel-body panel-body-padded">
+      <div id="breakeven-loading" class="loading-state">
+        <div class="loading-spinner"></div><br>Loading breakeven data...
+      </div>
+      <div id="breakeven-error" class="error-state" style="display:none;"></div>
+      <div id="breakeven-content" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ── Year-by-Year Detail (collapsible) ── -->
+  <div class="panel" id="detail-panel">
+    <div class="collapsible-header" onclick="toggleDetail()">
+      <h2>Year-by-Year Detail</h2>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select class="scenario-select" id="detail-scenario-select" onclick="event.stopPropagation();">
+          <option value="current">Current</option>
+          <option value="mid">Mid</option>
+          <option value="aggressive">Aggressive</option>
+          <option value="maa_floor">MAA Floor</option>
+        </select>
+        <span class="collapsible-chevron" id="detail-chevron">&#9654;</span>
+      </div>
+    </div>
+    <div class="collapsible-body" id="detail-body">
+      <div id="detail-loading" class="loading-state">
+        <div class="loading-spinner"></div><br>Loading detail...
+      </div>
+      <div id="detail-error" class="error-state" style="display:none;"></div>
+      <div id="detail-table-wrap" class="tif-table-wrap" style="display:none;"></div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  // ─── Helpers ──────────────────────────────────────────────────
+  function fmt(v, decimals) {
+    if (v == null) return '—';
+    decimals = decimals != null ? decimals : 0;
+    return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  function fmtM(v) {
+    if (v == null) return '—';
+    var n = Number(v);
+    if (Math.abs(n) >= 1e6) {
+      return '$' + (n / 1e6).toFixed(2) + 'M';
+    }
+    return fmt(n, 0);
+  }
+
+  function fmtPct(v) {
+    if (v == null) return '—';
+    return Number(v).toFixed(2) + '%';
+  }
+
+  function valClass(v, invert) {
+    if (v == null || v === 0) return 'val-neutral';
+    var positive = invert ? v < 0 : v > 0;
+    return positive ? 'val-positive' : 'val-negative';
+  }
+
+  function showEl(id) { document.getElementById(id).style.display = ''; }
+  function hideEl(id) { document.getElementById(id).style.display = 'none'; }
+
+  function showError(id, msg) {
+    var el = document.getElementById(id);
+    el.textContent = msg;
+    el.style.display = '';
+  }
+
+  // ─── Scenario Comparison Table ────────────────────────────────
+  var scenarioData = null;
+
+  function loadScenarios() {
+    fetch('/tif-analysis/api/scenarios')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        scenarioData = data;
+        hideEl('scenario-loading');
+        renderScenarioTable(data);
+        showEl('scenario-table-wrap');
+        drawAmortChart(data);
+      })
+      .catch(function(err) {
+        hideEl('scenario-loading');
+        showError('scenario-error', 'Failed to load scenario data: ' + err.message);
+      });
+  }
+
+  function renderScenarioTable(data) {
+    var scenarios = data.scenarios || {};
+    var keys = ['current', 'mid', 'aggressive', 'maa_floor'];
+    var labels = { current: 'Current', mid: 'Mid', aggressive: 'Aggressive', maa_floor: 'MAA Floor' };
+
+    var rows = [
+      { section: 'TIF NOTE' },
+      { label: 'Starting TMV', field: 'starting_tmv', format: 'M' },
+      { label: 'TIF Note Payoff Year', field: 'payoff_year', format: 'plain' },
+      { label: 'Total Net TIF Received (19yr)', field: 'total_net_tif', format: 'dollar' },
+      { label: 'Total Note Interest Paid', field: 'total_note_interest', format: 'dollar' },
+      { section: 'PROPERTY TAX' },
+      { label: 'Total Property Tax Paid', field: 'total_property_tax', format: 'dollar' },
+      { section: 'VS. CURRENT — Savings & Benefit' },
+      { label: 'Tax Savings vs Current (Nominal)', field: 'tax_savings_nominal', format: 'dollar', colored: true },
+      { label: 'Tax Savings vs Current (NPV @5%)', field: 'tax_savings_npv', format: 'dollar', colored: true },
+      { label: 'TIF Reduction vs Current (Nominal)', field: 'tif_reduction_nominal', format: 'dollar', colored: true, invert: true },
+      { label: 'Net Economic Benefit (Nominal)', field: 'net_benefit_nominal', format: 'dollar', colored: true },
+      { label: 'Net Economic Benefit (NPV @5%)', field: 'net_benefit_npv', format: 'dollar', colored: true },
+      { label: 'Attorney Fees', field: 'attorney_fees', format: 'dollar' },
+      { label: 'Net Benefit After Fees', field: 'net_benefit_after_fees', format: 'dollar', colored: true },
+    ];
+
+    var html = '<table class="tif-table">';
+    html += '<thead><tr><th></th>';
+    for (var k = 0; k < keys.length; k++) {
+      var cls = keys[k] === 'current' ? 'col-current' : 'col-scenario';
+      html += '<th class="text-right ' + cls + '">' + labels[keys[k]] + '</th>';
+    }
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (row.section) {
+        html += '<tr class="section-header"><td colspan="5">' + row.section + '</td></tr>';
+        continue;
+      }
+      html += '<tr><td class="row-label">' + row.label + '</td>';
+      for (var j = 0; j < keys.length; j++) {
+        var sc = scenarios[keys[j]] || {};
+        var val = sc[row.field];
+        var display;
+
+        if (row.format === 'M') {
+          display = fmtM(val);
+        } else if (row.format === 'dollar') {
+          display = fmt(val, 0);
+        } else {
+          display = val != null ? val : '—';
+        }
+
+        var cls = 'text-right';
+        if (keys[j] === 'current' && row.colored) {
+          cls += ' val-baseline';
+        } else if (row.colored && val != null) {
+          cls += ' ' + valClass(val, row.invert);
+        }
+
+        html += '<td class="' + cls + '">' + display + '</td>';
+      }
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    document.getElementById('scenario-table-wrap').innerHTML = html;
+  }
+
+  // ─── Note Amortization Chart (Canvas) ─────────────────────────
+  function drawAmortChart(data) {
+    var canvas = document.getElementById('amort-chart');
+    var ctx = canvas.getContext('2d');
+
+    // High-DPI support
+    var rect = canvas.parentElement.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = 320 * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = '320px';
+    ctx.scale(dpr, dpr);
+
+    var W = rect.width;
+    var H = 320;
+    var pad = { top: 30, right: 30, bottom: 50, left: 70 };
+    var plotW = W - pad.left - pad.right;
+    var plotH = H - pad.top - pad.bottom;
+
+    var startYear = 2026;
+    var endYear = 2044;
+    var numYears = endYear - startYear + 1;
+    var maxBal = 7300000;
+
+    var scenarios = data.scenarios || {};
+    var keys = ['current', 'mid', 'aggressive', 'maa_floor'];
+    var colors = {
+      current: '#8E8E9A',
+      mid: '#185FA5',
+      aggressive: '#3A8FD4',
+      maa_floor: '#10B981'
+    };
+    var lineLabels = {
+      current: 'Current',
+      mid: 'Mid',
+      aggressive: 'Aggressive',
+      maa_floor: 'MAA Floor'
+    };
+
+    // Clear
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = '#E2E4E8';
+    ctx.lineWidth = 1;
+    var yTicks = [0, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000];
+    for (var t = 0; t < yTicks.length; t++) {
+      var y = pad.top + plotH - (yTicks[t] / maxBal) * plotH;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(pad.left + plotW, y);
+      ctx.stroke();
+
+      // Y-axis labels
+      ctx.fillStyle = '#8E8E9A';
+      ctx.font = '11px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      var yLabel = '$' + (yTicks[t] / 1e6).toFixed(1) + 'M';
+      if (yTicks[t] === 0) yLabel = '$0';
+      ctx.fillText(yLabel, pad.left - 8, y);
+    }
+
+    // X-axis labels
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (var yr = startYear; yr <= endYear; yr++) {
+      var x = pad.left + ((yr - startYear) / (numYears - 1)) * plotW;
+      if ((yr - startYear) % 2 === 0 || yr === endYear) {
+        ctx.fillStyle = '#8E8E9A';
+        ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.fillText(yr.toString(), x, pad.top + plotH + 8);
+      }
+      // Vertical grid every 2 years
+      if ((yr - startYear) % 4 === 0) {
+        ctx.strokeStyle = '#f0f1f3';
+        ctx.beginPath();
+        ctx.moveTo(x, pad.top);
+        ctx.lineTo(x, pad.top + plotH);
+        ctx.stroke();
+        ctx.strokeStyle = '#E2E4E8';
+      }
+    }
+
+    // Axes
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, pad.top + plotH);
+    ctx.lineTo(pad.left + plotW, pad.top + plotH);
+    ctx.stroke();
+
+    // Draw lines
+    for (var si = 0; si < keys.length; si++) {
+      var key = keys[si];
+      var sc = scenarios[key];
+      if (!sc || !sc.amortization) continue;
+
+      var amort = sc.amortization;
+      var payoff = sc.payoff_year;
+
+      ctx.strokeStyle = colors[key];
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+
+      var firstPoint = true;
+      for (var ai = 0; ai < amort.length; ai++) {
+        var aYear = amort[ai].year || (startYear + ai);
+        var aBal = amort[ai].end_balance != null ? amort[ai].end_balance : amort[ai].balance;
+        if (aBal == null) aBal = 0;
+
+        var px = pad.left + ((aYear - startYear) / (numYears - 1)) * plotW;
+        var py = pad.top + plotH - (aBal / maxBal) * plotH;
+
+        if (firstPoint) {
+          ctx.moveTo(px, py);
+          firstPoint = false;
+        } else {
+          ctx.lineTo(px, py);
+        }
+
+        // Payoff year marker
+        if (payoff && aYear === payoff) {
+          ctx.stroke();
+          // Draw dot
+          ctx.fillStyle = colors[key];
+          ctx.beginPath();
+          ctx.arc(px, py, 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Payoff label
+          ctx.fillStyle = colors[key];
+          ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(payoff.toString(), px, py - 8);
+
+          // Restart path for remaining points
+          ctx.strokeStyle = colors[key];
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Legend
+    var legendX = pad.left + 10;
+    var legendY = pad.top + 6;
+    for (var li = 0; li < keys.length; li++) {
+      ctx.fillStyle = colors[keys[li]];
+      ctx.fillRect(legendX, legendY + li * 18, 14, 3);
+      ctx.fillStyle = '#1A1A2E';
+      ctx.font = '11px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(lineLabels[keys[li]], legendX + 20, legendY + li * 18 + 2);
+    }
+  }
+
+  // ─── Sensitivity Sweep ────────────────────────────────────────
+  function loadSensitivity() {
+    fetch('/tif-analysis/api/sensitivity')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        hideEl('sensitivity-loading');
+        renderSensitivityTable(data);
+        showEl('sensitivity-table-wrap');
+      })
+      .catch(function(err) {
+        hideEl('sensitivity-loading');
+        showError('sensitivity-error', 'Failed to load sensitivity data: ' + err.message);
+      });
+  }
+
+  function renderSensitivityTable(data) {
+    var rows = data.rows || data;
+    var html = '<table class="tif-table"><thead><tr>';
+    html += '<th>Post-Appeal TMV</th>';
+    html += '<th class="text-right">Annual Tax Savings</th>';
+    html += '<th class="text-right">Annual TIF Reduction</th>';
+    html += '<th class="text-right">19yr Cumul. Tax Savings</th>';
+    html += '<th class="text-right">19yr Cumul. TIF Reduction</th>';
+    html += '<th class="text-right">Net Nominal Benefit</th>';
+    html += '<th class="text-right">NPV Net Benefit</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      html += '<tr>';
+      html += '<td class="row-label">' + fmtM(r.tmv) + '</td>';
+      html += '<td class="text-right ' + valClass(r.annual_tax_savings) + '">' + fmt(r.annual_tax_savings, 0) + '</td>';
+      html += '<td class="text-right ' + valClass(r.annual_tif_reduction, true) + '">' + fmt(r.annual_tif_reduction, 0) + '</td>';
+      html += '<td class="text-right ' + valClass(r.cumul_tax_savings) + '">' + fmt(r.cumul_tax_savings, 0) + '</td>';
+      html += '<td class="text-right ' + valClass(r.cumul_tif_reduction, true) + '">' + fmt(r.cumul_tif_reduction, 0) + '</td>';
+      html += '<td class="text-right ' + valClass(r.net_nominal_benefit) + '">' + fmt(r.net_nominal_benefit, 0) + '</td>';
+      html += '<td class="text-right ' + valClass(r.npv_net_benefit) + '">' + fmt(r.npv_net_benefit, 0) + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    document.getElementById('sensitivity-table-wrap').innerHTML = html;
+  }
+
+  // ─── Breakeven Analysis ───────────────────────────────────────
+  function loadBreakeven() {
+    fetch('/tif-analysis/api/breakeven')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        hideEl('breakeven-loading');
+        renderBreakeven(data);
+        showEl('breakeven-content');
+      })
+      .catch(function(err) {
+        hideEl('breakeven-loading');
+        showError('breakeven-error', 'Failed to load breakeven data: ' + err.message);
+      });
+  }
+
+  function renderBreakeven(data) {
+    var html = '<div class="breakeven-grid">';
+    html += '<div class="breakeven-item"><div class="be-value">' + fmtM(data.breakeven_tmv) + '</div><div class="be-label">Breakeven TMV</div></div>';
+    html += '<div class="breakeven-item"><div class="be-value">' + fmt(data.required_annual_payment, 0) + '</div><div class="be-label">Required Annual Payment</div></div>';
+    html += '<div class="breakeven-item"><div class="be-value">' + fmtM(data.maa_floor) + '</div><div class="be-label">MAA Floor</div></div>';
+    html += '<div class="breakeven-item"><div class="be-value">' + fmtM(data.cushion) + ' (' + fmtPct(data.cushion_pct) + ')</div><div class="be-label">Cushion vs MAA</div></div>';
+    html += '</div>';
+
+    var verdictPass = data.verdict_pass !== false;
+    var verdictText = data.verdict || 'TIF Note retires under ALL appeal scenarios including MAA Floor';
+    html += '<div class="verdict-banner ' + (verdictPass ? '' : 'verdict-fail') + '">' + verdictText + '</div>';
+
+    document.getElementById('breakeven-content').innerHTML = html;
+  }
+
+  // ─── Year-by-Year Detail ──────────────────────────────────────
+  var detailOpen = false;
+
+  window.toggleDetail = function() {
+    detailOpen = !detailOpen;
+    var body = document.getElementById('detail-body');
+    var chev = document.getElementById('detail-chevron');
+    if (detailOpen) {
+      body.classList.add('open');
+      chev.classList.add('open');
+      loadDetail();
+    } else {
+      body.classList.remove('open');
+      chev.classList.remove('open');
+    }
+  };
+
+  function loadDetail() {
+    var scenario = document.getElementById('detail-scenario-select').value;
+    if (!scenarioData) {
+      hideEl('detail-table-wrap');
+      document.getElementById('detail-loading').style.display = '';
+      // Retry after scenarios loaded
+      setTimeout(loadDetail, 500);
+      return;
+    }
+    hideEl('detail-loading');
+    hideEl('detail-error');
+
+    var sc = (scenarioData.scenarios || {})[scenario];
+    if (!sc || !sc.amortization || sc.amortization.length === 0) {
+      showError('detail-error', 'No year-by-year data available for this scenario.');
+      hideEl('detail-table-wrap');
+      return;
+    }
+
+    renderDetailTable(sc.amortization);
+    showEl('detail-table-wrap');
+  }
+
+  function renderDetailTable(amort) {
+    var html = '<table class="tif-table"><thead><tr>';
+    html += '<th>Year</th>';
+    html += '<th class="text-right">TMV</th>';
+    html += '<th class="text-right">NTC</th>';
+    html += '<th class="text-right">Captured NTC</th>';
+    html += '<th class="text-right">Tax Increment</th>';
+    html += '<th class="text-right">Net TIF</th>';
+    html += '<th class="text-right">Note Beg Bal</th>';
+    html += '<th class="text-right">Note Interest</th>';
+    html += '<th class="text-right">Principal Paid</th>';
+    html += '<th class="text-right">Note End Bal</th>';
+    html += '<th class="text-right">Property Tax</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < amort.length; i++) {
+      var r = amort[i];
+      html += '<tr>';
+      html += '<td class="row-label">' + (r.year || '—') + '</td>';
+      html += '<td class="text-right">' + fmtM(r.tmv) + '</td>';
+      html += '<td class="text-right">' + fmt(r.ntc, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.captured_ntc, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.tax_increment, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.net_tif, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.beg_balance, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.note_interest, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.principal_paid, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.end_balance, 0) + '</td>';
+      html += '<td class="text-right">' + fmt(r.property_tax, 0) + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    document.getElementById('detail-table-wrap').innerHTML = html;
+  }
+
+  // Scenario dropdown change handler
+  document.getElementById('detail-scenario-select').addEventListener('change', function() {
+    if (detailOpen) loadDetail();
+  });
+
+  // ─── Resize handler for chart ─────────────────────────────────
+  var resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      if (scenarioData) drawAmortChart(scenarioData);
+    }, 200);
+  });
+
+  // ─── Init ─────────────────────────────────────────────────────
+  loadScenarios();
+  loadSensitivity();
+  loadBreakeven();
+
+})();
+</script>
+{% endblock %}

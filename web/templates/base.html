@@ -124,6 +124,11 @@
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 8h4M6 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </span> Closing Books
             </a></li>
+            <li><a href="{{ url_for('tif_analysis.tif_index') }}" class="{% if request.endpoint and request.endpoint.startswith('tif_analysis.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14V6l4-4 4 4v8" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 8h4v6H2" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 9v3M8 11v1M11 9v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </span> TIF / Tax Analysis
+            </a></li>
         </ul>
 
         {% if current_user and current_user.role == 'admin' %}

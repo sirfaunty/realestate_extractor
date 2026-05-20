@@ -2117,6 +2117,12 @@ class DocumentClassifier:
         # Equity / waterfall
         (r'equity.?return.?calc|jv.?equity|equity.?waterfall', 'equity_waterfall', 0.90),
         (r'equity.?account|equity.?detail', 'equity_waterfall', 0.88),
+        # Monthly report packages (Village Green / property management exports)
+        (r'monthly.?report', 'rent_roll', 0.90),
+        (r'executive.?summary.?report', 'rent_roll', 0.90),
+        (r'unit.?mix', 'rent_roll', 0.92),
+        (r'12.?month.?statement|statement.?\(12', 'operating_statement', 0.92),
+        (r'variance.?report|budget.?comparison', 'operating_statement', 0.90),
         # Operating / budget
         (r'budget.?overview|operating.?budget|detailed.?budget', 'operating_statement', 0.90),
         (r'property.?overview.?summary', 'operating_statement', 0.85),
@@ -2646,17 +2652,33 @@ class DocumentClassifier:
         # ── Layer 0: Email pre-check ──
         # .msg/.eml files with email-forwarding prefixes (RE:, FW:, FWD:) are
         # almost always correspondence, not the financial doc referenced in the
-        # subject.  Catch these before filename patterns run.
+        # subject.  Catch these before filename patterns run — BUT allow
+        # strong financial keywords (monthly report, etc.) to override.
+        _email_prefix_match = None
         if is_email:
-            email_prefix = re.match(
+            _email_prefix_match = re.match(
                 r'^(re[_:\s]|fw[d]?[_:\s]|fwd[_:\s])', filename_lower
             )
-            if email_prefix:
-                logger.info(
-                    f"Classifier: email prefix '{email_prefix.group()}' on .msg "
-                    f"→ correspondence (0.80)"
+            if _email_prefix_match:
+                # Check if the rest of the filename contains strong financial keywords
+                # that should override the correspondence default
+                _rest = filename_lower[_email_prefix_match.end():]
+                _strong_financial = re.search(
+                    r'monthly.?report|rent.?roll|operating.?statement|12.?month|'
+                    r'variance.?report|executive.?summary|unit.?mix|budget.?comparison',
+                    _rest
                 )
-                return 'correspondence', 0.80
+                if not _strong_financial:
+                    logger.info(
+                        f"Classifier: email prefix '{_email_prefix_match.group()}' on .msg "
+                        f"→ correspondence (0.80)"
+                    )
+                    return 'correspondence', 0.80
+                else:
+                    logger.info(
+                        f"Classifier: email prefix '{_email_prefix_match.group()}' on .msg "
+                        f"overridden by strong financial keyword in filename — continuing"
+                    )
 
         # ── Layer 1: Filename patterns ──
         for pattern, doc_type, confidence in self._filename_patterns:
