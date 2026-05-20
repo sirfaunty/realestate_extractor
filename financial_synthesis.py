@@ -13,6 +13,7 @@ property-specific logic. Handles multiple NOI definitions
 authority and flagging divergence.
 """
 
+import datetime
 import logging
 import re
 from collections import defaultdict
@@ -214,7 +215,6 @@ class FinancialSynthesizer:
 
     def _group_by_period(self, items: List[Dict]) -> Dict[str, List[Dict]]:
         """Group items by period, filtering out far-future amortization periods."""
-        import datetime
         current_year = datetime.date.today().year
         max_year = current_year + 12  # Allow up to 12 years of proforma
 

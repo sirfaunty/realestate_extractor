@@ -188,13 +188,13 @@
       </div>
 
       <!-- Tab content containers -->
-      <div id="cbTabFiles" class="tab-content"></div>
-      <div id="cbTabBlocks" class="tab-content" style="display:none;"></div>
-      <div id="cbTabMappings" class="tab-content" style="display:none;"></div>
-      <div id="cbTabGaps" class="tab-content" style="display:none;"></div>
-      <div id="cbTabDuplicates" class="tab-content" style="display:none;"></div>
-      <div id="cbTabQueries" class="tab-content" style="display:none;"></div>
-      <div id="cbTabLearnings" class="tab-content" style="display:none;"></div>
+      <div id="cbTabFiles" class="tab-content active"></div>
+      <div id="cbTabBlocks" class="tab-content"></div>
+      <div id="cbTabMappings" class="tab-content"></div>
+      <div id="cbTabGaps" class="tab-content"></div>
+      <div id="cbTabDuplicates" class="tab-content"></div>
+      <div id="cbTabQueries" class="tab-content"></div>
+      <div id="cbTabLearnings" class="tab-content"></div>
     </div>
   </div>
 </div>
@@ -229,6 +229,7 @@
         {% if detail_file_id %}
         showFileDetail('{{ detail_file_id }}');
         {% else %}
+        document.getElementById('cbTabFiles').classList.add('active');
         loadFiles();
         {% endif %}
       })
@@ -265,16 +266,16 @@
     }
     var contents = document.querySelectorAll('.cb-root .tab-content');
     for (var i = 0; i < contents.length; i++) {
-      contents[i].style.display = 'none';
+      contents[i].classList.remove('active');
     }
     var tabMap = {
       files: 'cbTabFiles', blocks: 'cbTabBlocks', mappings: 'cbTabMappings',
       gaps: 'cbTabGaps', duplicates: 'cbTabDuplicates', queries: 'cbTabQueries',
       learnings: 'cbTabLearnings'
     };
-    document.getElementById(tabMap[tab]).style.display = 'block';
+    document.getElementById(tabMap[tab]).classList.add('active');
     document.getElementById('cbDetail').style.display = 'none';
-    document.getElementById('cbList').style.display = 'block';
+    document.getElementById('cbList').style.display = '';
 
     if (tab === 'files') loadFiles();
     else if (tab === 'blocks') loadBlocks();
@@ -488,7 +489,7 @@
 
   window.cbBackToList = function() {
     document.getElementById('cbDetail').style.display = 'none';
-    document.getElementById('cbList').style.display = 'block';
+    document.getElementById('cbList').style.display = '';
   };
 
   // ── Blocks tab ────────────────────────────────────────────────

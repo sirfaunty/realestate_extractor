@@ -236,6 +236,7 @@ CREATE INDEX IF NOT EXISTS idx_rent_roll_doc ON rent_roll_entries(document_id);
 CREATE INDEX IF NOT EXISTS idx_rent_roll_tenant ON rent_roll_entries(tenant_name);
 CREATE INDEX IF NOT EXISTS idx_opstat_doc ON operating_statement_items(document_id);
 CREATE INDEX IF NOT EXISTS idx_opstat_category ON operating_statement_items(category);
+CREATE INDEX IF NOT EXISTS idx_opstat_doc_period_cat ON operating_statement_items(document_id, period, category);
 CREATE INDEX IF NOT EXISTS idx_gl_doc ON gl_entries(document_id);
 CREATE INDEX IF NOT EXISTS idx_gl_account ON gl_entries(account_code);
 CREATE INDEX IF NOT EXISTS idx_gl_date ON gl_entries(entry_date);
