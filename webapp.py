@@ -224,7 +224,16 @@ def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_nam
 def get_config_store():
     """Get or create a per-request ConfigStore cached in flask.g."""
     if hasattr(g, '_config_store') and g._config_store is not None:
-        return g._config_store
+        store = g._config_store
+        # Reconnect if a prior caller closed it within this request
+        if store.conn is None:
+            store.connect()
+        else:
+            try:
+                store.conn.execute("SELECT 1")
+            except Exception:
+                store.connect()
+        return store
     store = ConfigStore(CONFIG_DB, DATA_DIR)
     store.connect()
     try:
@@ -249,10 +258,9 @@ def get_usage_tracker():
 def get_org_db(org_id):
     """Get the extraction database for a specific org."""
     store = get_config_store()
-    try:
-        db_path = store.get_org_db_path(org_id)
-    finally:
-        store.close()
+    db_path = store.get_org_db_path(org_id)
+    # Note: don't close store here — it's cached in flask.g
+    # and will be closed by _close_cached_stores teardown
     if not db_path:
         return None
     db = Database(db_path)
@@ -269,7 +277,15 @@ def request_entity_too_large(error):
 def get_permission_store():
     """Get or create a per-request PermissionStore cached in flask.g."""
     if hasattr(g, '_permission_store') and g._permission_store is not None:
-        return g._permission_store
+        store = g._permission_store
+        if store.conn is None:
+            store.connect()
+        else:
+            try:
+                store.conn.execute("SELECT 1")
+            except Exception:
+                store.connect()
+        return store
     store = PermissionStore(CONFIG_DB)
     store.connect()
     try:
@@ -342,11 +358,8 @@ def extract_zip(zip_path, dest_dir):
 def is_setup_complete():
     """Check if initial setup has been completed."""
     store = get_config_store()
-    try:
-        orgs = store.list_orgs()
-        return len(orgs) > 0
-    finally:
-        store.close()
+    orgs = store.list_orgs()
+    return len(orgs) > 0
 
 def get_current_user():
     """Get the current logged-in user from session."""
@@ -370,27 +383,21 @@ def _ensure_dev_session():
         return
     # Auto-provision a dev org and admin user
     store = get_config_store()
-    try:
-        orgs = store.list_orgs()
-        if not orgs:
-            from .licensing import generate_org_key, generate_user_key
-            from werkzeug.security import generate_password_hash
-            org_key = generate_org_key('dev', 'enterprise')
-            store.create_org('dev', 'Dev Testing', org_key, plan='enterprise')
-            store.create_user('dev', 'admin', 'admin@capactive.local',
-                              'Dev Admin', role='admin',
-                              password_hash=generate_password_hash('devadmin'))
-            # Init permissions
-            pstore = get_permission_store()
-            try:
-                pstore.init_user_permissions('admin', 'dev', role='admin')
-            finally:
-                pstore.close()
-        org = store.get_org('dev') or store.list_orgs()[0]
-        users = store.list_users(org.org_id)
-        user = users[0] if users else None
-    finally:
-        store.close()
+    orgs = store.list_orgs()
+    if not orgs:
+        from .licensing import generate_org_key, generate_user_key
+        from werkzeug.security import generate_password_hash
+        org_key = generate_org_key('dev', 'enterprise')
+        store.create_org('dev', 'Dev Testing', org_key, plan='enterprise')
+        store.create_user('dev', 'admin', 'admin@capactive.local',
+                          'Dev Admin', role='admin',
+                          password_hash=generate_password_hash('devadmin'))
+        # Init permissions
+        pstore = get_permission_store()
+        pstore.init_user_permissions('admin', 'dev', role='admin')
+    org = store.get_org('dev') or store.list_orgs()[0]
+    users = store.list_users(org.org_id)
+    user = users[0] if users else None
 
     if org and user:
         session['user_id'] = user['user_id']
@@ -2308,8 +2315,7 @@ def api_property_synthesis(property_id):
 _EXTRACTABLE_TYPES = DocumentClassifier.EXTRACTABLE_TYPES
 _OS_TYPES = {'operating_statement'}
 _NO_EXTRACT_TYPES = {
-    'organizational', 'reference',
-    'correspondence', 'due_diligence', 'unknown',
+    'unknown',
 }
 
 
@@ -2330,6 +2336,10 @@ def _assess_doc(db, doc):
             conf = meta.get('classification_confidence', 1.0)
         except (json.JSONDecodeError, TypeError):
             pass
+
+    # Empty/blank document_type = needs reclassification → always flag
+    if not doc_type or not doc_type.strip():
+        return 'needs_rerun', 'Unclassified — needs reclassification before extraction'
 
     if analysis_status != 'analyzed':
         return 'new', 'Not yet analyzed'
@@ -2432,6 +2442,120 @@ def api_assess_property(property_id):
             'total': len(docs),
             'counts': counts,
             'rerun_count': rerun_count,
+            'documents': results,
+        })
+    finally:
+        db.close()
+
+
+@app.route('/api/property/<int:property_id>/reclassify', methods=['POST'])
+@login_required
+def api_reclassify_property(property_id):
+    """
+    Re-run document classification for a property.
+
+    By default, only re-classifies docs with empty/blank document_type.
+    Pass {"force": true} to re-classify ALL docs for the property.
+
+    Returns updated classification results per document.
+    """
+    org_id = session['org_id']
+    body = request.get_json(force=True) if request.data else {}
+    force_all = body.get('force', False)
+
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            return jsonify({'error': 'Property not found'}), 404
+
+        docs = db.conn.execute(
+            "SELECT * FROM documents WHERE property_id = ? ORDER BY id",
+            (property_id,)
+        ).fetchall()
+        docs = [dict(d) for d in docs]
+
+        if not force_all:
+            docs = [d for d in docs if not d.get('document_type', '').strip()]
+
+        if not docs:
+            return jsonify({
+                'success': True,
+                'message': 'No documents need reclassification.',
+                'reclassified': 0,
+            })
+
+        from .pdf_ingestion import DocumentContent, PageContent
+
+        llm = get_llm()
+        classifier = DocumentClassifier(llm)
+        results = []
+        reclassified = 0
+
+        for doc in docs:
+            doc_id = doc['id']
+            old_type = doc.get('document_type', '')
+
+            # Reconstruct doc content from stored fulltext
+            rows = db.conn.execute("""
+                SELECT page_number, content FROM document_fulltext
+                WHERE CAST(document_id AS INTEGER) = ?
+                ORDER BY CAST(page_number AS INTEGER)
+            """, (doc_id,)).fetchall()
+
+            if not rows:
+                results.append({
+                    'id': doc_id,
+                    'filename': doc.get('filename', ''),
+                    'old_type': old_type,
+                    'new_type': old_type,
+                    'confidence': 0,
+                    'changed': False,
+                    'error': 'No fulltext stored',
+                })
+                continue
+
+            pages = [PageContent(
+                page_number=int(r['page_number']),
+                text=r['content'],
+                tables=[],
+                is_scanned=bool(doc.get('is_scanned')),
+            ) for r in rows]
+
+            doc_content = DocumentContent(
+                filepath=doc.get('filepath', ''),
+                filename=doc.get('filename', ''),
+                pages=pages,
+                page_count=len(pages),
+                is_scanned=bool(doc.get('is_scanned')),
+                file_hash=doc.get('file_hash', ''),
+            )
+
+            new_type, conf = classifier.classify(doc_content, use_llm=False)
+            changed = (new_type != old_type) and new_type and new_type != 'unknown'
+
+            if changed:
+                meta = json.dumps({'classification_confidence': conf})
+                db.conn.execute(
+                    'UPDATE documents SET document_type=?, analysis_status=?, metadata=? WHERE id=?',
+                    (new_type, 'ingested', meta, doc_id)
+                )
+                reclassified += 1
+
+            results.append({
+                'id': doc_id,
+                'filename': doc.get('filename', ''),
+                'old_type': old_type,
+                'new_type': new_type if changed else old_type,
+                'confidence': round(conf, 2),
+                'changed': changed,
+            })
+
+        db.conn.commit()
+        return jsonify({
+            'success': True,
+            'total': len(docs),
+            'reclassified': reclassified,
             'documents': results,
         })
     finally:

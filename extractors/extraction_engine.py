@@ -2068,12 +2068,17 @@ class ExtractionEngine:
 class DocumentClassifier:
     """
     Classify document type using a layered approach:
+      0. Email pre-check (.msg/.eml with RE:/FW: prefix → correspondence)
       1. Filename pattern matching (highest priority, fast)
+      1b. Retry with numbered prefix stripped (e.g. "22_HUD_..." → "HUD_...")
       2. Title/header keyword matching (first 500 chars, high weight)
       3. Body keyword scoring (first 5000 chars)
-      4. LLM fallback (only when confidence is very low)
+      4. Low-confidence .msg fallback → correspondence
+      5. LLM fallback (only when confidence is very low)
 
-    Supports 13 document types covering the full CRE document universe.
+    Supports 15 document types covering the full CRE document universe.
+    Email files (.msg) are protected from misclassification as financial
+    types unless a high-confidence (>=0.89) pattern matches.
     """
 
     # ── Filename patterns ──────────────────────────────────────────
@@ -2152,10 +2157,26 @@ class DocumentClassifier:
         # Certificates of occupancy / inspections
         (r'certificate.?of.?occupancy|certificates.?of.?occupancy', 'due_diligence', 0.88),
         (r'radon.?(?:report|test|measurement)', 'due_diligence', 0.88),
+        # Loan — payment letters, lender certificates
+        (r'payment.?letter|lender.?s?.?(?:current\s*)?payment', 'loan', 0.88),
+        (r'lender.?(?:certificate|certification)', 'loan', 0.88),
+        # Closing — licenses, permits, title agent
+        (r'local.?requirements|licenses?.?and.?permits', 'closing', 0.86),
+        (r'title.?agent|letter.?of.?authority', 'closing', 0.86),
+        (r'certificate.?of.?(?:substantial\s*)?completion', 'closing', 0.86),
+        # Due diligence — trip reports, inspections
+        (r'trip.?report|re.?inspection|inspection.?report', 'due_diligence', 0.88),
+        (r'final.?trip.?report', 'due_diligence', 0.90),
+        # Correspondence — explicit email patterns
+        (r'^re[_\s]|^fw[d]?[_\s]|^fwd[_\s]', 'correspondence', 0.80),
+        (r'memo\.msg$|_memo\.msg$', 'correspondence', 0.82),
+        # Generic .msg files that didn't match anything more specific above
+        # are almost certainly correspondence
+        (r'\.msg$', 'correspondence', 0.70),
         # Rent roll
         (r'rent.?roll', 'rent_roll', 0.92),
-        # GL
-        (r'general.?ledger|gl.?detail', 'general_ledger', 0.90),
+        # GL — require "general ledger" or "gl detail", not just "cost"
+        (r'general.?ledger|gl.?detail|gl.?report', 'general_ledger', 0.90),
         # Org chart / organizational docs
         (r'organizational.?chart|org.?chart|borrower.?org', 'organizational', 0.88),
         (r'organizational.?(?:documents|certification)', 'organizational', 0.88),
@@ -2440,24 +2461,74 @@ class DocumentClassifier:
             for pat, dtype, conf in self.FILENAME_PATTERNS
         ]
 
+    # Patterns that strip leading numbered prefixes from closing-book filenames
+    # e.g. "22_HUD_Approved..." → "HUD_Approved...", "11._Lenders_..." → "Lenders_..."
+    _NUMBERED_PREFIX_RE = re.compile(r'^[\d]+[._\-]+\s*')
+
     def classify(self, doc: DocumentContent,
                  use_llm: bool = True) -> Tuple[str, float]:
         """
         Classify document type using layered analysis.
 
         Strategy:
+          0. Email pre-check (.msg files → correspondence unless strong override)
           1. Filename pattern match (fast, high confidence)
+          1b. Retry with numbered prefix stripped
           2. Title + body keyword scoring with negative penalties
           3. LLM fallback if confidence is very low
 
         Returns (document_type, confidence) tuple.
         """
-        # ── Layer 1: Filename patterns ──
         filename_lower = doc.filename.lower()
+        is_email = filename_lower.endswith('.msg') or filename_lower.endswith('.eml')
+
+        # ── Layer 0: Email pre-check ──
+        # .msg/.eml files with email-forwarding prefixes (RE:, FW:, FWD:) are
+        # almost always correspondence, not the financial doc referenced in the
+        # subject.  Catch these before filename patterns run.
+        if is_email:
+            email_prefix = re.match(
+                r'^(re[_:\s]|fw[d]?[_:\s]|fwd[_:\s])', filename_lower
+            )
+            if email_prefix:
+                logger.info(
+                    f"Classifier: email prefix '{email_prefix.group()}' on .msg "
+                    f"→ correspondence (0.80)"
+                )
+                return 'correspondence', 0.80
+
+        # ── Layer 1: Filename patterns ──
         for pattern, doc_type, confidence in self._filename_patterns:
             if pattern.search(filename_lower):
+                # Guard: don't let vague patterns override .msg → correspondence
+                # Only allow if the matched type is specifically email-plausible
+                # or the pattern confidence is very high (>0.88)
+                if is_email and confidence < 0.89 and doc_type not in (
+                    'correspondence', 'reference',
+                ):
+                    logger.info(
+                        f"Classifier: filename pattern '{doc_type}' ({confidence:.0%}) "
+                        f"suppressed for .msg file — falling through to keyword scoring"
+                    )
+                    continue
                 logger.info(f"Classifier: filename match → {doc_type} ({confidence:.0%})")
                 return doc_type, confidence
+
+        # ── Layer 1b: Retry with numbered prefix stripped ──
+        # Closing-book docs often have "22_HUD_..." or "11._Lenders_..." prefixes
+        stripped = self._NUMBERED_PREFIX_RE.sub('', filename_lower)
+        if stripped != filename_lower:
+            for pattern, doc_type, confidence in self._filename_patterns:
+                if pattern.search(stripped):
+                    if is_email and confidence < 0.89 and doc_type not in (
+                        'correspondence', 'reference',
+                    ):
+                        continue
+                    logger.info(
+                        f"Classifier: filename match (stripped prefix) → {doc_type} "
+                        f"({confidence:.0%}) [original: {doc.filename}]"
+                    )
+                    return doc_type, confidence
 
         # ── Layer 2: Keyword scoring ──
         text_lower = doc.full_text[:5000].lower()
@@ -2511,15 +2582,16 @@ class DocumentClassifier:
 
         confidence = min(signal_conf + margin_bonus, 1.0)
 
-        # ── Low-confidence .msg fallback ──
+        # ── Low-confidence .msg/.eml fallback ──
         # Email files that don't strongly match any structured doc type
-        # are likely general correspondence (meeting notes, FYIs, etc.)
-        if confidence < 0.20 and doc.filename.lower().endswith('.msg'):
+        # are likely general correspondence.  Raise the threshold so emails
+        # about "costs" or "analysis" don't get misclassified as financial docs.
+        if is_email and confidence < 0.55:
             logger.info(
-                f"Classifier: low-confidence .msg ({best_type} @ {confidence:.0%}) "
+                f"Classifier: low-confidence email ({best_type} @ {confidence:.0%}) "
                 f"→ defaulting to correspondence"
             )
-            return 'correspondence', 0.25
+            return 'correspondence', max(0.30, confidence)
 
         return best_type, confidence
 
