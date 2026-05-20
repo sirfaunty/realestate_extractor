@@ -2,6 +2,7 @@
 {% block title %}Extraction Review — capactive{% endblock %}
 
 {% block content %}
+<script>document.querySelector('.main').classList.add('main-wide');</script>
 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
     <div>
         <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">Extraction Review</h2>
@@ -64,7 +65,7 @@
 <!-- Review Table -->
 <div class="card" style="padding: 0; overflow: hidden;">
     <div style="overflow-x: auto;">
-        <table class="data-table" style="margin: 0; border-radius: 0;">
+        <table class="data-table" style="margin: 0; border-radius: 0; min-width: 950px;">
             <thead>
                 <tr>
                     <th style="width: 30px; text-align: center;">

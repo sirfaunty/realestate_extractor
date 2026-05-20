@@ -164,7 +164,7 @@
 
 <div id="done-actions" style="display: {{ 'flex' if job.status != 'processing' else 'none' }}; gap: 12px; margin-top: 16px;">
     <a href="{{ url_for('documents') }}" class="btn btn-primary">View Documents</a>
-    <a href="{{ url_for('upload') }}" class="btn btn-secondary">Upload Another</a>
+    <a href="{{ url_for('file_extractor') }}" class="btn btn-secondary">Upload Another</a>
     <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
 </div>
 

@@ -180,7 +180,16 @@ a:hover {
     flex: 1;
     margin-left: 240px;
     padding: 32px 40px;
-    max-width: 1100px;
+    min-width: 0;           /* allow flex child to shrink below content size */
+}
+
+/* Constrain prose-heavy pages; data-heavy pages override with .main-wide */
+.main:not(.main-wide) {
+    max-width: 1400px;
+}
+
+.main-wide {
+    max-width: none;
 }
 
 /* ─── Page Header ──��� */
@@ -418,6 +427,7 @@ select:focus {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    min-width: 700px;       /* force horizontal scroll rather than column crush */
 }
 
 .data-table th {
@@ -1104,10 +1114,21 @@ details[open] summary::before {
 
 /* ─── Responsive ─── */
 
+@media (max-width: 1200px) {
+    .main { padding: 24px 24px; }
+}
+
 @media (max-width: 768px) {
     .sidebar { display: none; }
-    .main { margin-left: 0; padding: 20px; }
+    .main { margin-left: 0; padding: 16px; }
+    .main:not(.main-wide) { max-width: none; }
     .card-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 480px) {
+    .card-grid { grid-template-columns: 1fr; }
+    .data-table { font-size: 12px; }
+    .data-table th, .data-table td { padding: 8px 10px; }
 }
 
 /* ─── Autocomplete ─── */
