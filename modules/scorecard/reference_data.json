@@ -1,0 +1,1999 @@
+{
+  "reference_table": [
+    {
+      "costar_raw": "Abilene - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Akron - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Albany - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Albany - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Albany - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Albuquerque - NM",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Alexandria - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Altoona - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Amarillo - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Ames - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Anchorage - AK",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Ann Arbor - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Anniston-Oxford - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Appleton - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Asheville - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Athens - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Atlanta - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Atlantic City - NJ",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Auburn-Opelika - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Augusta - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Austin - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Bakersfield - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Baltimore - MD",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Bangor - ME",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Barnstable Town - MA",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Baton Rouge - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Battle Creek - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Bay City - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Beaumont - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Beckley - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Bellingham - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Bend - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Billings - MT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Binghamton - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Birmingham - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Bismarck - ND",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Blacksburg - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Bloomington - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Bloomington - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Bloomsburg-Berwick - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Boise - ID",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Boston - MA",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Boulder - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Bowling Green - KY",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Bozeman - MT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Bremerton - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Brownsville-Harlingen - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Brunswick - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Buffalo - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Burlington - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Burlington - VT",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "California-Lexington Park - MD",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Canton - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Cape Girardeau - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Carbondale-Marion - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Carson City - NV",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Casper - WY",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Cedar Rapids - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Chambersburg-Waynesboro - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Champaign-Urbana - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Charleston - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Charleston - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Charlotte - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Charlottesville - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Chattanooga - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Cheyenne - WY",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Chicago - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Chico - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Cincinnati - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Clarksville - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Cleveland - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Cleveland - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Coeur d'Alene - ID",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "College Station-Bryan - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Colorado Springs - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Columbia - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Columbia - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Columbus - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Columbus - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Columbus - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Corpus Christi - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Corvallis - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Cumberland - MD",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Dallas-Fort Worth - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Dalton - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Danville - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Daphne-Fairhope-Foley - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Davenport - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Dayton - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Daytona Beach - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Decatur - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Decatur - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Denver - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Des Moines - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Detroit - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Dothan - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Dover - DE",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Dubuque - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Duluth - MN",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Durham - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Eagle Pass - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "East Bay - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "East Stroudsburg - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Eau Claire - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "El Centro - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "El Paso - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Elizabethtown-Fort Knox - KY",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Elkhart - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Elmira - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Enid - OK",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Erie - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Eugene - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Evansville - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Fairbanks - AK",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Fargo - ND",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Farmington - NM",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Fayetteville - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Flagstaff - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Flint - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Florence - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Florence-Muscle Shoals - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Fond du Lac - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Fort Collins - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Fort Lauderdale - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Fort Myers - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Fort Smith - AR",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Fort Wayne - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Fresno - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Ft Walton Beach - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Gadsden - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Gainesville - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Gainesville - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Gettysburg - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Glens Falls - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Goldsboro - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Grand Forks - ND",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Grand Island - NE",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Grand Junction - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Grand Rapids - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Grants Pass - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Great Falls - MT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Greeley - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Green Bay - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Greensboro - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Greenville - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Greenville - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Gulfport-Biloxi-Pascagoula - MS",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Hagerstown - MD",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Hammond - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Hanford-Corcoran - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Harrisburg - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Harrisonburg - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Hartford - CT",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Hattiesburg - MS",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Helena - MT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Hickory - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Hilton Head Island - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Hinesville - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Homosassa Springs - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Honolulu - HI",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Hot Springs - AR",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Houma-Thibodaux - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Houston - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Huntington - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Huntsville - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Idaho Falls - ID",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Indianapolis - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Inland Empire - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Iowa City - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Ithaca - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Jackson - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Jackson - MS",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Jackson - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Jacksonville - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Jacksonville - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Janesville-Beloit - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Jefferson City - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Johnson City - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Johnstown - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Jonesboro - AR",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Joplin - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Kahului-Wailuku-Lahaina - HI",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Kalamazoo - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Kankakee - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Kansas City - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Kennewick-Richland - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Killeen - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Kingsport - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Kingston - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Knoxville - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Kokomo - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "La Crosse-Onalaska - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Lafayette - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Lafayette-West Lafayette - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Lake Charles - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Lake Havasu - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Lakeland - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Lancaster - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Lansing - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Laredo - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Las Cruces - NM",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Las Vegas - NV",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Lawrence - KS",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Lawton - OK",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Lebanon - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Lehigh Valley - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Lewiston - ID",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Lewiston-Auburn - ME",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Lexington - KY",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Lima - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Lincoln - NE",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Little Rock - AR",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Logan - UT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Long Island - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Longview - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Longview - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Los Angeles - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Louisville - KY",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Lubbock - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Lynchburg - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Macon - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Madera - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Madison - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Manchester - NH",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Manhattan - KS",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Mankato - MN",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Mansfield - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "McAllen - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Medford - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Melbourne - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Memphis - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Merced - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Miami - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Michigan City-La Porte - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Midland - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Midland - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Milwaukee - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Minneapolis - MN",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Minot - ND",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Missoula - MT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Mobile - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Modesto - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Monroe - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Monroe - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Montgomery - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Morgantown - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Morristown - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Mount Vernon - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Muncie - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Muskegon - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Myrtle Beach - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Napa - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Naples - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Nashville - TN",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "New Bern - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "New Haven - CT",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "New Orleans - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "New York - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Niles-Benton Harbor - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Norfolk - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Northern New Jersey - NJ",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Northwest Arkansas - AR",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Norwich - CT",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Ocala - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Ocean City - NJ",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Odessa - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Ogden - UT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Oklahoma City - OK",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Olympia - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Omaha - NE",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Orange County - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Orlando - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Oshkosh-Neenah - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Owensboro - KY",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Paducah - KY",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Palm Beach - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Panama City - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Parkersburg - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Pensacola - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Peoria - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Philadelphia - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Phoenix - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Pine Bluff - AR",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Pinehurst-Southern Pines - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Pittsburgh - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Pittsfield - MA",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Pocatello - ID",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Port St. Lucie - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Portland - ME",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Portland - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Poughkeepsie - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Prescott - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Providence - RI",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Provo - UT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Pueblo - CO",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Punta Gorda - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Racine - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Raleigh - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Rapid City - SD",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Reading - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Redding - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Reno - NV",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Richmond - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Roanoke - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Rochester - MN",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Rochester - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Rockford - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Rocky Mount - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Rome - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Sacramento - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Saginaw - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Saint Louis - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Salem - OR",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Salinas - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Salisbury - MD",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Salt Lake City - UT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "San Angelo - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "San Antonio - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "San Diego - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "San Francisco - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "San Jose - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "San Luis Obispo - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "San Rafael - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Sandusky - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Santa Barbara - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Santa Cruz - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Santa Fe - NM",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Santa Rosa - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Sarasota - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Savannah - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Scranton - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Seattle - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Sebastian-Vero Beach - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Sebring - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Sheboygan - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Sherman-Denison - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Shreveport - LA",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Sierra Vista-Douglas - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Sioux City - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Sioux Falls - SD",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "South Bend - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Spartanburg - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Spokane - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Springfield - IL",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Springfield - MA",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Springfield - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Springfield - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "St. Cloud - MN",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "St. George - UT",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "St. Joseph - MO",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Stamford - CT",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "State College - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Staunton-Waynesboro - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Stockton - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Sumter - SC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Syracuse - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Tallahassee - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Tampa - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Terre Haute - IN",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Texarkana - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "The Villages - FL",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Toledo - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Topeka - KS",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Traverse City - MI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Trenton - NJ",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Tucson - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Tulsa - OK",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Tuscaloosa - AL",
+      "general_region": "South",
+      "specific_region": "East South Central"
+    },
+    {
+      "costar_raw": "Twin Falls - ID",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    },
+    {
+      "costar_raw": "Tyler - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Utica - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Valdosta - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Vallejo-Fairfield - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Ventura - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Victoria - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Vineland - NJ",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Visalia - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Waco - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Walla Walla - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Warner Robins - GA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Washington - DC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Waterloo-Cedar Falls - IA",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Watertown-Fort Drum - NY",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Wausau - WI",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Weirton-Steubenville - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Wenatchee - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Wheeling - WV",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Wichita - KS",
+      "general_region": "Midwest",
+      "specific_region": "West North Central"
+    },
+    {
+      "costar_raw": "Wichita Falls - TX",
+      "general_region": "South",
+      "specific_region": "West South Central"
+    },
+    {
+      "costar_raw": "Williamsport - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Wilmington - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Winchester - VA",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Winston-Salem - NC",
+      "general_region": "South",
+      "specific_region": "South Atlantic"
+    },
+    {
+      "costar_raw": "Worcester - MA",
+      "general_region": "Northeast",
+      "specific_region": "New England"
+    },
+    {
+      "costar_raw": "Yakima - WA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "York - PA",
+      "general_region": "Northeast",
+      "specific_region": "Mid-Atlantic"
+    },
+    {
+      "costar_raw": "Youngstown - OH",
+      "general_region": "Midwest",
+      "specific_region": "East North Central"
+    },
+    {
+      "costar_raw": "Yuba City - CA",
+      "general_region": "West",
+      "specific_region": "Pacific"
+    },
+    {
+      "costar_raw": "Yuma - AZ",
+      "general_region": "West",
+      "specific_region": "Mountain"
+    }
+  ]
+}
