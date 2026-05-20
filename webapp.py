@@ -674,6 +674,13 @@ def index():
                            usage=usage)
 
 
+@app.route('/extract')
+@login_required
+def file_extractor():
+    """Unified file extractor page — single files, folders, or ZIP archives."""
+    return render_template('file_extractor.html', templates=list_templates())
+
+
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required
 @permission_required('extraction.upload', 'edit')
@@ -863,7 +870,8 @@ def upload():
 
         return redirect(url_for('job_status', job_id=job_id))
 
-    return render_template('upload.html', templates=list_templates())
+    # GET requests redirect to unified file extractor page
+    return redirect(url_for('file_extractor'))
 
 
 @app.route('/batch', methods=['GET', 'POST'])
@@ -1042,7 +1050,8 @@ def batch():
 
         return redirect(url_for('job_status', job_id=job_id))
 
-    return render_template('batch.html', templates=list_templates())
+    # GET requests redirect to unified file extractor page
+    return redirect(url_for('file_extractor'))
 
 
 @app.route('/job/<job_id>')

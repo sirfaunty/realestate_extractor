@@ -18,11 +18,8 @@
         </p>
     </div>
     <div style="display: flex; gap: 8px;">
-        {% if can_edit('extraction.upload') %}
-        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload PDF</a>
-        {% endif %}
-        {% if can_edit('extraction.batch') %}
-        <a href="{{ url_for('batch') }}" class="btn btn-secondary">Batch Process</a>
+        {% if can_edit('extraction.upload') or can_edit('extraction.batch') %}
+        <a href="{{ url_for('file_extractor') }}" class="btn btn-primary">Upload & Extract</a>
         {% endif %}
     </div>
 </div>
@@ -270,8 +267,8 @@
         </div>
         <p style="color: var(--text-secondary); margin-bottom: 8px;">No documents processed yet</p>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Upload a PDF to start extracting lease terms, rent rolls, and financial data.</p>
-        {% if can_edit('extraction.upload') %}
-        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload Your First PDF</a>
+        {% if can_edit('extraction.upload') or can_edit('extraction.batch') %}
+        <a href="{{ url_for('file_extractor') }}" class="btn btn-primary">Upload Your First Document</a>
         {% endif %}
     </div>
     {% endif %}

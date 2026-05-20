@@ -2,6 +2,7 @@
 {% block title %}Documents — capactive{% endblock %}
 
 {% block content %}
+<script>document.querySelector('.main').classList.add('main-wide');</script>
 <style>
     .doc-table { table-layout: fixed; }
     .doc-table th:nth-child(1) { width: 38%; }
@@ -107,7 +108,7 @@
     <div class="empty-state">
         <div class="icon">&#128196;</div>
         <p>No documents found{% if filter_type or filter_property %} matching your filters{% endif %}.</p>
-        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload a PDF</a>
+        <a href="{{ url_for('file_extractor') }}" class="btn btn-primary">Upload Documents</a>
     </div>
     {% endif %}
 </div>
