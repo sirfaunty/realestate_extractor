@@ -228,26 +228,57 @@ LOAN_DOCUMENT = DocumentTemplate(
         # ── CRITICAL: Deal-defining terms — must always be extracted ──
         FieldDefinition("borrower", "Name of the borrower/mortgagor",
                         required=True, priority=FieldPriority.CRITICAL,
-                        aliases=["mortgagor", "obligor"]),
+                        aliases=["mortgagor", "obligor"],
+                        prose_patterns=[
+                            # "Borrower: Chamberlain Apartments, LLC" (same line)
+                            r"(?i)(?:Borrower|Mortgagor)\s*[:]\s+([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,}|Property)",
+                            # "Borrower Name and Address:\nChamberlain Apartments, LLC" (next line)
+                            r"(?i)Borrower\s+Name\s+and\s+Address\s*[:]\s*(?:Property.*\n)?([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,})",
+                        ]),
         FieldDefinition("lender", "Name of the lender/mortgagee",
                         required=True, priority=FieldPriority.CRITICAL,
-                        aliases=["mortgagee", "note holder", "payee"]),
+                        aliases=["mortgagee", "note holder", "payee"],
+                        prose_patterns=[
+                            r"(?i)(?:Lender|Mortgagee|Payee)\s*[:]\s*(.+?)(?:\s*$|\s{2,})",
+                        ]),
         FieldDefinition("loan_amount", "Principal loan amount", field_type="currency",
                         required=True, priority=FieldPriority.CRITICAL,
                         aliases=["principal", "commitment amount", "principal sum",
-                                 "amount of debt", "face amount"]),
+                                 "amount of debt", "face amount"],
+                        prose_patterns=[
+                            r"(?i)(?:Unpaid\s+)?Principal\s+(?:Balance|Sum|Amount)\s*\$?\s*([\d,]+\.?\d*)",
+                            r"(?i)(?:Loan|Mortgage|Commitment)\s+Amount\s*[:]\s*\$?\s*([\d,]+\.?\d*)",
+                            r"(?i)(?:Face\s+Amount|Amount\s+of\s+(?:Note|Debt))\s*[:]\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
         FieldDefinition("interest_rate", "Interest rate (annual)", field_type="percentage",
                         required=True, priority=FieldPriority.CRITICAL,
-                        aliases=["rate", "coupon", "note rate", "contract rate"]),
+                        aliases=["rate", "coupon", "note rate", "contract rate"],
+                        prose_patterns=[
+                            r"(?i)Interest\s+Rate\s*[:]\s*(\d+\.?\d*)\s*%",
+                            r"(?i)(?:Note|Contract|Coupon)\s+Rate\s*[:]\s*(\d+\.?\d*)\s*%",
+                            r"(?i)(?:at\s+(?:the\s+)?rate\s+of|bearing\s+interest\s+at)\s+(\d+\.?\d*)\s*%",
+                        ]),
         FieldDefinition("maturity_date", "Loan maturity date", field_type="date",
                         required=True, priority=FieldPriority.CRITICAL,
-                        aliases=["due date", "final payment date"]),
+                        aliases=["due date", "final payment date"],
+                        prose_patterns=[
+                            r"(?i)Maturity\s+Date\s*[:]\s*(\d{1,2}/\d{1,2}/\d{2,4})",
+                            r"(?i)(?:due|maturing|payable)\s+(?:on\s+)?(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
         FieldDefinition("origination_date", "Loan origination/closing date", field_type="date",
                         priority=FieldPriority.CRITICAL,
-                        aliases=["closing date", "effective date", "dated as of"]),
+                        aliases=["closing date", "effective date", "dated as of"],
+                        prose_patterns=[
+                            r"(?i)Note\s+Date\s*[:]\s*(\d{1,2}/\d{1,2}/\d{2,4})",
+                            r"(?i)(?:dated|effective)\s+(?:as\s+of\s+)?(\w+\s+\d{1,2},?\s+\d{4})",
+                            r"(?i)(?:dated|effective)\s+(?:as\s+of\s+)?(\d{1,2}/\d{1,2}/\d{2,4})",
+                        ]),
         FieldDefinition("collateral", "Description of collateral property",
                         priority=FieldPriority.CRITICAL,
-                        aliases=["security", "pledged property", "mortgaged property"]),
+                        aliases=["security", "pledged property", "mortgaged property"],
+                        prose_patterns=[
+                            r"(?i)Property\s+Name\s*(?:and\s+City)?\s*[:]\s*(.+?)(?:\s*$|\s{2,})",
+                        ]),
 
         # ── IMPORTANT: Rate structure & payment terms ──
         FieldDefinition("rate_type", "Whether rate is fixed or variable", field_type="text",
@@ -340,6 +371,52 @@ LOAN_DOCUMENT = DocumentTemplate(
         FieldDefinition("late_fee", "Late payment fee",
                         priority=FieldPriority.OPTIONAL,
                         aliases=["late charge", "late payment"]),
+
+        # ── Payoff statement fields ──
+        FieldDefinition("total_payoff", "Total payoff/amount due", field_type="currency",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["payoff amount", "total due"],
+                        prose_patterns=[
+                            r"(?i)Total\s+Amount\s+Due\s+(?:On\s+\w+\s+\d+,?\s+\d{4}\s+)?\$?\s*([\d,]+\.?\d*)",
+                            r"(?i)Total\s+Payoff\s*[:]\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("payoff_date", "Payoff effective date", field_type="date",
+                        priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Payoff\s+Date\s*[:]\s*(\d{1,2}/\d{1,2}/\d{2,4})",
+                            r"(?i)Total\s+Amount\s+Due\s+On\s+(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        FieldDefinition("prepayment_premium_amount", "Prepayment premium dollar amount",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Prepayment\s+Premium\s+(?:Consideration\s+)?[\d.%]*\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("tax_escrow_balance", "Tax escrow balance", field_type="currency",
+                        priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Tax\s+Escrow\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("insurance_escrow_balance", "Insurance escrow balance",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Insurance\s+Escrow\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("replacement_reserve_balance", "Replacement reserve balance",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Replacement\s+Reserve[s]?\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("mip_escrow_balance", "MIP escrow balance",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)MIP\s+Escrow\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("loan_number", "Lender loan number",
+                        priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)(?:Colliers\s+)?Loan\s*#?\s*[:]\s*(\d+)",
+                            r"(?i)Loan\s+Number\s*[:]\s*(\S+)",
+                        ]),
     ],
 
     clause_types=[
@@ -404,20 +481,82 @@ CLOSING_DOCUMENT = DocumentTemplate(
     financial_fields=[
         # ── CRITICAL ──
         FieldDefinition("buyer", "Name of the buyer/purchaser",
-                        required=True, priority=FieldPriority.CRITICAL),
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["purchaser", "grantee"],
+                        prose_patterns=[
+                            r"(?i)(?:buyer|purchaser|grantee|borrower)\s*[:]\s+([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,})",
+                        ]),
         FieldDefinition("seller", "Name of the seller",
-                        required=True, priority=FieldPriority.CRITICAL),
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["grantor"],
+                        prose_patterns=[
+                            r"(?i)(?:seller|grantor)\s*[:]\s+([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,})",
+                        ]),
         FieldDefinition("property_address", "Property address",
-                        required=True, priority=FieldPriority.CRITICAL),
+                        required=True, priority=FieldPriority.CRITICAL,
+                        prose_patterns=[
+                            r"(?i)(?:property\s+(?:address|location)|project\s+address)\s*[:]\s*(.+?)(?:\s*$|\s{2,})",
+                        ]),
         FieldDefinition("purchase_price", "Purchase price", field_type="currency",
                         required=True, priority=FieldPriority.CRITICAL,
-                        aliases=["sale price", "consideration"]),
+                        aliases=["sale price", "consideration"],
+                        prose_patterns=[
+                            r"(?i)(?:purchase|sale)\s+price\s*[:]\s*\$?([\d,]+\.?\d*)",
+                            r"(?i)total\s+(?:purchase|sale|consideration)\s*[:]\s*\$?([\d,]+\.?\d*)",
+                        ]),
         FieldDefinition("closing_date", "Closing date", field_type="date",
-                        required=True, priority=FieldPriority.CRITICAL),
-        # ── IMPORTANT ──
+                        required=True, priority=FieldPriority.CRITICAL,
+                        prose_patterns=[
+                            r"(?i)closing\s+date\s*[:]\s*(\d{1,2}/\d{1,2}/\d{2,4})",
+                            r"(?i)(?:dated?\s+(?:as\s+of\s+)?|effective\s+)(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+
+        # ── IMPORTANT: HUD closing statement fields ──
+        FieldDefinition("mortgage_proceeds", "HUD/FHA mortgage proceeds", field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["hud mortgage proceeds", "fha mortgage proceeds"],
+                        prose_patterns=[
+                            r"(?i)(?:HUD\s+)?(?:Mortgage|Loan)\s+Proceeds\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("borrower_cash", "Borrower cash requirement", field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["cash requirement", "equity contribution"],
+                        prose_patterns=[
+                            r"(?i)Borrower\s+Cash\s+(?:Requirement|Contribution)\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("total_sources", "Total sources of funds", field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        prose_patterns=[
+                            r"(?i)TOTAL\s*[:]\s*\$?\s*([\d,]+\.?\d*)",
+                            r"(?i)Total\s+Sources\s*[:]\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("financing_fee", "Lender financing/origination fee", field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["origination fee", "commitment fee"],
+                        prose_patterns=[
+                            r"(?i)Financing\s+Fee\s*\$?\s*([\d,]+\.?\d*)",
+                            r"(?i)Origination\s+Fee\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("prepayment_premium", "Prepayment premium/penalty", field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        prose_patterns=[
+                            r"(?i)Prepayment\s+Premium\s+(?:Consideration\s+)?[\d.%]*\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("net_cash_proceeds", "Net cash to borrower", field_type="currency",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["net proceeds", "cash to borrower"],
+                        prose_patterns=[
+                            r"(?i)(?:Net\s+Cash\s+(?:to\s+be\s+)?(?:received|available)|Net\s+Proceeds)\s*[|:]?\s*\$?\s*([\d,]+\.?\d*)",
+                            r"(?i)TOTAL\s+CASH\s+TO\s+BE\s+RECEIVED\s*[|:]?\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
+
+        # ── IMPORTANT: Standard closing fields ──
         FieldDefinition("earnest_money", "Earnest money deposit", field_type="currency",
                         priority=FieldPriority.IMPORTANT,
-                        aliases=["deposit", "good faith deposit"]),
+                        aliases=["deposit", "good faith deposit"],
+                        prose_patterns=[
+                            r"(?i)(?:earnest\s+money|good\s+faith)\s+(?:deposit)?\s*[:]\s*\$?([\d,]+\.?\d*)",
+                        ]),
         FieldDefinition("due_diligence_period", "Due diligence/inspection period",
                         priority=FieldPriority.IMPORTANT,
                         aliases=["inspection period", "feasibility period"]),
@@ -426,7 +565,27 @@ CLOSING_DOCUMENT = DocumentTemplate(
                         aliases=["loan contingency", "mortgage contingency"]),
         FieldDefinition("title_company", "Title company/escrow agent",
                         priority=FieldPriority.IMPORTANT,
-                        aliases=["escrow", "settlement agent"]),
+                        aliases=["escrow", "settlement agent"],
+                        prose_patterns=[
+                            r"(?i)(?:Title\s+Company|Escrow\s+Agent|Settlement\s+Agent)\s*[:]\s*(.+?)(?:\s*$|\s{2,})",
+                        ]),
+        FieldDefinition("hud_program", "HUD/FHA program type",
+                        priority=FieldPriority.IMPORTANT,
+                        prose_patterns=[
+                            r"(?i)HUD\s+Program\s*[:]\s*(\S+(?:\s*\(\S+\))?)",
+                            r"(?i)(Section\s+\d+\s*\([a-z0-9]+\))",
+                        ]),
+        FieldDefinition("hud_project_number", "HUD project number",
+                        priority=FieldPriority.IMPORTANT,
+                        prose_patterns=[
+                            r"(?i)(?:HUD\s+)?Project\s+Number\s*[:]\s*(\d{3}-\d{5})",
+                        ]),
+        FieldDefinition("lender", "Lender name",
+                        priority=FieldPriority.IMPORTANT,
+                        prose_patterns=[
+                            r"(?i)Lender\s*[:]\s+([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,}|Based\s+on)",
+                        ]),
+
         # ── OPTIONAL ──
         FieldDefinition("prorations", "Proration details (taxes, rent, etc.)",
                         priority=FieldPriority.OPTIONAL,
@@ -438,6 +597,26 @@ CLOSING_DOCUMENT = DocumentTemplate(
         FieldDefinition("cap_rate", "Capitalization rate", field_type="percentage",
                         priority=FieldPriority.OPTIONAL,
                         aliases=["cap rate", "going-in cap"]),
+        FieldDefinition("tax_escrow", "Tax escrow balance", field_type="currency",
+                        priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Tax\s+Escrow\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("insurance_escrow", "Insurance escrow balance", field_type="currency",
+                        priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Insurance\s+Escrow\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("replacement_reserve_escrow", "Replacement reserve escrow balance",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Replacement\s+Reserve[s]?\b.*?\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("construction_contract", "Construction contract amount",
+                        field_type="currency", priority=FieldPriority.OPTIONAL,
+                        prose_patterns=[
+                            r"(?i)Construction\s+[Cc]ontract\s*[|:]\s*\$?\s*([\d,]+\.?\d*)",
+                        ]),
     ],
 
     clause_types=[
