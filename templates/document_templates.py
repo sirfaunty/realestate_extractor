@@ -1709,6 +1709,440 @@ Document text:
 )
 
 
+# ─── Balance Sheet ────────────────────────────────────────────────────
+
+BALANCE_SHEET = DocumentTemplate(
+    document_type="balance_sheet",
+    display_name="Balance Sheet",
+    description="Property or entity balance sheets — assets, liabilities, and equity",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("line_item", "Line item description", required=True,
+                        aliases=["description", "item", "account", "account name"]),
+        FieldDefinition("category", "Top-level classification — asset, liability, or equity",
+                        required=True, aliases=["section", "type", "classification"]),
+        FieldDefinition("subcategory", "Sub-classification within category",
+                        aliases=["sub-section", "sub-type", "detail type",
+                                 "current_asset", "fixed_asset", "current_liability",
+                                 "long_term_liability", "equity"]),
+        FieldDefinition("amount", "Dollar amount", field_type="currency",
+                        required=True, aliases=["balance", "total", "value"]),
+        FieldDefinition("prior_period_amount", "Comparative prior-period amount",
+                        field_type="currency",
+                        aliases=["prior year", "prior period", "comparative",
+                                 "last year", "previous"]),
+        FieldDefinition("period", "Reporting period", field_type="date",
+                        aliases=["date", "as of", "quarter", "year"]),
+        FieldDefinition("is_subtotal", "Whether this row is a subtotal",
+                        field_type="boolean", aliases=["subtotal"]),
+        FieldDefinition("is_total", "Whether this row is a grand total",
+                        field_type="boolean", aliases=["total"]),
+    ],
+
+    llm_system_prompt="""You are a CRE accounting analyst. Parse balance sheets and classify
+each line item into asset, liability, or equity. Identify subtotals and
+totals. Handle comparative (multi-column) balance sheets by extracting
+both current and prior period amounts.""",
+
+    llm_extraction_prompt="""Parse this balance sheet into structured line items.
+For each line, identify:
+- line_item: the description
+- category: one of [asset, liability, equity]
+- subcategory: one of [current_asset, fixed_asset, current_liability, long_term_liability, equity]
+- amount: the dollar value for the current period
+- prior_period_amount: the dollar value for the comparative period (if present)
+- is_subtotal: true if this is a subtotal row
+- is_total: true if this is a total row (e.g., Total Assets, Total Liabilities & Equity)
+
+Return as a JSON array of objects.
+
+Balance sheet data:
+{document_text}"""
+)
+
+
+# ─── Cash Flow Statement ─────────────────────────────────────────────
+
+CASH_FLOW_STATEMENT = DocumentTemplate(
+    document_type="cash_flow",
+    display_name="Statement of Cash Flows",
+    description="Cash flow statements — operating, investing, financing activities",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("line_item", "Line item description", required=True,
+                        aliases=["description", "item", "account", "activity"]),
+        FieldDefinition("activity_type", "Cash flow activity classification",
+                        required=True,
+                        aliases=["section", "type", "category",
+                                 "operating", "investing", "financing"]),
+        FieldDefinition("amount", "Dollar amount", field_type="currency",
+                        required=True, aliases=["total", "value", "net"]),
+        FieldDefinition("period", "Reporting period", field_type="date",
+                        aliases=["date", "quarter", "year", "for period"]),
+        FieldDefinition("is_subtotal", "Whether this row is a subtotal",
+                        field_type="boolean", aliases=["subtotal"]),
+        FieldDefinition("is_total", "Whether this row is a grand total",
+                        field_type="boolean", aliases=["total", "net cash"]),
+    ],
+
+    llm_system_prompt="""You are a CRE accounting analyst. Parse cash flow statements and
+classify each line item into operating, investing, or financing activities.
+Identify subtotals (e.g., Net Cash from Operations) and the overall net
+change in cash.""",
+
+    llm_extraction_prompt="""Parse this cash flow statement into structured line items.
+For each line, identify:
+- line_item: the description
+- activity_type: one of [operating, investing, financing]
+- amount: the dollar value (use negative for outflows)
+- is_subtotal: true if this is a section subtotal (e.g., Net Cash from Operating Activities)
+- is_total: true if this is the net change in cash
+
+Return as a JSON array of objects.
+
+Cash flow statement data:
+{document_text}"""
+)
+
+
+# ─── Bank Reconciliation ─────────────────────────────────────────────
+
+BANK_RECONCILIATION = DocumentTemplate(
+    document_type="bank_reconciliation",
+    display_name="Bank Reconciliation",
+    description="Bank reconciliation reports — matching book balance to bank balance",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("line_item", "Line item description", required=True,
+                        aliases=["description", "item", "detail", "memo"]),
+        FieldDefinition("entry_type", "Reconciliation entry type",
+                        required=True,
+                        aliases=["type", "category", "section"]),
+        FieldDefinition("amount", "Dollar amount", field_type="currency",
+                        required=True, aliases=["total", "value"]),
+        FieldDefinition("check_number", "Check number",
+                        aliases=["check #", "chk #", "check no", "ck #"]),
+        FieldDefinition("date", "Transaction or cleared date", field_type="date",
+                        aliases=["trans date", "cleared date", "effective date"]),
+        FieldDefinition("payee", "Payee name",
+                        aliases=["vendor", "name", "paid to"]),
+        FieldDefinition("reference", "Reference number",
+                        aliases=["ref", "ref #", "reference #", "invoice #"]),
+        FieldDefinition("cleared", "Whether the item has cleared the bank",
+                        field_type="boolean",
+                        aliases=["reconciled", "matched", "cleared?"]),
+    ],
+
+    llm_system_prompt="""You are a CRE accounting analyst. Parse bank reconciliation reports.
+Identify deposits in transit, outstanding checks, adjustments, and other
+reconciling items. Distinguish book balance from bank balance entries.""",
+
+    llm_extraction_prompt="""Parse this bank reconciliation into structured entries.
+For each line, identify:
+- line_item: the description
+- entry_type: one of [deposit_in_transit, outstanding_check, adjustment, book_balance, bank_balance]
+- amount: the dollar value
+- check_number: if applicable
+- date: the transaction date
+- payee: the vendor or payee name
+- cleared: true/false whether the item has cleared
+
+Return as a JSON array of objects.
+
+Bank reconciliation data:
+{document_text}"""
+)
+
+
+# ─── Security Deposit Ledger ─────────────────────────────────────────
+
+SECURITY_DEPOSIT_LEDGER = DocumentTemplate(
+    document_type="security_deposit",
+    display_name="Security Deposit Ledger",
+    description="Security deposit tracking — tenant deposits held, refunds, forfeitures",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("unit_number", "Unit or suite number", required=True,
+                        aliases=["unit", "suite", "space", "#", "unit #"]),
+        FieldDefinition("tenant_name", "Tenant name", required=True,
+                        aliases=["tenant", "resident", "lessee", "occupant"]),
+        FieldDefinition("deposit_amount", "Security deposit amount held",
+                        field_type="currency", required=True,
+                        aliases=["deposit", "amount held", "original deposit",
+                                 "security deposit"]),
+        FieldDefinition("deposit_date", "Date deposit was received",
+                        field_type="date",
+                        aliases=["date received", "received date", "move-in date"]),
+        FieldDefinition("refund_amount", "Amount refunded to tenant",
+                        field_type="currency",
+                        aliases=["refund", "amount refunded", "returned"]),
+        FieldDefinition("refund_date", "Date refund was issued",
+                        field_type="date",
+                        aliases=["date refunded", "refund issued"]),
+        FieldDefinition("forfeiture_amount", "Amount forfeited / retained",
+                        field_type="currency",
+                        aliases=["forfeiture", "retained", "amount retained"]),
+        FieldDefinition("status", "Current deposit status",
+                        aliases=["deposit status", "state"]),
+        FieldDefinition("interest_accrued", "Interest accrued on deposit",
+                        field_type="currency",
+                        aliases=["interest", "accrued interest"]),
+        FieldDefinition("notes", "Additional notes or comments",
+                        aliases=["comments", "remarks", "memo"]),
+    ],
+
+    llm_system_prompt="""You are a CRE property accounting analyst. Parse security deposit
+ledgers to track tenant deposits, refunds, and forfeitures. Identify
+deposit lifecycle status (held, refunded, forfeited, partial).""",
+
+    llm_extraction_prompt="""Parse this security deposit ledger into structured entries.
+For each tenant, identify:
+- unit_number, tenant_name
+- deposit_amount: the original deposit held
+- deposit_date: when the deposit was received
+- refund_amount / refund_date: if a refund was issued
+- forfeiture_amount: if any amount was retained
+- status: one of [held, refunded, forfeited, partial]
+- interest_accrued: any interest earned on the deposit
+
+Return as a JSON array of objects.
+
+Security deposit data:
+{document_text}"""
+)
+
+
+# ─── Outstanding Payables ────────────────────────────────────────────
+
+OUTSTANDING_PAYABLES = DocumentTemplate(
+    document_type="payables",
+    display_name="Outstanding Payables",
+    description="Accounts payable aging / outstanding payable reports",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("vendor_name", "Vendor or supplier name", required=True,
+                        aliases=["vendor", "supplier", "payee", "company"]),
+        FieldDefinition("invoice_number", "Invoice number",
+                        aliases=["invoice #", "inv #", "invoice no", "bill #"]),
+        FieldDefinition("invoice_date", "Invoice date", field_type="date",
+                        aliases=["inv date", "bill date", "date"]),
+        FieldDefinition("due_date", "Payment due date", field_type="date",
+                        aliases=["due", "pay by", "payment due"]),
+        FieldDefinition("amount", "Invoice amount", field_type="currency",
+                        required=True,
+                        aliases=["total", "balance", "amount due", "open amount"]),
+        FieldDefinition("aging_bucket", "Aging classification",
+                        aliases=["aging", "days", "bucket", "age",
+                                 "current", "30", "60", "90", "120+"]),
+        FieldDefinition("description", "Invoice or charge description",
+                        aliases=["memo", "detail", "line item"]),
+        FieldDefinition("account_code", "GL account code",
+                        aliases=["account #", "gl code", "acct", "account"]),
+        FieldDefinition("status", "Payment status",
+                        aliases=["pay status", "state"]),
+    ],
+
+    llm_system_prompt="""You are a CRE property accounting analyst. Parse accounts payable
+aging reports. Identify vendors, invoice details, and aging buckets.
+Classify each payable by aging period (current, 30, 60, 90, 120+ days).""",
+
+    llm_extraction_prompt="""Parse this accounts payable report into structured entries.
+For each payable, identify:
+- vendor_name: the vendor or supplier
+- invoice_number, invoice_date, due_date
+- amount: the open/outstanding amount
+- aging_bucket: one of [current, 30, 60, 90, 120+]
+- status: one of [open, partial, paid]
+
+Return as a JSON array of objects.
+
+Payables data:
+{document_text}"""
+)
+
+
+# ─── Outstanding Receivables ─────────────────────────────────────────
+
+OUTSTANDING_RECEIVABLES = DocumentTemplate(
+    document_type="receivables",
+    display_name="Outstanding Receivables",
+    description="Accounts receivable aging / tenant receivable reports",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("tenant_name", "Tenant or debtor name", required=True,
+                        aliases=["tenant", "resident", "customer", "lessee"]),
+        FieldDefinition("unit_number", "Unit or suite number",
+                        aliases=["unit", "suite", "space", "#", "unit #"]),
+        FieldDefinition("charge_type", "Type of charge",
+                        aliases=["type", "category", "charge code",
+                                 "rent", "cam", "utility", "other"]),
+        FieldDefinition("charge_date", "Date charge was posted", field_type="date",
+                        aliases=["post date", "date", "transaction date"]),
+        FieldDefinition("due_date", "Payment due date", field_type="date",
+                        aliases=["due", "pay by"]),
+        FieldDefinition("amount", "Original charge amount", field_type="currency",
+                        required=True,
+                        aliases=["total", "charged", "original amount"]),
+        FieldDefinition("aging_bucket", "Aging classification",
+                        aliases=["aging", "days", "bucket", "age",
+                                 "current", "30", "60", "90", "120+"]),
+        FieldDefinition("payments_received", "Payments received against charge",
+                        field_type="currency",
+                        aliases=["paid", "receipts", "applied"]),
+        FieldDefinition("balance_due", "Remaining balance due",
+                        field_type="currency",
+                        aliases=["balance", "outstanding", "open amount"]),
+        FieldDefinition("status", "Receivable status",
+                        aliases=["state", "collection status"]),
+    ],
+
+    llm_system_prompt="""You are a CRE property accounting analyst. Parse accounts receivable
+aging reports. Identify tenants, charge types (rent, CAM, utilities),
+and aging buckets. Track payments received against outstanding charges.""",
+
+    llm_extraction_prompt="""Parse this accounts receivable report into structured entries.
+For each receivable, identify:
+- tenant_name, unit_number
+- charge_type: one of [rent, cam, utility, other]
+- charge_date, due_date
+- amount: the original charge
+- aging_bucket: one of [current, 30, 60, 90, 120+]
+- payments_received: any payments applied
+- balance_due: the remaining balance
+
+Return as a JSON array of objects.
+
+Receivables data:
+{document_text}"""
+)
+
+
+# ─── Bad Debt Detail ─────────────────────────────────────────────────
+
+BAD_DEBT_DETAIL = DocumentTemplate(
+    document_type="bad_debt",
+    display_name="Bad Debt Detail",
+    description="Bad debt write-offs, collections, and allowance detail",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("tenant_name", "Tenant name", required=True,
+                        aliases=["tenant", "resident", "debtor", "customer"]),
+        FieldDefinition("unit_number", "Unit or suite number",
+                        aliases=["unit", "suite", "space", "#", "unit #"]),
+        FieldDefinition("original_amount", "Original debt amount",
+                        field_type="currency", required=True,
+                        aliases=["original balance", "total owed", "amount owed"]),
+        FieldDefinition("write_off_amount", "Amount written off",
+                        field_type="currency",
+                        aliases=["write-off", "written off", "w/o amount"]),
+        FieldDefinition("write_off_date", "Date of write-off", field_type="date",
+                        aliases=["w/o date", "written off date"]),
+        FieldDefinition("recovery_amount", "Amount recovered or collected",
+                        field_type="currency",
+                        aliases=["recovered", "collected", "collection amount"]),
+        FieldDefinition("recovery_date", "Date of recovery", field_type="date",
+                        aliases=["collection date", "recovered date"]),
+        FieldDefinition("reason", "Reason for write-off or bad debt",
+                        aliases=["cause", "detail", "description", "memo"]),
+        FieldDefinition("status", "Current status of the debt",
+                        aliases=["state", "disposition"]),
+        FieldDefinition("collection_agency", "Collection agency handling the debt",
+                        aliases=["agency", "collector", "collections firm"]),
+        FieldDefinition("notes", "Additional notes or comments",
+                        aliases=["comments", "remarks"]),
+    ],
+
+    llm_system_prompt="""You are a CRE property accounting analyst. Parse bad debt schedules.
+Track write-offs, recoveries, and collection status for each tenant.
+Identify debts that are written off, in collections, recovered, or
+partially recovered.""",
+
+    llm_extraction_prompt="""Parse this bad debt detail into structured entries.
+For each entry, identify:
+- tenant_name, unit_number
+- original_amount: the original debt
+- write_off_amount / write_off_date: if written off
+- recovery_amount / recovery_date: if any amount was recovered
+- reason: why the debt went bad
+- status: one of [written_off, in_collections, recovered, partial_recovery]
+- collection_agency: if assigned to collections
+
+Return as a JSON array of objects.
+
+Bad debt data:
+{document_text}"""
+)
+
+
+# ─── Concession Burn Off ─────────────────────────────────────────────
+
+CONCESSION_BURN_OFF = DocumentTemplate(
+    document_type="concession",
+    display_name="Concession Burn Off",
+    description="Lease concession schedules — free rent, tenant improvements, amortization",
+    extraction_modes=[ExtractionMode.TABULAR],
+
+    table_columns=[
+        FieldDefinition("tenant_name", "Tenant name", required=True,
+                        aliases=["tenant", "lessee", "resident"]),
+        FieldDefinition("unit_number", "Unit or suite number",
+                        aliases=["unit", "suite", "space", "#", "unit #"]),
+        FieldDefinition("concession_type", "Type of concession granted",
+                        required=True,
+                        aliases=["type", "concession", "category"]),
+        FieldDefinition("total_amount", "Total concession value",
+                        field_type="currency", required=True,
+                        aliases=["total", "concession amount", "value",
+                                 "total concession"]),
+        FieldDefinition("start_date", "Concession start date", field_type="date",
+                        aliases=["effective date", "begin date", "from"]),
+        FieldDefinition("end_date", "Concession end date", field_type="date",
+                        aliases=["expiration", "expire date", "to", "through"]),
+        FieldDefinition("amortization_period", "Amortization period in months",
+                        field_type="number",
+                        aliases=["amort period", "term", "months"]),
+        FieldDefinition("monthly_burn", "Monthly amortization / burn amount",
+                        field_type="currency",
+                        aliases=["monthly amort", "monthly amount",
+                                 "burn rate", "per month"]),
+        FieldDefinition("remaining_balance", "Unamortized balance remaining",
+                        field_type="currency",
+                        aliases=["remaining", "unamortized", "balance",
+                                 "outstanding"]),
+        FieldDefinition("status", "Concession status",
+                        aliases=["state", "active/expired"]),
+    ],
+
+    llm_system_prompt="""You are a CRE property accounting analyst. Parse concession and
+burn-off schedules. Identify concession types (free rent, rent abatement,
+tenant improvements, move-in credits), track amortization, and calculate
+remaining unamortized balances.""",
+
+    llm_extraction_prompt="""Parse this concession burn-off schedule into structured entries.
+For each concession, identify:
+- tenant_name, unit_number
+- concession_type: one of [free_rent, rent_abatement, tenant_improvement, move_in_credit, other]
+- total_amount: the total concession value
+- start_date / end_date: the concession period
+- amortization_period: length in months
+- monthly_burn: monthly amortization amount
+- remaining_balance: unamortized balance
+- status: one of [active, fully_amortized, expired]
+
+Return as a JSON array of objects.
+
+Concession data:
+{document_text}"""
+)
+
+
 # ─── Template Registry ───────────────────────────────────────────────
 
 TEMPLATES: Dict[str, DocumentTemplate] = {
@@ -1727,6 +2161,14 @@ TEMPLATES: Dict[str, DocumentTemplate] = {
     "organizational": ORGANIZATIONAL,
     "correspondence": CORRESPONDENCE,
     "reference": REFERENCE,
+    "balance_sheet": BALANCE_SHEET,
+    "cash_flow": CASH_FLOW_STATEMENT,
+    "bank_reconciliation": BANK_RECONCILIATION,
+    "security_deposit": SECURITY_DEPOSIT_LEDGER,
+    "payables": OUTSTANDING_PAYABLES,
+    "receivables": OUTSTANDING_RECEIVABLES,
+    "bad_debt": BAD_DEBT_DETAIL,
+    "concession": CONCESSION_BURN_OFF,
 }
 
 

@@ -139,7 +139,12 @@ class PropertyAnalyzer:
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    if _conf < 0.3 and doc_type in ('rent_roll', 'operating_statement', 'general_ledger'):
+                    if _conf < 0.3 and doc_type in (
+                        'rent_roll', 'operating_statement', 'general_ledger',
+                        'balance_sheet', 'cash_flow', 'bank_reconciliation',
+                        'security_deposit', 'payables', 'receivables',
+                        'bad_debt', 'concession',
+                    ):
                         logger.info(
                             f"Skipping {doc_type} extraction for "
                             f"{doc_record['filename']} — low confidence ({_conf:.2f})"
@@ -276,7 +281,12 @@ class PropertyAnalyzer:
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    if _conf < 0.3 and doc_type in ('rent_roll', 'operating_statement', 'general_ledger'):
+                    if _conf < 0.3 and doc_type in (
+                        'rent_roll', 'operating_statement', 'general_ledger',
+                        'balance_sheet', 'cash_flow', 'bank_reconciliation',
+                        'security_deposit', 'payables', 'receivables',
+                        'bad_debt', 'concession',
+                    ):
                         logger.info(
                             f"Skipping {doc_type} extraction for "
                             f"{doc_record['filename']} — low confidence ({_conf:.2f})"
@@ -1623,12 +1633,20 @@ class PropertyAnalyzer:
             )
         return list(found.values())
 
+    # Tables to clear before re-extraction (accounting + standard)
+    _EXTRACTION_TABLES = [
+        'financial_terms', 'clauses', 'gl_entries',
+        'balance_sheet_items', 'cash_flow_items', 'bank_recon_entries',
+        'security_deposit_entries', 'payable_entries', 'receivable_entries',
+        'bad_debt_entries', 'concession_entries',
+    ]
+
     def _analyze_with_engine(self, doc_id: int, doc: DocumentContent,
                               template) -> Dict[str, int]:
-        """Run the full extraction engine for lease/loan/closing docs."""
+        """Run the full extraction engine for lease/loan/closing/accounting docs."""
         # Clear existing extracted data for this document
-        self.db.conn.execute("DELETE FROM financial_terms WHERE document_id = ?", (doc_id,))
-        self.db.conn.execute("DELETE FROM clauses WHERE document_id = ?", (doc_id,))
+        for tbl in self._EXTRACTION_TABLES:
+            self.db.conn.execute(f"DELETE FROM {tbl} WHERE document_id = ?", (doc_id,))
 
         # Run extraction — standard engine (prose/legal patterns)
         extraction = self.engine.extract(doc, template)
@@ -1736,9 +1754,11 @@ class PropertyAnalyzer:
                 logger.warning(f"Failed to store clause: {e}")
 
         # Store tabular data if extraction found any
+        tabular_count = 0
         for row in extraction.get('tabular_data', []):
             try:
-                if template.document_type == 'general_ledger':
+                dtype = template.document_type
+                if dtype == 'general_ledger':
                     self.db.insert_gl_entry(
                         document_id=doc_id,
                         account_code=row.get('account_code'),
@@ -1751,8 +1771,123 @@ class PropertyAnalyzer:
                         period=row.get('period'),
                         page_number=row.get('page_number'),
                     )
+                elif dtype == 'balance_sheet':
+                    self.db.insert_balance_sheet_item(
+                        document_id=doc_id,
+                        category=row.get('category', 'unknown'),
+                        line_item=row.get('line_item', ''),
+                        subcategory=row.get('subcategory'),
+                        amount=self._safe_float(row.get('amount')),
+                        prior_period_amount=self._safe_float(row.get('prior_period_amount')),
+                        period=row.get('period'),
+                        is_subtotal=row.get('is_subtotal', False),
+                        is_total=row.get('is_total', False),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'cash_flow':
+                    self.db.insert_cash_flow_item(
+                        document_id=doc_id,
+                        activity_type=row.get('activity_type', 'unknown'),
+                        line_item=row.get('line_item', ''),
+                        amount=self._safe_float(row.get('amount')),
+                        period=row.get('period'),
+                        is_subtotal=row.get('is_subtotal', False),
+                        is_total=row.get('is_total', False),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'bank_reconciliation':
+                    self.db.insert_bank_recon_entry(
+                        document_id=doc_id,
+                        line_item=row.get('line_item', ''),
+                        entry_type=row.get('entry_type', 'unknown'),
+                        amount=self._safe_float(row.get('amount')),
+                        check_number=row.get('check_number'),
+                        entry_date=row.get('date') or row.get('entry_date'),
+                        payee=row.get('payee'),
+                        reference=row.get('reference'),
+                        cleared=row.get('cleared', False),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'security_deposit':
+                    self.db.insert_security_deposit_entry(
+                        document_id=doc_id,
+                        unit_number=row.get('unit_number'),
+                        tenant_name=row.get('tenant_name'),
+                        deposit_amount=self._safe_float(row.get('deposit_amount')),
+                        deposit_date=row.get('deposit_date'),
+                        refund_amount=self._safe_float(row.get('refund_amount')),
+                        refund_date=row.get('refund_date'),
+                        forfeiture_amount=self._safe_float(row.get('forfeiture_amount')),
+                        status=row.get('status'),
+                        interest_accrued=self._safe_float(row.get('interest_accrued')),
+                        notes=row.get('notes'),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'payables':
+                    self.db.insert_payable_entry(
+                        document_id=doc_id,
+                        vendor_name=row.get('vendor_name', ''),
+                        invoice_number=row.get('invoice_number'),
+                        invoice_date=row.get('invoice_date'),
+                        due_date=row.get('due_date'),
+                        amount=self._safe_float(row.get('amount')),
+                        aging_bucket=row.get('aging_bucket'),
+                        description=row.get('description'),
+                        account_code=row.get('account_code'),
+                        status=row.get('status'),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'receivables':
+                    self.db.insert_receivable_entry(
+                        document_id=doc_id,
+                        tenant_name=row.get('tenant_name', ''),
+                        unit_number=row.get('unit_number'),
+                        charge_type=row.get('charge_type'),
+                        charge_date=row.get('charge_date'),
+                        due_date=row.get('due_date'),
+                        amount=self._safe_float(row.get('amount')),
+                        aging_bucket=row.get('aging_bucket'),
+                        payments_received=self._safe_float(row.get('payments_received')),
+                        balance_due=self._safe_float(row.get('balance_due')),
+                        status=row.get('status'),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'bad_debt':
+                    self.db.insert_bad_debt_entry(
+                        document_id=doc_id,
+                        tenant_name=row.get('tenant_name', ''),
+                        unit_number=row.get('unit_number'),
+                        original_amount=self._safe_float(row.get('original_amount')),
+                        write_off_amount=self._safe_float(row.get('write_off_amount')),
+                        write_off_date=row.get('write_off_date'),
+                        recovery_amount=self._safe_float(row.get('recovery_amount')),
+                        recovery_date=row.get('recovery_date'),
+                        reason=row.get('reason'),
+                        status=row.get('status'),
+                        collection_agency=row.get('collection_agency'),
+                        notes=row.get('notes'),
+                        page_number=row.get('page_number'),
+                    )
+                elif dtype == 'concession':
+                    self.db.insert_concession_entry(
+                        document_id=doc_id,
+                        tenant_name=row.get('tenant_name', ''),
+                        unit_number=row.get('unit_number'),
+                        concession_type=row.get('concession_type', 'other'),
+                        total_amount=self._safe_float(row.get('total_amount')),
+                        start_date=row.get('start_date'),
+                        end_date=row.get('end_date'),
+                        amortization_period=row.get('amortization_period'),
+                        monthly_burn=self._safe_float(row.get('monthly_burn')),
+                        remaining_balance=self._safe_float(row.get('remaining_balance')),
+                        status=row.get('status'),
+                        page_number=row.get('page_number'),
+                    )
+                tabular_count += 1
             except Exception as e:
                 logger.warning(f"Failed to store tabular row: {e}")
+        if tabular_count:
+            counts['tabular'] = tabular_count
 
         logger.info(f"Engine: {counts['terms']} terms, {counts['clauses']} clauses")
         return counts

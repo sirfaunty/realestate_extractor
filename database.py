@@ -214,7 +214,181 @@ CREATE TABLE IF NOT EXISTS gl_entries (
     metadata        TEXT
 );
 
+-- ─── Balance Sheet Items ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS balance_sheet_items (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id         INTEGER NOT NULL REFERENCES documents(id),
+    property_id         INTEGER REFERENCES properties(id),
+    property_name       TEXT,
+    period              TEXT,
+    category            TEXT NOT NULL,          -- asset, liability, equity
+    subcategory         TEXT,                   -- current_asset, fixed_asset, current_liability, long_term_liability, equity
+    line_item           TEXT NOT NULL,
+    amount              REAL,
+    prior_period_amount REAL,
+    is_subtotal         BOOLEAN DEFAULT 0,
+    is_total            BOOLEAN DEFAULT 0,
+    page_number         INTEGER,
+    metadata            TEXT
+);
+
+-- ─── Cash Flow Items ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS cash_flow_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL REFERENCES documents(id),
+    property_id     INTEGER REFERENCES properties(id),
+    property_name   TEXT,
+    period          TEXT,
+    activity_type   TEXT NOT NULL,          -- operating, investing, financing
+    line_item       TEXT NOT NULL,
+    amount          REAL,
+    is_subtotal     BOOLEAN DEFAULT 0,
+    is_total        BOOLEAN DEFAULT 0,
+    page_number     INTEGER,
+    metadata        TEXT
+);
+
+-- ─── Bank Reconciliation Entries ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS bank_recon_entries (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL REFERENCES documents(id),
+    property_id     INTEGER REFERENCES properties(id),
+    property_name   TEXT,
+    line_item       TEXT NOT NULL,
+    entry_type      TEXT NOT NULL,          -- deposit_in_transit, outstanding_check, adjustment, book_balance, bank_balance
+    amount          REAL,
+    check_number    TEXT,
+    entry_date      TEXT,
+    payee           TEXT,
+    reference       TEXT,
+    cleared         BOOLEAN DEFAULT 0,
+    page_number     INTEGER,
+    metadata        TEXT
+);
+
+-- ─── Security Deposit Entries ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS security_deposit_entries (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id         INTEGER NOT NULL REFERENCES documents(id),
+    property_id         INTEGER REFERENCES properties(id),
+    property_name       TEXT,
+    unit_number         TEXT,
+    tenant_name         TEXT,
+    deposit_amount      REAL,
+    deposit_date        TEXT,
+    refund_amount       REAL,
+    refund_date         TEXT,
+    forfeiture_amount   REAL,
+    status              TEXT,               -- held, refunded, forfeited, partial
+    interest_accrued    REAL,
+    notes               TEXT,
+    page_number         INTEGER,
+    metadata            TEXT
+);
+
+-- ─── Payable Entries ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS payable_entries (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL REFERENCES documents(id),
+    property_id     INTEGER REFERENCES properties(id),
+    property_name   TEXT,
+    vendor_name     TEXT NOT NULL,
+    invoice_number  TEXT,
+    invoice_date    TEXT,
+    due_date        TEXT,
+    amount          REAL,
+    aging_bucket    TEXT,                   -- current, 30, 60, 90, 120+
+    description     TEXT,
+    account_code    TEXT,
+    status          TEXT,                   -- open, partial, paid
+    page_number     INTEGER,
+    metadata        TEXT
+);
+
+-- ─── Receivable Entries ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS receivable_entries (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id         INTEGER NOT NULL REFERENCES documents(id),
+    property_id         INTEGER REFERENCES properties(id),
+    property_name       TEXT,
+    tenant_name         TEXT NOT NULL,
+    unit_number         TEXT,
+    charge_type         TEXT,               -- rent, cam, utility, other
+    charge_date         TEXT,
+    due_date            TEXT,
+    amount              REAL,
+    aging_bucket        TEXT,
+    payments_received   REAL,
+    balance_due         REAL,
+    status              TEXT,
+    page_number         INTEGER,
+    metadata            TEXT
+);
+
+-- ─── Bad Debt Entries ─────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS bad_debt_entries (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id         INTEGER NOT NULL REFERENCES documents(id),
+    property_id         INTEGER REFERENCES properties(id),
+    property_name       TEXT,
+    tenant_name         TEXT NOT NULL,
+    unit_number         TEXT,
+    original_amount     REAL,
+    write_off_amount    REAL,
+    write_off_date      TEXT,
+    recovery_amount     REAL,
+    recovery_date       TEXT,
+    reason              TEXT,
+    status              TEXT,               -- written_off, in_collections, recovered, partial_recovery
+    collection_agency   TEXT,
+    notes               TEXT,
+    page_number         INTEGER,
+    metadata            TEXT
+);
+
+-- ─── Concession Entries ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS concession_entries (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id         INTEGER NOT NULL REFERENCES documents(id),
+    property_id         INTEGER REFERENCES properties(id),
+    property_name       TEXT,
+    tenant_name         TEXT NOT NULL,
+    unit_number         TEXT,
+    concession_type     TEXT NOT NULL,      -- free_rent, rent_abatement, tenant_improvement, move_in_credit, other
+    total_amount        REAL,
+    start_date          TEXT,
+    end_date            TEXT,
+    amortization_period TEXT,
+    monthly_burn        REAL,
+    remaining_balance   REAL,
+    status              TEXT,               -- active, fully_amortized, expired
+    page_number         INTEGER,
+    metadata            TEXT
+);
+
 -- ─── Indexes ────────────────────────────────────────────────────────
+
+-- New accounting table indexes
+CREATE INDEX IF NOT EXISTS idx_balance_sheet_doc ON balance_sheet_items(document_id);
+CREATE INDEX IF NOT EXISTS idx_balance_sheet_category ON balance_sheet_items(category);
+CREATE INDEX IF NOT EXISTS idx_cash_flow_doc ON cash_flow_items(document_id);
+CREATE INDEX IF NOT EXISTS idx_cash_flow_activity ON cash_flow_items(activity_type);
+CREATE INDEX IF NOT EXISTS idx_bank_recon_doc ON bank_recon_entries(document_id);
+CREATE INDEX IF NOT EXISTS idx_security_deposit_doc ON security_deposit_entries(document_id);
+CREATE INDEX IF NOT EXISTS idx_payable_doc ON payable_entries(document_id);
+CREATE INDEX IF NOT EXISTS idx_payable_vendor ON payable_entries(vendor_name);
+CREATE INDEX IF NOT EXISTS idx_receivable_doc ON receivable_entries(document_id);
+CREATE INDEX IF NOT EXISTS idx_receivable_tenant ON receivable_entries(tenant_name);
+CREATE INDEX IF NOT EXISTS idx_bad_debt_doc ON bad_debt_entries(document_id);
+CREATE INDEX IF NOT EXISTS idx_concession_doc ON concession_entries(document_id);
 
 -- Asset hierarchy indexes
 CREATE INDEX IF NOT EXISTS idx_properties_portfolio ON properties(portfolio_id);
@@ -882,7 +1056,15 @@ class Database:
                    COALESCE(rr.cnt, 0) as rent_roll_entries,
                    COALESCE(ft.cnt, 0) as financial_terms,
                    COALESCE(cl.cnt, 0) as clauses,
-                   COALESCE(gl.cnt, 0) as gl_entries
+                   COALESCE(gl.cnt, 0) as gl_entries,
+                   COALESCE(bs.cnt, 0) as balance_sheet_items,
+                   COALESCE(cf.cnt, 0) as cash_flow_items,
+                   COALESCE(br.cnt, 0) as bank_recon_entries,
+                   COALESCE(sd.cnt, 0) as security_deposit_entries,
+                   COALESCE(pe.cnt, 0) as payable_entries,
+                   COALESCE(re_t.cnt, 0) as receivable_entries,
+                   COALESCE(bd.cnt, 0) as bad_debt_entries,
+                   COALESCE(ce.cnt, 0) as concession_entries
             FROM documents d
             LEFT JOIN properties p ON d.property_id = p.id
             LEFT JOIN (
@@ -918,6 +1100,38 @@ class Database:
                 SELECT document_id, COUNT(*) as cnt
                 FROM gl_entries GROUP BY document_id
             ) gl ON gl.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM balance_sheet_items GROUP BY document_id
+            ) bs ON bs.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM cash_flow_items GROUP BY document_id
+            ) cf ON cf.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM bank_recon_entries GROUP BY document_id
+            ) br ON br.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM security_deposit_entries GROUP BY document_id
+            ) sd ON sd.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM payable_entries GROUP BY document_id
+            ) pe ON pe.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM receivable_entries GROUP BY document_id
+            ) re_t ON re_t.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM bad_debt_entries GROUP BY document_id
+            ) bd ON bd.document_id = d.id
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as cnt
+                FROM concession_entries GROUP BY document_id
+            ) ce ON ce.document_id = d.id
             WHERE {where}
             ORDER BY d.property_id, d.document_type, d.filename
         """, params).fetchall()
@@ -1233,6 +1447,14 @@ class Database:
         self.conn.execute("DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM gl_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM balance_sheet_items WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM cash_flow_items WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM bank_recon_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM security_deposit_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM payable_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM receivable_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM bad_debt_entries WHERE document_id = ?", (doc_id,))
+        self.conn.execute("DELETE FROM concession_entries WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM document_tables WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM document_fulltext WHERE document_id = ?", (str(doc_id),))
 
@@ -1813,6 +2035,279 @@ class Database:
             query += " AND gl.entry_date <= ?"
             params.append(date_to)
         query += " ORDER BY gl.entry_date"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Balance Sheet Operations ──────────────────────────────────
+
+    def insert_balance_sheet_item(self, document_id: int, category: str,
+                                   line_item: str, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'period', 'subcategory', 'amount',
+                  'prior_period_amount', 'is_subtotal', 'is_total', 'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id', 'category', 'line_item'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id, category, line_item] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO balance_sheet_items ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_balance_sheet(self, document_id: int = None, category: str = None,
+                          period: str = None) -> List[Dict]:
+        query = "SELECT bs.*, d.filename FROM balance_sheet_items bs JOIN documents d ON bs.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND bs.document_id = ?"
+            params.append(document_id)
+        if category:
+            query += " AND bs.category = ?"
+            params.append(category)
+        if period:
+            query += " AND bs.period = ?"
+            params.append(period)
+        query += " ORDER BY bs.id"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Cash Flow Operations ──────────────────────────────────────
+
+    def insert_cash_flow_item(self, document_id: int, activity_type: str,
+                               line_item: str, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'period', 'amount',
+                  'is_subtotal', 'is_total', 'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id', 'activity_type', 'line_item'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id, activity_type, line_item] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO cash_flow_items ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_cash_flow(self, document_id: int = None, activity_type: str = None,
+                      period: str = None) -> List[Dict]:
+        query = "SELECT cf.*, d.filename FROM cash_flow_items cf JOIN documents d ON cf.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND cf.document_id = ?"
+            params.append(document_id)
+        if activity_type:
+            query += " AND cf.activity_type = ?"
+            params.append(activity_type)
+        if period:
+            query += " AND cf.period = ?"
+            params.append(period)
+        query += " ORDER BY cf.id"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Bank Reconciliation Operations ────────────────────────────
+
+    def insert_bank_recon_entry(self, document_id: int, line_item: str,
+                                 entry_type: str, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'amount', 'check_number',
+                  'entry_date', 'payee', 'reference', 'cleared', 'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id', 'line_item', 'entry_type'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id, line_item, entry_type] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO bank_recon_entries ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_bank_recon(self, document_id: int = None, entry_type: str = None) -> List[Dict]:
+        query = "SELECT br.*, d.filename FROM bank_recon_entries br JOIN documents d ON br.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND br.document_id = ?"
+            params.append(document_id)
+        if entry_type:
+            query += " AND br.entry_type = ?"
+            params.append(entry_type)
+        query += " ORDER BY br.id"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Security Deposit Operations ───────────────────────────────
+
+    def insert_security_deposit_entry(self, document_id: int, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'unit_number', 'tenant_name',
+                  'deposit_amount', 'deposit_date', 'refund_amount', 'refund_date',
+                  'forfeiture_amount', 'status', 'interest_accrued', 'notes',
+                  'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO security_deposit_entries ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_security_deposits(self, document_id: int = None,
+                               tenant_name: str = None) -> List[Dict]:
+        query = "SELECT sd.*, d.filename FROM security_deposit_entries sd JOIN documents d ON sd.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND sd.document_id = ?"
+            params.append(document_id)
+        if tenant_name:
+            query += " AND sd.tenant_name LIKE ?"
+            params.append(f"%{tenant_name}%")
+        query += " ORDER BY sd.id"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Payable Operations ────────────────────────────────────────
+
+    def insert_payable_entry(self, document_id: int, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'vendor_name', 'invoice_number',
+                  'invoice_date', 'due_date', 'amount', 'aging_bucket',
+                  'description', 'account_code', 'status', 'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO payable_entries ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_payables(self, document_id: int = None, vendor_name: str = None,
+                     aging_bucket: str = None) -> List[Dict]:
+        query = "SELECT pe.*, d.filename FROM payable_entries pe JOIN documents d ON pe.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND pe.document_id = ?"
+            params.append(document_id)
+        if vendor_name:
+            query += " AND pe.vendor_name LIKE ?"
+            params.append(f"%{vendor_name}%")
+        if aging_bucket:
+            query += " AND pe.aging_bucket = ?"
+            params.append(aging_bucket)
+        query += " ORDER BY pe.due_date"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Receivable Operations ─────────────────────────────────────
+
+    def insert_receivable_entry(self, document_id: int, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'tenant_name', 'unit_number',
+                  'charge_type', 'charge_date', 'due_date', 'amount',
+                  'aging_bucket', 'payments_received', 'balance_due', 'status',
+                  'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO receivable_entries ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_receivables(self, document_id: int = None, tenant_name: str = None,
+                        aging_bucket: str = None) -> List[Dict]:
+        query = "SELECT re.*, d.filename FROM receivable_entries re JOIN documents d ON re.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND re.document_id = ?"
+            params.append(document_id)
+        if tenant_name:
+            query += " AND re.tenant_name LIKE ?"
+            params.append(f"%{tenant_name}%")
+        if aging_bucket:
+            query += " AND re.aging_bucket = ?"
+            params.append(aging_bucket)
+        query += " ORDER BY re.due_date"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Bad Debt Operations ───────────────────────────────────────
+
+    def insert_bad_debt_entry(self, document_id: int, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'tenant_name', 'unit_number',
+                  'original_amount', 'write_off_amount', 'write_off_date',
+                  'recovery_amount', 'recovery_date', 'reason', 'status',
+                  'collection_agency', 'notes', 'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO bad_debt_entries ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_bad_debts(self, document_id: int = None, status: str = None) -> List[Dict]:
+        query = "SELECT bd.*, d.filename FROM bad_debt_entries bd JOIN documents d ON bd.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND bd.document_id = ?"
+            params.append(document_id)
+        if status:
+            query += " AND bd.status = ?"
+            params.append(status)
+        query += " ORDER BY bd.id"
+        cur = self.conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    # ─── Concession Operations ─────────────────────────────────────
+
+    def insert_concession_entry(self, document_id: int, **kwargs) -> int:
+        fields = ['property_id', 'property_name', 'tenant_name', 'unit_number',
+                  'concession_type', 'total_amount', 'start_date', 'end_date',
+                  'amortization_period', 'monthly_burn', 'remaining_balance',
+                  'status', 'page_number', 'metadata']
+        values = {f: kwargs.get(f) for f in fields}
+        if isinstance(values.get('metadata'), dict):
+            values['metadata'] = json.dumps(values['metadata'])
+        cols = ['document_id'] + [k for k, v in values.items() if v is not None]
+        vals = [document_id] + [v for v in values.values() if v is not None]
+        placeholders = ','.join(['?'] * len(cols))
+        col_str = ','.join(cols)
+        cur = self.conn.execute(
+            f"INSERT INTO concession_entries ({col_str}) VALUES ({placeholders})", vals)
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get_concessions(self, document_id: int = None, status: str = None,
+                        concession_type: str = None) -> List[Dict]:
+        query = "SELECT ce.*, d.filename FROM concession_entries ce JOIN documents d ON ce.document_id = d.id WHERE 1=1"
+        params = []
+        if document_id:
+            query += " AND ce.document_id = ?"
+            params.append(document_id)
+        if status:
+            query += " AND ce.status = ?"
+            params.append(status)
+        if concession_type:
+            query += " AND ce.concession_type = ?"
+            params.append(concession_type)
+        query += " ORDER BY ce.id"
         cur = self.conn.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
 

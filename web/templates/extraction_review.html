@@ -134,7 +134,7 @@
                         {% endif %}
                     </td>
                     <td style="text-align: right; font-variant-numeric: tabular-nums; font-size: 12px;">
-                        {% set total_data = doc.total_opstat_items + doc.rent_roll_entries + doc.financial_terms + doc.clauses + doc.gl_entries %}
+                        {% set total_data = doc.total_opstat_items + doc.rent_roll_entries + doc.financial_terms + doc.clauses + doc.gl_entries + doc.balance_sheet_items + doc.cash_flow_items + doc.bank_recon_entries + doc.security_deposit_entries + doc.payable_entries + doc.receivable_entries + doc.bad_debt_entries + doc.concession_entries %}
                         {% if total_data > 0 %}
                         <span title="{{ doc.total_opstat_items }} opstat, {{ doc.rent_roll_entries }} rent roll, {{ doc.financial_terms }} terms, {{ doc.clauses }} clauses">
                             {{ total_data }}
