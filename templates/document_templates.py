@@ -1325,6 +1325,390 @@ Document excerpt:
 )
 
 
+# ─── Due Diligence ──────────────────────────────────────────────────
+
+DUE_DILIGENCE = DocumentTemplate(
+    document_type="due_diligence",
+    display_name="Due Diligence Report",
+    description="Environmental reports, surveys, appraisals, inspections, radon tests, insurance certificates, certificates of occupancy",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL ──
+        FieldDefinition("property_name", "Name of the property",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["project name", "project", "property"],
+                        prose_patterns=[
+                            r"(?i)(?:property|project)\s*(?:name)?\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|$)",
+                            r"(?i)re:\s*([A-Z][\w\s,.'&()-]+?)(?:\n|,\s*(?:located|richfield|minneapolis))",
+                        ]),
+        FieldDefinition("property_address", "Property street address",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["address", "location", "site address", "building address"],
+                        prose_patterns=[
+                            r"(?i)(?:property|building|site|project)\s*address\s*[:]\s*(.+?)(?:\n|$)",
+                            r"(?i)(?:located\s+at|address[:\s]+)\s*(\d+\s+[A-Z][\w\s,.]+(?:Avenue|Street|Parkway|Road|Drive|Blvd|Way)\s*\w*)",
+                        ]),
+        FieldDefinition("report_type", "Type of report or document",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["document type", "assessment type"],
+                        prose_patterns=[
+                            r"(?i)(phase\s+[iI1]\s+environmental\s+site\s+assessment)",
+                            r"(?i)(phase\s+[iI1]{2,}\s+environmental)",
+                            r"(?i)(property\s+condition\s+(?:assessment|report))",
+                            r"(?i)(ALTA/?NSPS\s+(?:land\s+title\s+)?survey)",
+                            r"(?i)(radon\s+(?:test|report|measurement|assessment))",
+                            r"(?i)(certificate\s+of\s+(?:occupancy|insurance))",
+                            r"(?i)(appraisal\s+report)",
+                            r"(?i)(surveyor.s\s+report)",
+                        ]),
+        FieldDefinition("report_date", "Date of the report", field_type="date",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["date", "prepared date", "effective date", "issue date"],
+                        prose_patterns=[
+                            r"(?i)(?:date|prepared|effective|issued)\s*[:]\s*(\w+\s+\d{1,2},?\s+\d{4})",
+                            r"(?i)(?:dated|as of)\s+(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        # ── IMPORTANT ──
+        FieldDefinition("prepared_by", "Company or person who prepared the report",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["author", "consultant", "surveyor", "inspector", "insurer"],
+                        prose_patterns=[
+                            r"(?i)(?:prepared\s+by|consultant|surveyor|inspector)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|$)",
+                        ]),
+        FieldDefinition("prepared_for", "Entity the report was prepared for",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["client", "addressee", "requested by"],
+                        prose_patterns=[
+                            r"(?i)(?:prepared\s+for|client|addressee)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|$)",
+                        ]),
+        FieldDefinition("hud_project_number", "HUD project number",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["project number", "fha number", "fha project"],
+                        prose_patterns=[
+                            r"(?i)(?:project\s*(?:number|no\.?|#)|FHA\s*(?:number|no\.?|#))\s*[:]\s*(\d{3}[\s-]?\d{5})",
+                            r"(\d{3}-\d{5})",
+                        ]),
+        FieldDefinition("findings_summary", "Key findings or conclusions",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["conclusions", "summary", "results"]),
+        FieldDefinition("compliance_status", "Compliance determination",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["status", "determination", "clearance"],
+                        prose_patterns=[
+                            r"(?i)(compliant|in\s+compliance|satisfactory|clearance\s+(?:is\s+)?granted)",
+                            r"(?i)(non[\s-]?compliant|deficien|unsatisfactory|violation)",
+                        ]),
+        # ── OPTIONAL ──
+        FieldDefinition("policy_number", "Insurance policy number",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["policy no", "certificate number"],
+                        prose_patterns=[
+                            r"(?i)(?:policy|certificate)\s*(?:number|no\.?|#)\s*[:]\s*([\w-]+)",
+                        ]),
+        FieldDefinition("coverage_amount", "Insurance coverage amount", field_type="currency",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["coverage", "limit", "amount of insurance"],
+                        prose_patterns=[
+                            r"(?i)(?:coverage|limit|amount)\s*[:]\s*\$\s*([\d,]+\.?\d*)",
+                        ]),
+        FieldDefinition("expiration_date", "Policy or certificate expiration", field_type="date",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["expires", "valid through", "policy period to"],
+                        prose_patterns=[
+                            r"(?i)(?:expir(?:es|ation)|valid\s+through|period\s+to)\s*[:]\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})",
+                        ]),
+        FieldDefinition("recording_date", "Date recorded with county", field_type="date",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["recorded", "filed"],
+                        prose_patterns=[
+                            r"(?i)(?:recorded|filed|certified)\s+(?:on\s+)?(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        FieldDefinition("recording_number", "County recording/document number",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["doc no", "document number", "instrument number"],
+                        prose_patterns=[
+                            r"(?i)(?:doc(?:ument)?\s*no\.?|instrument\s*(?:number|no\.?))\s*[:]\s*([A-Z]?\d+)",
+                        ]),
+    ],
+
+    clause_types=[],
+
+    llm_system_prompt="""You are a real estate due diligence analyst.
+Extract all material facts, dates, parties, and findings from this document.""",
+
+    llm_extraction_prompt="""Extract the following terms from this due diligence document.
+Return as JSON array with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+section_ref, page_number, confidence
+
+Terms:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
+# ─── Organizational ─────────────────────────────────────────────────
+
+ORGANIZATIONAL = DocumentTemplate(
+    document_type="organizational",
+    display_name="Organizational Document",
+    description="Organizational charts, certificates of formation, good standing certificates, borrower certifications, entity structure documents",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL ──
+        FieldDefinition("entity_name", "Primary entity name",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["company name", "borrower", "mortgagor", "LLC name"],
+                        prose_patterns=[
+                            r"(?i)(?:entity|company|borrower|mortgagor)\s*(?:name)?\s*[:]\s*([A-Z][\w\s,.'&()-]+?(?:LLC|Inc|LP|Corp)[\w.]*)",
+                            r"([A-Z][\w\s]+(?:LLC|Inc\.|LP|Corp\.|L\.L\.C\.))",
+                        ]),
+        FieldDefinition("entity_type", "Type of entity (LLC, LP, Corp, etc.)",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["organization type", "form of entity"],
+                        prose_patterns=[
+                            r"(?i)(limited\s+liability\s+company)",
+                            r"(?i)(limited\s+partnership)",
+                            r"(?i)(corporation)",
+                        ]),
+        FieldDefinition("managing_member", "Managing member or general partner",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["general partner", "manager", "managing partner"],
+                        prose_patterns=[
+                            r"(?i)(?:managing\s+member|general\s+partner|manager)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|\(|$)",
+                        ]),
+        # ── IMPORTANT ──
+        FieldDefinition("ownership_percentage", "Ownership interest percentage", field_type="percentage",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["interest", "membership interest", "% interest"],
+                        prose_patterns=[
+                            r"(\d{1,3}(?:\.\d+)?)\s*%\s*(?:member|interest|owner)",
+                            r"(?:member|interest|owner)\s*.*?(\d{1,3}(?:\.\d+)?)\s*%",
+                        ]),
+        FieldDefinition("formation_date", "Date of entity formation", field_type="date",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["date of formation", "organized", "incorporated"],
+                        prose_patterns=[
+                            r"(?i)(?:formed|organized|incorporated|date\s+of\s+formation)\s*(?:on|:)?\s*(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        FieldDefinition("formation_state", "State of formation/organization",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["state of formation", "jurisdiction", "organized under"],
+                        prose_patterns=[
+                            r"(?i)(?:organized|formed|incorporated)\s+(?:in|under\s+the\s+laws\s+of)\s+(?:the\s+State\s+of\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+                        ]),
+        FieldDefinition("authorized_signers", "Authorized signers or officers",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["officers", "signatories", "authorized representatives"],
+                        prose_patterns=[
+                            r"(?i)(?:CEO|President|Secretary|Treasurer|Vice\s+President|CFO|COO)\s*[-:]\s*([A-Z][\w\s.]+?)(?:\n|,|$)",
+                        ]),
+        FieldDefinition("hud_project_number", "HUD project number",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["project number", "fha number"],
+                        prose_patterns=[
+                            r"(?i)(?:project\s*(?:number|no\.?|#))\s*[:]\s*(\d{3}[\s-]?\d{5})",
+                            r"(\d{3}-\d{5})",
+                        ]),
+        # ── OPTIONAL ──
+        FieldDefinition("certification_date", "Date of certification", field_type="date",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["dated", "as of", "effective date"],
+                        prose_patterns=[
+                            r"(?i)(?:dated|as\s+of|effective)\s*[:]\s*(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        FieldDefinition("initial_endorsement_date", "HUD initial endorsement date", field_type="date",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["initial closing", "initial endorsement"],
+                        prose_patterns=[
+                            r"(?i)(?:initial\s+endorsement|initial\s+closing)\s*(?:date)?\s*[:(\s]\s*(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        FieldDefinition("members", "List of members/partners",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["partners", "owners", "interest holders"]),
+    ],
+
+    clause_types=[],
+
+    llm_system_prompt="""You are a corporate governance analyst specializing in real estate entity structures.
+Extract all entity information, ownership details, and officer/signer data.""",
+
+    llm_extraction_prompt="""Extract the following terms from this organizational document.
+Return as JSON array with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+section_ref, page_number, confidence
+
+Terms:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
+# ─── Correspondence ─────────────────────────────────────────────────
+
+CORRESPONDENCE = DocumentTemplate(
+    document_type="correspondence",
+    display_name="Correspondence",
+    description="Emails, letters, memos, and certifications — captures sender, recipient, dates, and key referenced items",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL ──
+        FieldDefinition("sender", "Sender name and/or organization",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["from", "author"],
+                        prose_patterns=[
+                            r"(?i)(?:from|sender)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|<|$)",
+                        ]),
+        FieldDefinition("recipient", "Recipient name and/or organization",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["to", "addressee"],
+                        prose_patterns=[
+                            r"(?i)(?:^to|sent\s+to|addressee)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|<|$)",
+                        ]),
+        FieldDefinition("date_sent", "Date of correspondence", field_type="date",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["date", "sent"],
+                        prose_patterns=[
+                            r"(?i)(?:date|sent)\s*[:]\s*(\w+(?:day)?,?\s+\w+\s+\d{1,2},?\s+\d{4})",
+                            r"(?i)(?:date|sent)\s*[:]\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})",
+                        ]),
+        FieldDefinition("subject", "Subject line or topic",
+                        priority=FieldPriority.CRITICAL,
+                        aliases=["re", "regarding", "subject line"],
+                        prose_patterns=[
+                            r"(?i)(?:subject|re)\s*[:]\s*(.+?)(?:\n|$)",
+                        ]),
+        # ── IMPORTANT ──
+        FieldDefinition("property_name", "Referenced property name",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["project name", "project", "property"],
+                        prose_patterns=[
+                            r"(?i)(?:re|subject|property|project)\s*[:]\s*(?:the\s+)?([A-Z][\w\s,.'&()-]+?)(?:\n|,\s*(?:located|richfield|minneapolis)|$)",
+                        ]),
+        FieldDefinition("hud_project_number", "HUD project number",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["project number", "fha number"],
+                        prose_patterns=[
+                            r"(?i)(?:project\s*(?:number|no\.?|#))\s*[:]\s*(\d{3}[\s-]?\d{5})",
+                            r"(\d{3}-\d{5})",
+                        ]),
+        FieldDefinition("action_requested", "Key action or request",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["request", "action item", "please"]),
+        FieldDefinition("entity_referenced", "Key entity referenced",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["entity", "company", "borrower"],
+                        prose_patterns=[
+                            r"([A-Z][\w\s]+(?:LLC|Inc\.|LP|Corp\.|L\.L\.C\.))",
+                        ]),
+        FieldDefinition("reference_number", "Reference or file number",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["ref", "file number", "binder number"],
+                        prose_patterns=[
+                            r"(?i)(?:reference|ref|file|binder)\s*(?:number|no\.?|#)\s*[:]\s*([\w-]+)",
+                        ]),
+    ],
+
+    clause_types=[],
+
+    llm_system_prompt="""You are a document analyst extracting key metadata from real estate correspondence.
+Focus on parties, dates, referenced entities, and any action items or decisions.""",
+
+    llm_extraction_prompt="""Extract the following terms from this correspondence.
+Return as JSON array with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+section_ref, page_number, confidence
+
+Terms:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
+# ─── Reference ──────────────────────────────────────────────────────
+
+REFERENCE = DocumentTemplate(
+    document_type="reference",
+    display_name="Reference Document",
+    description="Contact lists, UCC filings, context files, and other reference materials",
+    extraction_modes=[ExtractionMode.FINANCIAL],
+
+    financial_fields=[
+        # ── CRITICAL ──
+        FieldDefinition("property_name", "Property or project name",
+                        required=True, priority=FieldPriority.CRITICAL,
+                        aliases=["project name", "project"],
+                        prose_patterns=[
+                            r"(?i)(?:property|project)\s*(?:name)?\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|$)",
+                        ]),
+        # ── IMPORTANT ──
+        FieldDefinition("borrower", "Borrower entity name",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["debtor", "mortgagor"],
+                        prose_patterns=[
+                            r"(?i)(?:borrower|debtor|mortgagor)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|$)",
+                        ]),
+        FieldDefinition("lender", "Lender entity name",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["secured party", "creditor"],
+                        prose_patterns=[
+                            r"(?i)(?:lender|secured\s+party|creditor)\s*[:]\s*([A-Z][\w\s,.'&()-]+?)(?:\n|$)",
+                        ]),
+        FieldDefinition("filing_date", "Filing or recording date", field_type="date",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["filed", "recorded", "date filed"],
+                        prose_patterns=[
+                            r"(?i)(?:fil(?:ed|ing)\s*(?:date)?|recorded)\s*[:]\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})",
+                            r"(?i)(?:fil(?:ed|ing)\s*(?:date)?|recorded)\s*[:]\s*(\w+\s+\d{1,2},?\s+\d{4})",
+                        ]),
+        FieldDefinition("filing_number", "Filing or document number",
+                        priority=FieldPriority.IMPORTANT,
+                        aliases=["file number", "document number", "UCC number"],
+                        prose_patterns=[
+                            r"(?i)(?:filing\s*(?:number|no\.?|#)|UCC\s*(?:number|no\.?))\s*[:]\s*(\d[\d\s]+\d)",
+                        ]),
+        # ── OPTIONAL ──
+        FieldDefinition("contact_name", "Key contact name",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["contact", "representative"]),
+        FieldDefinition("contact_organization", "Contact organization",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["company", "firm"]),
+        FieldDefinition("property_address", "Property address",
+                        priority=FieldPriority.OPTIONAL,
+                        aliases=["address", "location"],
+                        prose_patterns=[
+                            r"(?i)(?:property|project)\s*address\s*[:]\s*(.+?)(?:\n|$)",
+                        ]),
+    ],
+
+    clause_types=[],
+
+    llm_system_prompt="""You are a document analyst extracting key metadata from real estate reference documents.
+Focus on entity names, filing details, and contact information.""",
+
+    llm_extraction_prompt="""Extract the following terms from this reference document.
+Return as JSON array with keys:
+term_type, term_label, value_raw, value_numeric, value_unit,
+section_ref, page_number, confidence
+
+Terms:
+{field_list}
+
+Document text:
+{document_text}""",
+)
+
+
 # ─── Template Registry ───────────────────────────────────────────────
 
 TEMPLATES: Dict[str, DocumentTemplate] = {
@@ -1339,6 +1723,10 @@ TEMPLATES: Dict[str, DocumentTemplate] = {
     "equity_waterfall": EQUITY_WATERFALL,
     "hud_form": HUD_FORM,
     "partnership_agreement": PARTNERSHIP_AGREEMENT,
+    "due_diligence": DUE_DILIGENCE,
+    "organizational": ORGANIZATIONAL,
+    "correspondence": CORRESPONDENCE,
+    "reference": REFERENCE,
 }
 
 

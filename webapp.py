@@ -78,16 +78,31 @@ _jobs_lock = threading.Lock()
 JOB_EXPIRY_HOURS = int(os.environ.get('CAPACTIVE_JOB_EXPIRY_HOURS', '24'))
 
 
+MAX_RETAINED_JOBS = int(os.environ.get('CAPACTIVE_MAX_JOBS', '500'))
+
+
 def _cleanup_expired_jobs():
-    """Remove jobs older than JOB_EXPIRY_HOURS."""
+    """Remove jobs older than JOB_EXPIRY_HOURS and enforce size cap."""
     cutoff = datetime.now().timestamp() - (JOB_EXPIRY_HOURS * 3600)
     with _jobs_lock:
+        # Remove expired jobs
         expired = [
             jid for jid, job in jobs.items()
             if datetime.fromisoformat(job.get('started', datetime.now().isoformat())).timestamp() < cutoff
         ]
         for jid in expired:
             del jobs[jid]
+
+        # If still over cap, evict oldest completed jobs
+        if len(jobs) > MAX_RETAINED_JOBS:
+            completed = sorted(
+                [(jid, job) for jid, job in jobs.items()
+                 if job.get('status') in ('completed', 'failed')],
+                key=lambda x: x[1].get('started', ''),
+            )
+            to_evict = len(jobs) - MAX_RETAINED_JOBS
+            for jid, _ in completed[:to_evict]:
+                del jobs[jid]
 
 
 # ─── Rate Limiting ──────────────────────────────────────────────────
@@ -207,13 +222,28 @@ def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_nam
 # ─── Helpers ─────────────────────────────────────────────────────────
 
 def get_config_store():
+    """Get or create a per-request ConfigStore cached in flask.g."""
+    if hasattr(g, '_config_store') and g._config_store is not None:
+        return g._config_store
     store = ConfigStore(CONFIG_DB, DATA_DIR)
     store.connect()
+    try:
+        g._config_store = store
+    except RuntimeError:
+        # Outside request context (e.g. background thread) — return uncached
+        return store
     return store
 
 def get_usage_tracker():
+    """Get or create a per-request UsageTracker cached in flask.g."""
+    if hasattr(g, '_usage_tracker') and g._usage_tracker is not None:
+        return g._usage_tracker
     tracker = UsageTracker(CONFIG_DB)
     tracker.connect()
+    try:
+        g._usage_tracker = tracker
+    except RuntimeError:
+        return tracker
     return tracker
 
 def get_org_db(org_id):
@@ -237,9 +267,27 @@ def request_entity_too_large(error):
 
 
 def get_permission_store():
+    """Get or create a per-request PermissionStore cached in flask.g."""
+    if hasattr(g, '_permission_store') and g._permission_store is not None:
+        return g._permission_store
     store = PermissionStore(CONFIG_DB)
     store.connect()
+    try:
+        g._permission_store = store
+    except RuntimeError:
+        return store
     return store
+
+@app.teardown_appcontext
+def _close_cached_stores(exc):
+    """Close any per-request cached stores at end of request."""
+    for attr in ('_config_store', '_permission_store', '_usage_tracker'):
+        store = g.pop(attr, None)
+        if store is not None:
+            try:
+                store.close()
+            except Exception:
+                pass
 
 def get_llm():
     return LocalLLMClient(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
@@ -398,12 +446,9 @@ def permission_required(scope, level='read'):
                 return f(*args, **kwargs)
             if 'user_id' not in session:
                 return redirect(url_for('login'))
-            store = get_permission_store()
-            try:
-                perms = store.get_user_permissions(
-                    session['user_id'], session['org_id'])
-            finally:
-                store.close()
+            store = get_permission_store()  # cached in flask.g
+            perms = store.get_user_permissions(
+                session['user_id'], session['org_id'])
             if not check_permission(perms, scope, level):
                 flash(f'You don\'t have permission to access this feature.', 'error')
                 return redirect(url_for('index'))
@@ -420,11 +465,8 @@ def inject_user():
     user = get_current_user()
     perms = {}
     if user:
-        store = get_permission_store()
-        try:
-            perms = store.get_user_permissions(user['user_id'], user['org_id'])
-        finally:
-            store.close()
+        store = get_permission_store()  # cached in flask.g, closed by teardown
+        perms = store.get_user_permissions(user['user_id'], user['org_id'])
 
     def user_can_read(scope):
         return can_read(perms, scope)
@@ -725,6 +767,7 @@ def upload():
         first_filename = saved[0][0]
 
         # Process in background
+        _cleanup_expired_jobs()
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
             'org_id': org_id,
@@ -906,6 +949,7 @@ def batch():
         doc_type = request.form.get('doc_type') or None
         property_name = request.form.get('property_name') or None
 
+        _cleanup_expired_jobs()
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
             'org_id': org_id,
@@ -2092,6 +2136,7 @@ def api_reextract(doc_id):
 
         # Create a job and reprocess in background
         filename = os.path.basename(filepath)
+        _cleanup_expired_jobs()
         job_id = str(uuid.uuid4())[:8]
         jobs[job_id] = {
             'id': job_id,
@@ -2164,6 +2209,7 @@ def api_analyze_property(property_id):
     finally:
         db.close()
 
+    _cleanup_expired_jobs()
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {
         'id': job_id,
@@ -2466,6 +2512,7 @@ def api_analyze_selective(property_id):
         db.close()
 
     mode_label = {'full': 'Full re-run', 'smart': 'Smart (needs rerun only)', 'new_only': 'New docs only'}.get(mode, mode)
+    _cleanup_expired_jobs()
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {
         'id': job_id,

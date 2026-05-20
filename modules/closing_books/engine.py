@@ -2,14 +2,15 @@
 Closing Books Engine — read-only access to the partner's SQLite
 document extraction warehouse.
 
-Tables:
-  file_record       — 71 rows (19 extracted, 52 inventoried-only)
-  content_block     — 379 rows (extracted text, dollar amounts, dates)
-  module_mapping    — 156 rows (block → platform module links)
-  gap_record        — 16 rows (expected-but-missing documents)
-  duplicate_verdict — 16 rows (cross-file dedup decisions)
-  search_query      — 48 rows (saved extraction queries)
-  batch_learning    — 20 rows (lessons learned during extraction)
+Tables (cumulative across 6 batches):
+  file_record       — 220 rows (6 batches: 01_CLOSING_BOOKS, 02_LLC, 03_IDP_COMMS,
+                       04_PARTNERSHIP_CONTEXT, 05_VG_MONTHLY_REPORTS, 06_IDP_CORRESPONDENCE)
+  content_block     — 553 rows (extracted text, dollar amounts, dates)
+  module_mapping    — 343 rows (block → platform module links)
+  gap_record        — 19 rows (expected-but-missing documents)
+  duplicate_verdict — 21 rows (cross-file dedup decisions)
+  search_query      — 80 rows (saved extraction queries)
+  batch_learning    — 58 rows (lessons learned during extraction)
 """
 
 import json
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Default path relative to project root
 DEFAULT_DB = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    'data', 'chamberlain_warehouse.sqlite')
+    'data', 'chamberlain_warehouse_v3.sqlite')
 
 
 class ClosingBooksEngine:
@@ -204,53 +205,59 @@ class ClosingBooksEngine:
     # ── Stats / summary ───────────────────────────────────────────
 
     def get_stats(self):
-        """Summary statistics for the dashboard header."""
+        """Summary statistics for the dashboard header.
+
+        Consolidated into two queries instead of 10+ sequential COUNT(*)s.
+        """
         conn = self._conn()
-        stats = {}
 
-        stats['total_files'] = conn.execute(
-            'SELECT COUNT(*) FROM file_record').fetchone()[0]
-        stats['extracted_files'] = conn.execute(
-            "SELECT COUNT(*) FROM file_record WHERE ingest_status = 'extracted'"
-        ).fetchone()[0]
-        stats['pending_files'] = conn.execute(
-            "SELECT COUNT(*) FROM file_record WHERE ingest_status != 'extracted'"
-        ).fetchone()[0]
-        stats['total_blocks'] = conn.execute(
-            'SELECT COUNT(*) FROM content_block').fetchone()[0]
-        stats['blocks_with_dollars'] = conn.execute(
-            'SELECT COUNT(*) FROM content_block WHERE contains_dollar_amounts = 1'
-        ).fetchone()[0]
-        stats['total_mappings'] = conn.execute(
-            'SELECT COUNT(*) FROM module_mapping').fetchone()[0]
-        stats['total_gaps'] = conn.execute(
-            'SELECT COUNT(*) FROM gap_record').fetchone()[0]
-        stats['total_duplicates'] = conn.execute(
-            'SELECT COUNT(*) FROM duplicate_verdict').fetchone()[0]
-        stats['total_queries'] = conn.execute(
-            'SELECT COUNT(*) FROM search_query').fetchone()[0]
-        stats['total_learnings'] = conn.execute(
-            'SELECT COUNT(*) FROM batch_learning').fetchone()[0]
+        # Single query for all scalar counts across tables
+        row = conn.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM file_record) AS total_files,
+                (SELECT COUNT(*) FROM file_record
+                 WHERE ingest_status = 'extracted') AS extracted_files,
+                (SELECT COUNT(*) FROM file_record
+                 WHERE ingest_status != 'extracted') AS pending_files,
+                (SELECT COUNT(*) FROM content_block) AS total_blocks,
+                (SELECT COUNT(*) FROM content_block
+                 WHERE contains_dollar_amounts = 1) AS blocks_with_dollars,
+                (SELECT COUNT(*) FROM module_mapping) AS total_mappings,
+                (SELECT COUNT(*) FROM gap_record) AS total_gaps,
+                (SELECT COUNT(*) FROM duplicate_verdict) AS total_duplicates,
+                (SELECT COUNT(*) FROM search_query) AS total_queries,
+                (SELECT COUNT(*) FROM batch_learning) AS total_learnings
+        """).fetchone()
 
-        # Doc type breakdown
+        stats = {
+            'total_files': row['total_files'],
+            'extracted_files': row['extracted_files'],
+            'pending_files': row['pending_files'],
+            'total_blocks': row['total_blocks'],
+            'blocks_with_dollars': row['blocks_with_dollars'],
+            'total_mappings': row['total_mappings'],
+            'total_gaps': row['total_gaps'],
+            'total_duplicates': row['total_duplicates'],
+            'total_queries': row['total_queries'],
+            'total_learnings': row['total_learnings'],
+        }
+
+        # Group-by breakdowns (still need separate queries for different tables)
         doc_types = conn.execute(
             'SELECT doc_type, COUNT(*) as cnt FROM file_record '
             'GROUP BY doc_type ORDER BY cnt DESC').fetchall()
         stats['doc_types'] = [{'type': r[0], 'count': r[1]} for r in doc_types]
 
-        # Module breakdown
         modules = conn.execute(
             'SELECT module, COUNT(*) as cnt FROM module_mapping '
             'GROUP BY module ORDER BY cnt DESC').fetchall()
         stats['modules'] = [{'module': r[0], 'count': r[1]} for r in modules]
 
-        # Authority tiers
         tiers = conn.execute(
             'SELECT authority_tier, COUNT(*) as cnt FROM file_record '
             'GROUP BY authority_tier ORDER BY cnt DESC').fetchall()
         stats['authority_tiers'] = [{'tier': r[0], 'count': r[1]} for r in tiers]
 
-        # Batches
         batches = conn.execute(
             'SELECT subfolder_batch, COUNT(*) as cnt FROM file_record '
             'GROUP BY subfolder_batch ORDER BY cnt DESC').fetchall()

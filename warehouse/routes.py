@@ -46,7 +46,6 @@ def api_ingestions():
 def api_property(property_id):
     """Get property details + z-scores."""
     wh = _get_wh()
-    props = wh.find_property(address=None, name=None, market=None)  # need direct lookup
     # Direct lookup
     row = wh.conn.execute("""
         SELECT * FROM dim_property

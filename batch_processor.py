@@ -29,16 +29,20 @@ logger = logging.getLogger(__name__)
 class ProcessingResult:
     """Result of processing a single document."""
 
-    def __init__(self, filepath: str):
-        self.filepath = filepath
-        self.filename = os.path.basename(filepath)
-        self.success = False
-        self.document_id: Optional[int] = None
-        self.document_type: Optional[str] = None
-        self.page_count: int = 0
-        self.tables_stored: int = 0
-        self.error: Optional[str] = None
-        self.processing_time: float = 0
+    def __init__(self, filepath: str = None, *, filename: str = None,
+                 success: bool = False, document_id: int = None,
+                 document_type: str = None, page_count: int = 0,
+                 tables_stored: int = 0, error: str = None,
+                 processing_time: float = 0):
+        self.filepath = filepath or ''
+        self.filename = filename or (os.path.basename(filepath) if filepath else '')
+        self.success = success
+        self.document_id = document_id
+        self.document_type = document_type
+        self.page_count = page_count
+        self.tables_stored = tables_stored
+        self.error = error
+        self.processing_time = processing_time
 
     def __repr__(self):
         status = "OK" if self.success else f"FAILED: {self.error}"

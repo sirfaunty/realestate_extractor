@@ -36,6 +36,20 @@ from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_path(path: str) -> str:
+    """Sanitize a file path for use in DuckDB SQL string literals.
+
+    DuckDB's read_parquet()/read_csv() require a string literal —
+    parameterised placeholders aren't supported for file paths.
+    We validate and escape to prevent SQL injection.
+    """
+    resolved = os.path.realpath(path)
+    if not os.path.exists(resolved):
+        raise FileNotFoundError(f"Data file not found: {resolved}")
+    # Escape single quotes for SQL string literal
+    return resolved.replace("'", "''")
+
 # Default warehouse path: data/warehouse.duckdb alongside org_dev.db
 _DEFAULT_DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -208,7 +222,7 @@ class WarehouseEngine:
                 md5(lower(coalesce("Property Address",'')) ||
                     lower(coalesce("City",'')) ||
                     lower(coalesce("State",'')))
-            FROM read_parquet('{parquet_path}')
+            FROM read_parquet('{_safe_path(parquet_path)}')
             WHERE "PropertyID" IS NOT NULL
         """).fetchone()
 
@@ -249,7 +263,7 @@ class WarehouseEngine:
                 TRY_CAST("z_score" AS DOUBLE),
                 '{knowledge_date}',
                 {ingestion_id}
-            FROM read_parquet('{parquet_path}')
+            FROM read_parquet('{_safe_path(parquet_path)}')
             WHERE "PropertyID" IS NOT NULL
         """)
 
@@ -281,7 +295,7 @@ class WarehouseEngine:
                 TRY_CAST("peer_std" AS DOUBLE),
                 '{knowledge_date}',
                 {ingestion_id}
-            FROM read_parquet('{parquet_path}')
+            FROM read_parquet('{_safe_path(parquet_path)}')
         """)
 
         count = self.conn.execute(f"""
@@ -338,7 +352,7 @@ class WarehouseEngine:
                 TRY_CAST("source_row" AS INTEGER),
                 '{knowledge_date}',
                 {ingestion_id}
-            FROM read_csv('{csv_path}', auto_detect=true, all_varchar=true)
+            FROM read_csv('{_safe_path(csv_path)}', auto_detect=true, all_varchar=true)
         """)
 
         count = self.conn.execute(f"""
@@ -391,7 +405,7 @@ class WarehouseEngine:
                 {is_clean},
                 '{knowledge_date}',
                 {ingestion_id}
-            FROM read_csv('{csv_path}', auto_detect=true, all_varchar=true)
+            FROM read_csv('{_safe_path(csv_path)}', auto_detect=true, all_varchar=true)
         """)
 
         count = self.conn.execute(f"""
@@ -412,7 +426,7 @@ class WarehouseEngine:
 
         # Detect columns present
         cols = self.conn.execute(f"""
-            SELECT * FROM read_csv('{csv_path}', auto_detect=true) LIMIT 0
+            SELECT * FROM read_csv('{_safe_path(csv_path)}', auto_detect=true) LIMIT 0
         """).description
         col_names = [c[0] for c in cols]
 
@@ -450,7 +464,7 @@ class WarehouseEngine:
                 {ppsf_expr},
                 '{knowledge_date}',
                 {ingestion_id}
-            FROM read_csv('{csv_path}', auto_detect=true, all_varchar=true)
+            FROM read_csv('{_safe_path(csv_path)}', auto_detect=true, all_varchar=true)
         """)
 
         count = self.conn.execute(f"""
