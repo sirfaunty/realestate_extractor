@@ -2,16 +2,16 @@
 Closing Books Engine — read-only access to the partner's SQLite
 document extraction warehouse.
 
-Tables (cumulative across 7 batches):
-  file_record       — 461 rows (7 batches: 01_CLOSING_BOOKS, 02_LLC, 03_IDP_COMMS,
+Tables (cumulative across 8 batches):
+  file_record       — 468 rows (8 batches: 01_CLOSING_BOOKS, 02_LLC, 03_IDP_COMMS,
                        04_PARTNERSHIP_CONTEXT, 05_VG_MONTHLY_REPORTS, 06_IDP_CORRESPONDENCE,
-                       07_VG_WEEKLY_REPORTS)
-  content_block     — 2563 rows (extracted text, dollar amounts, dates)
-  module_mapping    — 825 rows (block → platform module links)
+                       07_VG_WEEKLY_REPORTS, 08_MRI_FINANCIALS)
+  content_block     — 2649 rows (extracted text, dollar amounts, dates)
+  module_mapping    — 839 rows (block → platform module links)
   gap_record        — 19 rows (expected-but-missing documents)
   duplicate_verdict — 21 rows (cross-file dedup decisions)
   search_query      — 80 rows (saved extraction queries)
-  batch_learning    — 68 rows (lessons learned during extraction)
+  batch_learning    — 85 rows (lessons learned during extraction)
 """
 
 import json

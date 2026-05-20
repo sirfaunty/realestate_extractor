@@ -37,8 +37,7 @@ EXTRACTABLE_TYPES = DocumentClassifier.EXTRACTABLE_TYPES
 OS_TYPES = {'operating_statement'}
 # Types that are expected to produce no structured extraction
 NO_EXTRACT_TYPES = {
-    'organizational', 'reference',
-    'correspondence', 'due_diligence', 'unknown',
+    'unknown',
 }
 
 

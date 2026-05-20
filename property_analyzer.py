@@ -83,10 +83,40 @@ class PropertyAnalyzer:
         }
 
         try:
+            # ── Auto-reclassify docs with empty/missing document_type ──
+            # This catches docs that were ingested before their type's
+            # classifier patterns existed, or that lost their type during
+            # a DB reset.  Re-runs filename + keyword classification
+            # (no LLM) so they get matched to the right template.
+            untyped = [d for d in docs if not d.get('document_type', '').strip()]
+            if untyped:
+                self._emit('classifying', f'Re-classifying {len(untyped)} untyped document(s)...')
+                classifier = DocumentClassifier(self.llm)
+                reclassified = 0
+                for doc in untyped:
+                    doc_content = self._reconstruct_document(doc['id'], doc)
+                    if not doc_content:
+                        continue
+                    new_type, conf = classifier.classify(doc_content, use_llm=False)
+                    if new_type and new_type != 'unknown':
+                        meta = json.dumps({'classification_confidence': conf})
+                        self.db.conn.execute(
+                            'UPDATE documents SET document_type=?, analysis_status=?, metadata=? WHERE id=?',
+                            (new_type, 'ingested', meta, doc['id'])
+                        )
+                        doc['document_type'] = new_type
+                        doc['analysis_status'] = 'ingested'
+                        doc['metadata'] = meta
+                        reclassified += 1
+                        logger.info(f"Auto-reclassified doc #{doc['id']} → {new_type} ({conf:.0%})")
+                if reclassified:
+                    self.db.conn.commit()
+                    self._emit('classifying', f'Re-classified {reclassified} of {len(untyped)} documents')
+
             # Group documents by type
             by_type = {}
             for doc in docs:
-                dt = doc.get('document_type', 'unknown')
+                dt = doc.get('document_type', 'unknown') or 'unknown'
                 by_type.setdefault(dt, []).append(doc)
 
             # Process each type
@@ -200,9 +230,34 @@ class PropertyAnalyzer:
         }
 
         try:
+            # ── Auto-reclassify untyped docs (same as analyze_property) ──
+            untyped = [d for d in docs if not d.get('document_type', '').strip()]
+            if untyped:
+                self._emit('classifying', f'Re-classifying {len(untyped)} untyped document(s)...')
+                classifier = DocumentClassifier(self.llm)
+                reclassified = 0
+                for doc in untyped:
+                    doc_content = self._reconstruct_document(doc['id'], doc)
+                    if not doc_content:
+                        continue
+                    new_type, conf = classifier.classify(doc_content, use_llm=False)
+                    if new_type and new_type != 'unknown':
+                        meta = json.dumps({'classification_confidence': conf})
+                        self.db.conn.execute(
+                            'UPDATE documents SET document_type=?, analysis_status=?, metadata=? WHERE id=?',
+                            (new_type, 'ingested', meta, doc['id'])
+                        )
+                        doc['document_type'] = new_type
+                        doc['analysis_status'] = 'ingested'
+                        doc['metadata'] = meta
+                        reclassified += 1
+                        logger.info(f"Auto-reclassified doc #{doc['id']} → {new_type} ({conf:.0%})")
+                if reclassified:
+                    self.db.conn.commit()
+
             by_type = {}
             for doc in docs:
-                dt = doc.get('document_type', 'unknown')
+                dt = doc.get('document_type', 'unknown') or 'unknown'
                 by_type.setdefault(dt, []).append(doc)
 
             for doc_type, type_docs in by_type.items():
