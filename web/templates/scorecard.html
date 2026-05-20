@@ -1,0 +1,2921 @@
+{% extends "base.html" %}
+
+{% block title %}Market Scorecard — capactive{% endblock %}
+
+{% block content %}
+{# Google Fonts for scorecard (JetBrains Mono not in base) #}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   SCORECARD MODULE — Scoped Styles
+   All classes prefixed or scoped to avoid base.html conflicts.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Brand variable aliases (from standalone brand.css) */
+.scorecard-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+
+  /* Aliases used throughout the scorecard JS-generated HTML */
+  --navy: var(--brand-navy);
+  --active: var(--brand-active);
+  --light-blue: var(--brand-light);
+  --cloud: var(--brand-cloud);
+  --signal: var(--brand-signal);
+  --primary: var(--brand-primary);
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --fg: var(--brand-ink);
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --danger-light: #fef2f2;
+  --warning: #d97706;
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+.scorecard-root {
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* ── Module Bar (MF / Demographics toggle) ── */
+.scorecard-root .module-bar {
+  display: flex;
+  gap: 0;
+  background: var(--cloud);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 16px;
+  width: fit-content;
+}
+.scorecard-root .module-tab {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.scorecard-root .module-tab.active {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.scorecard-root .module-tab:hover:not(.active) {
+  color: var(--text);
+}
+
+/* ── App Layout (sidebar config + main content) ── */
+.scorecard-root .app-layout {
+  display: flex;
+  gap: 0;
+  min-height: 600px;
+}
+.scorecard-root .sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+  position: sticky;
+  top: 20px;
+  font-size: 12px;
+}
+.scorecard-root .main-content {
+  flex: 1;
+  min-width: 0;
+  padding-left: 16px;
+}
+
+/* ── Header row ── */
+.scorecard-root .sc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.scorecard-root .sc-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+.scorecard-root .sc-header .subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.scorecard-root .prop-class-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--cloud);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.scorecard-root .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Buttons ── */
+.scorecard-root .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.scorecard-root .btn:hover { background: var(--cloud); }
+.scorecard-root .btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.scorecard-root .btn-primary:hover { background: var(--navy); border-color: var(--navy); }
+.scorecard-root .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.scorecard-root .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+.scorecard-root .btn-outline:hover { background: var(--cloud); }
+.scorecard-root .btn-ghost { background: none; border: none; color: var(--muted); }
+.scorecard-root .btn-ghost:hover { color: var(--text); }
+.scorecard-root .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── Config Sidebar Internals ── */
+.scorecard-root .config-header h2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0;
+}
+.scorecard-root .filter-item {
+  margin-bottom: 10px;
+}
+.scorecard-root .filter-item label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.scorecard-root .filter-item select,
+.scorecard-root .filter-item input[type="number"] {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: #fff;
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+.scorecard-root .filter-item select:focus,
+.scorecard-root .filter-item input:focus {
+  outline: none;
+  border-color: var(--active);
+}
+
+/* ── Config Sections & Accordions ── */
+.scorecard-root .config-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.scorecard-root .accordion-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: var(--cloud);
+  user-select: none;
+}
+.scorecard-root .config-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.scorecard-root .accordion-chevron {
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.scorecard-root .accordion-chevron.open { transform: rotate(0deg); }
+.scorecard-root .accordion-chevron:not(.open) { transform: rotate(-90deg); }
+.scorecard-root .accordion-body {
+  display: none;
+  padding: 10px 12px;
+}
+.scorecard-root .accordion-body.open { display: block; }
+
+.scorecard-root .config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.scorecard-root .config-item {
+  display: flex;
+  flex-direction: column;
+}
+.scorecard-root .config-item label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+.scorecard-root .config-item input[type="number"],
+.scorecard-root .config-item input[type="checkbox"] {
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: var(--mono);
+  width: 100%;
+  background: #fff;
+  color: var(--text);
+}
+.scorecard-root .config-item input[type="checkbox"] {
+  width: auto;
+}
+
+/* Info tips */
+.scorecard-root .info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--cloud);
+  color: var(--primary);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.scorecard-root .info-tip .tip-text {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--navy);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+  width: 220px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  pointer-events: none;
+}
+.scorecard-root .info-tip .tip-text::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: var(--arrow-left, 50%);
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--navy);
+}
+.scorecard-root .info-tip:hover .tip-text { display: block; }
+
+/* Weight error */
+.scorecard-root .weight-error {
+  font-size: 11px; font-weight: 500; color: var(--danger);
+  background: var(--danger-light); border: 1px solid #fecaca;
+  border-radius: 4px; padding: 4px 8px; margin-top: 6px;
+}
+
+/* Pct wrap */
+.scorecard-root .pct-wrap { position: relative; }
+.scorecard-root .pct-wrap input[type="number"] { padding-right: 22px !important; }
+.scorecard-root .pct-wrap::after {
+  content: '%'; position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%); font-size: 11px; color: var(--muted);
+  pointer-events: none; font-family: var(--mono);
+}
+.scorecard-root .pct-suffix { font-size: 11px; color: var(--muted); margin-left: 2px; font-family: var(--mono); }
+
+/* Momentum table */
+.scorecard-root .momentum-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.scorecard-root .momentum-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.scorecard-root .momentum-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text);
+}
+.scorecard-root .momentum-table input {
+  width: 60px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--mono);
+  text-align: right;
+}
+.scorecard-root .period-disabled td { opacity: 0.5; }
+
+.scorecard-root .subcat-weights-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── Stats Bar ── */
+.scorecard-root .stats-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.scorecard-root .stat-card {
+  flex: 1;
+  min-width: 110px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.scorecard-root .stat-card .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.scorecard-root .stat-card .value {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--navy);
+}
+.scorecard-root .stat-card .sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── View Tabs ── */
+.scorecard-root .view-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+.scorecard-root .view-tab {
+  padding: 8px 18px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+}
+.scorecard-root .view-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.scorecard-root .view-tab:hover:not(.active) { color: var(--text); }
+
+.scorecard-root .view-panel { display: none; }
+.scorecard-root .view-panel.active { display: block; }
+
+/* ── Table ── */
+.scorecard-root .table-container {}
+.scorecard-root .table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.scorecard-root .table-toolbar input[type="text"] {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  width: 240px;
+  font-family: var(--font);
+}
+.scorecard-root .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.scorecard-root .table-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.scorecard-root table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.scorecard-root thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.scorecard-root th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--cloud);
+  border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.scorecard-root th:hover { color: var(--primary); }
+.scorecard-root td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.scorecard-root tr:hover td { background: rgba(24, 95, 165, 0.03); }
+.scorecard-root tr.expanded td { background: var(--cloud); }
+.scorecard-root td.rank {
+  font-weight: 700;
+  color: var(--primary);
+  text-align: center;
+  width: 40px;
+}
+
+/* Score coloring */
+.scorecard-root .score-positive { color: var(--success); }
+.scorecard-root .score-negative { color: var(--danger); }
+.scorecard-root .score-neutral { color: var(--muted); }
+
+/* Percentile badge */
+.scorecard-root .pctl-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+.scorecard-root .pctl-high { background: #d1fae5; color: #065f46; }
+.scorecard-root .pctl-mid { background: var(--cloud); color: var(--primary); }
+.scorecard-root .pctl-low { background: #fef2f2; color: #991b1b; }
+
+/* Weight badge */
+.scorecard-root .weight-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--cloud);
+  color: var(--primary);
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Market name clickable */
+.scorecard-root .market-name {
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 500;
+  font-family: var(--font);
+}
+.scorecard-root .market-name:hover { color: var(--navy); text-decoration: underline; }
+
+/* ── Drill-Down ── */
+.scorecard-root .drill-down { background: #fafbfc; }
+.scorecard-root .drill-down.open td { padding: 0; }
+.scorecard-root .drill-content {
+  padding: 16px 20px;
+}
+.scorecard-root .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.scorecard-root .metric-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.scorecard-root .metric-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.scorecard-root .group-tag {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.scorecard-root .group-ds { background: var(--cloud); color: var(--primary); }
+.scorecard-root .group-occ { background: #d1fae5; color: #065f46; }
+.scorecard-root .group-rent { background: var(--cloud); color: var(--active); }
+.scorecard-root .group-pop { background: var(--cloud); color: var(--primary); }
+.scorecard-root .group-afford-snap { background: var(--cloud); color: var(--navy); }
+.scorecard-root .group-afford-growth { background: var(--cloud); color: var(--primary); }
+.scorecard-root .group-emp { background: #d1fae5; color: #065f46; }
+
+/* Metric bars */
+.scorecard-root .metric-bars { margin-top: 4px; }
+.scorecard-root .metric-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.scorecard-root .metric-bar-label {
+  width: 42px;
+  font-size: 10px;
+  color: var(--muted);
+  flex-shrink: 0;
+  text-align: right;
+}
+.scorecard-root .metric-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.scorecard-root .metric-bar-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--muted);
+  opacity: 0.4;
+}
+.scorecard-root .metric-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.scorecard-root .metric-bar-fill.positive { left: 50%; background: var(--success); }
+.scorecard-root .metric-bar-fill.negative { right: 50%; background: var(--danger); }
+.scorecard-root .metric-bar-val {
+  width: 50px;
+  font-size: 11px;
+  font-family: var(--mono);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* See All Data button */
+.scorecard-root .see-all-data-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--primary);
+  background: var(--cloud);
+  color: var(--primary);
+  font-family: var(--font);
+}
+.scorecard-root .see-all-data-btn:hover { background: var(--primary); color: #fff; }
+
+/* ── Distribution Charts ── */
+.scorecard-root .chart-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.scorecard-root .chart-panel h2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 12px;
+}
+.scorecard-root .distribution-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 180px;
+  padding: 0;
+}
+.scorecard-root .dist-bar-wrap {
+  flex: 1;
+  min-width: 2px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+}
+.scorecard-root .dist-bar {
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  transition: opacity 0.15s;
+  min-height: 1px;
+}
+.scorecard-root .dist-bar-wrap:hover .dist-bar { opacity: 1 !important; }
+.scorecard-root .dist-bar-wrap:hover .dist-tooltip { display: block; }
+.scorecard-root .dist-tooltip {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--navy);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+  margin-bottom: 4px;
+}
+.scorecard-root .dist-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+  padding: 0 2px;
+}
+.scorecard-root .dist-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.scorecard-root .dist-legend-item { display: flex; align-items: center; gap: 6px; }
+.scorecard-root .dist-legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
+
+/* ── Compare View ── */
+.scorecard-root .compare-panel { padding: 0; }
+.scorecard-root .compare-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 12px;
+}
+.scorecard-root .compare-selectors {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.scorecard-root .compare-select-wrap {
+  flex: 1;
+}
+.scorecard-root .compare-select-wrap label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.scorecard-root .compare-select-wrap select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+.scorecard-root .color-a { color: var(--primary); }
+.scorecard-root .color-b { color: var(--active); }
+.scorecard-root .bg-a { background: var(--primary); }
+.scorecard-root .bg-b { background: var(--active); }
+
+.scorecard-root .compare-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.scorecard-root .compare-summary-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-align: center;
+}
+.scorecard-root .csi-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.scorecard-root .csi-values {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+.scorecard-root .csi-val {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+}
+.scorecard-root .compare-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.scorecard-root .compare-metric-label {
+  width: 160px;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.scorecard-root .compare-bar-area {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.scorecard-root .compare-bar-area.left { direction: rtl; }
+.scorecard-root .compare-bar {
+  height: 100%;
+  border-radius: 4px;
+  display: inline-block;
+}
+.scorecard-root .compare-val {
+  width: 50px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Peer Group ── */
+.scorecard-root .pg-category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.scorecard-root .pg-cat-tab {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  background: var(--panel);
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.scorecard-root .pg-cat-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.scorecard-root .pg-cat-tab:hover:not(.active) { border-color: var(--active); color: var(--text); }
+
+.scorecard-root .pg-summary-row td {
+  background: var(--cloud) !important;
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+}
+.scorecard-root .pg-subgroup-summary td {
+  background: #f0f8ff !important;
+  font-weight: 600;
+  font-style: italic;
+  border-top: 1px dashed var(--border);
+}
+
+/* ── Loading Spinner ── */
+.scorecard-root .loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.scorecard-root .spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: sc-spin 0.7s linear infinite;
+}
+@keyframes sc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Duration Weight Modal ── */
+.scorecard-root .dw-modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(4px);
+  z-index: 1100;
+}
+.scorecard-root .dw-modal-backdrop.visible { display: block; }
+.scorecard-root .dw-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  z-index: 1101;
+  width: 800px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow: hidden;
+  display: none;
+}
+.scorecard-root .dw-modal.visible { display: block; }
+.scorecard-root .dw-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.scorecard-root .dw-modal-header h3 { font-size: 16px; font-weight: 700; margin: 0; }
+.scorecard-root .dw-close-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.scorecard-root .dw-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  max-height: calc(85vh - 120px);
+}
+.scorecard-root .dw-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.scorecard-root .dw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.scorecard-root .dw-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  background: var(--cloud);
+  border-bottom: 2px solid var(--border);
+}
+.scorecard-root .dw-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.scorecard-root .dw-table input {
+  width: 62px;
+  text-align: right;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.scorecard-root .dw-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+.scorecard-root .dw-save-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.scorecard-root .dw-save-btn.idle { background: var(--border); color: var(--muted); }
+.scorecard-root .dw-save-btn.changed { background: var(--primary); color: #fff; }
+.scorecard-root .dw-open-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  width: 100%;
+}
+.scorecard-root .dw-open-btn:hover { background: var(--cloud); }
+</style>
+
+<div class="scorecard-root" id="scorecard-root">
+
+<!-- Header -->
+<div class="sc-header">
+  <div>
+    <h1>Market Scorecard</h1>
+    <div class="subtitle">Q4 2025 | Over 50K Peer Group | <span id="market-count">--</span> Markets<span class="prop-class-badge" id="prop-class-label">All</span></div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="runCurrentModule()" id="run-btn">Run Scorecard</button>
+  </div>
+</div>
+
+<!-- Module Tabs (MF / Demo) -->
+<div class="module-bar">
+  <button class="module-tab active" data-module="mf" onclick="switchModule('mf')">Multi-Family Fundamentals</button>
+  <button class="module-tab" data-module="demo" onclick="switchModule('demo')">Demographics</button>
+</div>
+
+<div class="app-layout">
+  <!-- Config Sidebar -->
+  <div class="sidebar">
+    <button class="dw-open-btn" onclick="currentModule === 'demo' ? resetDemoConfig() : resetConfig()" style="margin-bottom:14px;">Reset Defaults</button>
+    <div id="sidebar-title-mf" class="config-header" style="margin-bottom:10px;"><h2>Engine Configuration</h2></div>
+    <div id="sidebar-title-demo" class="config-header" style="margin-bottom:10px;display:none;"><h2>Demographics Configuration</h2></div>
+    <div class="filter-item">
+      <label>Inventory Tier:</label>
+      <select id="filter-inventory-tier" style="width:100%;">
+        <option value="All" selected>All Tiers</option>
+        <option value="Over 50K">Over 50K</option>
+        <option value="15K - 50K">15K - 50K</option>
+        <option value="5K - 15K">5K - 15K</option>
+        <option value="Under 5K">Under 5K</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>Region:</label>
+      <select id="filter-region" style="width:100%;">
+        <option value="All" selected>All Regions</option>
+        <option value="East Coast">East Coast</option>
+        <option value="Midwest">Midwest</option>
+        <option value="Mountain West">Mountain West</option>
+        <option value="Sunbelt">Sunbelt</option>
+        <option value="West Coast">West Coast</option>
+      </select>
+      <input type="hidden" id="filter-region-type" value="specific">
+    </div>
+    <div class="filter-item">
+      <label>Property Class:</label>
+      <select id="cfg-property-class" style="width:100%;">
+        <option value="All" selected>All</option>
+        <option value="4 & 5 Star">4 & 5 Star</option>
+        <option value="3 Star">3 Star</option>
+        <option value="1 & 2 Star">1 & 2 Star</option>
+      </select>
+    </div>
+    <div class="filter-item" id="filter-duration-mf">
+      <label><span class="info-tip">i<span class="tip-text">Number of years of historical data to analyze</span></span> Duration (Years):</label>
+      <input type="number" step="1" min="1" max="25" id="cfg-duration-years" value="10" style="width:100%;">
+    </div>
+    <div class="filter-item" id="filter-duration-demo" style="display:none;">
+      <label><span class="info-tip">i<span class="tip-text">Number of years of historical data to analyze</span></span> Duration (Years):</label>
+      <input type="number" step="1" min="1" max="25" id="cfg-demo-duration-years" value="10" style="width:100%;">
+    </div>
+    <div class="filter-item" id="filter-period-mode-mf">
+      <label><span class="info-tip">i<span class="tip-text">Cumulative: overlapping windows. Standalone: non-overlapping year windows.</span></span> Period Mode:</label>
+      <select id="cfg-period-mode" style="width:100%;" onchange="togglePeriodMode()">
+        <option value="cumulative" selected>Cumulative (original)</option>
+        <option value="standalone">Standalone Years</option>
+      </select>
+    </div>
+
+  <!-- MF Config Panel -->
+  <div class="config-panel" id="config-panel">
+    <!-- 1. Category Weights -->
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('cat-weights')">
+        <div class="config-section-title">Category Weights (3-Way Split)</div>
+        <span class="accordion-chevron open" id="cat-weights-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body open" id="cat-weights-body">
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Weight for Supply &amp; Demand metrics. S&amp;D + Occ + Rent = 100</span></span> Supply &amp;<br>Demand</label>
+            <input type="number" step="5" min="0" max="100" id="cfg-ds-weight" value="35" oninput="validateWeightGroup('mf-cat')">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Weight for Occupancy metrics. S&amp;D + Occ + Rent = 100</span></span> Occupancy &amp; Years<br>to Stabilization</label>
+            <input type="number" step="5" min="0" max="100" id="cfg-occ-weight" value="25" oninput="validateWeightGroup('mf-cat')">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Weight for Rent metrics. S&amp;D + Occ + Rent = 100</span></span> Rent Growth</label>
+            <input type="number" step="5" min="0" max="100" id="cfg-rg-weight" value="40" oninput="validateWeightGroup('mf-cat')">
+          </div>
+        </div>
+        <div class="weight-error" id="mf-cat-weight-error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- 2. Dispersion -->
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('dispersion-settings')">
+        <div class="config-section-title">Dispersion</div>
+        <span class="accordion-chevron" id="dispersion-settings-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="dispersion-settings-body">
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 12px; line-height: 1.5;">
+          Dispersion measures how much a market's sub-metrics agree with each other. At <strong>0%</strong> (default), dispersion has no effect.
+        </div>
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">0% = no effect. Higher = more reward for metric consensus.</span></span> Dispersion Weight</label>
+            <input type="number" step="5" id="cfg-dispersion-weight" value="0">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Maximum allowed dispersion multiplier.</span></span> Dispersion Cap</label>
+            <input type="number" step="0.1" id="cfg-dispersion-cap" value="2.0">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Minimum allowed dispersion multiplier.</span></span> Dispersion Floor</label>
+            <input type="number" step="0.1" id="cfg-dispersion-floor" value="0.5">
+          </div>
+        </div>
+        <hr style="margin:10px 0;">
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">How much directional consistency across periods affects the tilt</span></span> Period Consistency Weight</label>
+            <input type="number" step="5" id="cfg-period-weight" value="20">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">How much directional consistency within a category affects the tilt</span></span> Category Consistency Weight</label>
+            <input type="number" step="5" id="cfg-cat-weight" value="25">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Sub-Category Weights -->
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('subcat-weights')">
+        <div class="config-section-title">Sub-Category Weights</div>
+        <span class="accordion-chevron" id="subcat-weights-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="subcat-weights-body">
+      <div style="font-size: 11px; color: var(--muted); margin-bottom: 12px;">Adjust emphasis on individual metrics. Values &gt;1.0 boost, &lt;1.0 dampen.</div>
+      <div class="config-grid" style="margin-bottom: 12px;">
+        <div class="config-item">
+          <label><span class="info-tip">i<span class="tip-text">Weight for Overall rent vs the average of unit-type rents. 50 = equal blend.</span></span> Overall Rent Weight</label>
+          <input type="number" step="5" id="cfg-rent-overall-weight" value="50">
+        </div>
+      </div>
+      <div class="config-grid" style="margin-bottom: 12px;">
+        <div class="config-item">
+          <label><span class="info-tip">i<span class="tip-text">Weight for actual occupancy rate. Pairs with effective occupancy.</span></span> Actual Occupancy Weight</label>
+          <input type="number" step="5" min="0" max="100" id="cfg-actual-occ" value="35" oninput="validateWeightGroup('occ-sub')">
+        </div>
+        <div class="config-item">
+          <label><span class="info-tip">i<span class="tip-text">Weight for effective occupancy rate. Pairs with actual occupancy.</span></span> Effective Occupancy Weight</label>
+          <input type="number" step="5" min="0" max="100" id="cfg-effective-occ" value="65" oninput="validateWeightGroup('occ-sub')">
+        </div>
+      </div>
+      <div class="weight-error" id="occ-sub-weight-error" style="display:none;"></div>
+      <div class="subcat-weights-grid">
+        <div>
+          <h4 style="font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Supply &amp; Demand</h4>
+          <table class="momentum-table">
+            <thead><tr><th>Metric</th><th style="text-align:right;">Weight</th></tr></thead>
+            <tbody>
+              <tr><td>Absorption</td><td style="text-align:right;"><input type="number" step="0.1" id="ds-mw-absorption" value="1.0"></td></tr>
+              <tr><td>Deliveries</td><td style="text-align:right;"><input type="number" step="0.1" id="ds-mw-deliveries" value="1.0"></td></tr>
+              <tr><td>Absorption - Deliveries</td><td style="text-align:right;"><input type="number" step="0.1" id="ds-mw-abs_del" value="1.0"></td></tr>
+            </tbody>
+          </table>
+          <h4 style="font-size: 12px; font-weight: 600; color: var(--text); margin: 12px 0 8px;">Occupancy</h4>
+          <table class="momentum-table">
+            <thead><tr><th>Metric</th><th style="text-align:right;">Weight</th></tr></thead>
+            <tbody>
+              <tr><td>Blended Occ</td><td style="text-align:right;"><input type="number" step="0.1" id="occ-mw-blended_occ" value="1.0"></td></tr>
+              <tr><td>Under Construction</td><td style="text-align:right;"><input type="number" step="0.1" id="occ-mw-under_construction" value="1.0"></td></tr>
+              <tr><td>Years to Stabilization</td><td style="text-align:right;"><input type="number" step="0.1" id="occ-mw-yrs_to_stab" value="1.0"></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h4 style="font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Rent Growth</h4>
+          <table class="momentum-table">
+            <thead><tr><th>Metric</th><th style="text-align:right;">Weight</th></tr></thead>
+            <tbody>
+              <tr><td>Eff Rent (Overall)</td><td style="text-align:right;"><input type="number" step="0.1" id="rent-mw-eff_rent_overall" value="1.0"></td></tr>
+              <tr><td>Eff Rent (Studio)</td><td style="text-align:right;"><input type="number" step="0.1" id="rent-mw-eff_rent_studio" value="1.0"></td></tr>
+              <tr><td>Eff Rent (1BR)</td><td style="text-align:right;"><input type="number" step="0.1" id="rent-mw-eff_rent_1br" value="1.0"></td></tr>
+              <tr><td>Eff Rent (2BR)</td><td style="text-align:right;"><input type="number" step="0.1" id="rent-mw-eff_rent_2br" value="1.0"></td></tr>
+              <tr><td>Eff Rent (3BR)</td><td style="text-align:right;"><input type="number" step="0.1" id="rent-mw-eff_rent_3br" value="1.0"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <!-- 4. Volatility -->
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('volatility-settings')">
+        <div class="config-section-title">Volatility</div>
+        <span class="accordion-chevron" id="volatility-settings-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="volatility-settings-body">
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 12px; line-height: 1.5;">
+          Volatility measures how much a market's metrics fluctuate over time. Computed <strong>per period</strong> using each period's own time window.
+        </div>
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">How much market volatility affects the tilt adjustment. Set to 0 to ignore.</span></span> Volatility Weight</label>
+            <input type="number" step="5" id="cfg-vol-weight" value="35">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Momentum -->
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('momentum-settings')">
+        <div class="config-section-title">Momentum</div>
+        <span class="accordion-chevron" id="momentum-settings-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="momentum-settings-body">
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Controls momentum sensitivity. Lower = softer, higher = more aggressive.</span></span> Momentum Knob</label>
+            <input type="number" step="5" id="cfg-mom-knob" value="35">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Scales effective half-lives. &gt;1 = faster decay.</span></span> Recent MOM Multiplier</label>
+            <input type="number" step="0.1" min="0.1" id="cfg-momentum-mult" value="1.0">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Advanced Settings -->
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('advanced-settings')">
+        <div class="config-section-title">Advanced Settings</div>
+        <span class="accordion-chevron" id="advanced-settings-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="advanced-settings-body">
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Maximum allowed total Z-score per metric.</span></span> Total Z-Score Cap</label>
+            <input type="number" step="0.5" id="cfg-z-cap" value="3.0">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Minimum total Z-score per metric.</span></span> Total Z-Score Floor</label>
+            <input type="number" step="0.5" id="cfg-z-floor" value="-3.0">
+          </div>
+        </div>
+        <hr style="margin:10px 0;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Half-Life Configuration</div>
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px; line-height: 1.5;">Controls how momentum decays across periods.</div>
+        <table class="momentum-table">
+          <thead><tr><th>Period</th><th>Half-Life Steps</th><th>Max Tilt</th></tr></thead>
+          <tbody>
+            <tr><td>Quarterly</td><td><input type="number" step="0.5" id="mom-hl-Quarterly" value="8.0"></td><td><input type="number" step="5" id="mom-mt-Quarterly" value="50"></td></tr>
+            <tr><td>Annual</td><td><input type="number" step="0.5" id="mom-hl-Annual" value="3.0"></td><td><input type="number" step="5" id="mom-mt-Annual" value="35"></td></tr>
+            <tr><td>2Yr</td><td><input type="number" step="0.5" id="mom-hl-2Yr" value="1.5"></td><td><input type="number" step="5" id="mom-mt-2Yr" value="30"></td></tr>
+            <tr><td>3Yr</td><td><input type="number" step="0.5" id="mom-hl-3Yr" value="1.0"></td><td><input type="number" step="5" id="mom-mt-3Yr" value="30"></td></tr>
+            <tr><td>5Yr</td><td><input type="number" step="0.5" id="mom-hl-5Yr" value="1.0"></td><td><input type="number" step="5" id="mom-mt-5Yr" value="20"></td></tr>
+            <tr class="period-disabled"><td>10Yr</td><td><input type="number" step="0.5" id="mom-hl-10Yr" value="0.0"></td><td><input type="number" step="5" id="mom-mt-10Yr" value="0"></td></tr>
+            <tr class="period-disabled"><td>12Yr</td><td><input type="number" step="0.5" id="mom-hl-12Yr" value="0.0"></td><td><input type="number" step="5" id="mom-mt-12Yr" value="0"></td></tr>
+          </tbody>
+        </table>
+        <hr style="margin:12px 0;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Signal Direction Overrides</div>
+        <div class="config-grid">
+          <div class="config-item" style="grid-column: 1/-1;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="cfg-flip-deliveries">
+              <span><span class="info-tip">i<span class="tip-text">By default, higher deliveries = negative signal. Check to flip.</span></span> Flip Deliveries Direction</span>
+            </label>
+          </div>
+        </div>
+        <hr style="margin:12px 0;">
+        <input type="hidden" id="cfg-auto-duration" value="true">
+        <div class="config-grid">
+          <div class="config-item" style="grid-column: 1/-1;">
+            <button class="dw-open-btn" id="dw-open-btn" onclick="dwOpenModal()">Customize Period Weights</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demographics Config Panel (hidden by default) -->
+  <div class="config-panel" id="demo-config-panel" style="display:none;">
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-cat-weights')">
+        <div class="config-section-title">Category Weights</div>
+        <span class="accordion-chevron open" id="demo-cat-weights-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body open" id="demo-cat-weights-body">
+        <div class="config-grid">
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Weight for Population/Household metrics. Pop + Afford + Emp = 100</span></span> Population / Household</label>
+            <input type="number" step="5" min="0" max="100" id="cfg-demo-pop-weight" value="30" oninput="validateWeightGroup('demo-cat')">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Weight for Rent Affordability metrics. Pop + Afford + Emp = 100</span></span> Rent Affordability</label>
+            <input type="number" step="5" min="0" max="100" id="cfg-demo-afford-weight" value="35" oninput="validateWeightGroup('demo-cat')">
+          </div>
+          <div class="config-item">
+            <label><span class="info-tip">i<span class="tip-text">Weight for Employment Growth metrics. Pop + Afford + Emp = 100</span></span> Employment Growth</label>
+            <input type="number" step="5" min="0" max="100" id="cfg-demo-emp-weight" value="35" oninput="validateWeightGroup('demo-cat')">
+          </div>
+        </div>
+        <div class="weight-error" id="demo-cat-weight-error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-dgd-sub')">
+        <div class="config-section-title">Demographic Growth Drivers</div>
+        <span class="accordion-chevron" id="demo-dgd-sub-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="demo-dgd-sub-body">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Controls the internal weighting of the 4 growth driver sub-categories within Pop/HH Drivers.</div>
+        <div class="config-grid">
+          <div class="config-item"><label>HH/Pop Growth</label><input type="number" step="0.1" id="cfg-dgd-hhpop-weight" value="1.0"></div>
+          <div class="config-item"><label>HH Formation</label><input type="number" step="0.1" id="cfg-dgd-hh-formation-weight" value="1.0"></div>
+          <div class="config-item"><label>Income Growth</label><input type="number" step="0.1" id="cfg-dgd-income-weight" value="1.0"></div>
+          <div class="config-item"><label>Employment Growth</label><input type="number" step="0.1" id="cfg-dgd-emp-weight" value="1.0"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:8px 0 4px;">HH/Pop Growth Blend</div>
+        <div class="config-grid">
+          <div class="config-item"><label>Household</label><input type="number" step="0.1" id="cfg-dgd-hh-weight" value="1.0"></div>
+          <div class="config-item"><label>Population</label><input type="number" step="0.1" id="cfg-dgd-pop-weight" value="1.0"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:8px 0 4px;">Employment Growth Blend</div>
+        <div class="config-grid">
+          <div class="config-item"><label>Total Employment</label><input type="number" step="0.1" id="cfg-dgd-emp-total-weight" value="1.0"></div>
+          <div class="config-item"><label>Office Employment</label><input type="number" step="0.1" id="cfg-dgd-emp-office-weight" value="1.0"></div>
+          <div class="config-item"><label>Industrial Employment</label><input type="number" step="0.1" id="cfg-dgd-emp-industrial-weight" value="1.0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-afford-sub')">
+        <div class="config-section-title">Affordability Sub-Weights</div>
+        <span class="accordion-chevron" id="demo-afford-sub-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="demo-afford-sub-body">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Controls how the Rent Affordability category score is blended internally.</div>
+        <div class="config-grid">
+          <div class="config-item"><label>Overall vs Unit Type</label><input type="number" step="5" id="cfg-demo-afford-overall-weight" value="50"></div>
+          <div class="config-item"><label>Snapshot vs Growth</label><input type="number" step="5" id="cfg-demo-afford-snapshot-weight" value="60"></div>
+          <div class="config-item"><label>Unit Dispersion Tilt</label><input type="number" step="5" min="0" max="100" id="cfg-demo-afford-dispersion-weight" value="0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-drv-ctx')">
+        <div class="config-section-title">Drivers vs Context</div>
+        <span class="accordion-chevron" id="demo-drv-ctx-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="demo-drv-ctx-body">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Controls the blend between growth/flow driver metrics vs structural/ratio context metrics.</div>
+        <div class="config-grid">
+          <div class="config-item"><label>Pop/HH Drivers Weight</label><input type="number" step="5" id="cfg-demo-pop-drv-weight" value="80"></div>
+          <div class="config-item"><label>Employment Drivers Weight</label><input type="number" step="5" id="cfg-demo-emp-drv-weight" value="80"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-halflife')">
+        <div class="config-section-title">Half-Life</div>
+        <span class="accordion-chevron" id="demo-halflife-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="demo-halflife-body">
+        <div class="config-grid" style="margin-bottom:12px;display:none;">
+          <div class="config-item"><label>Momentum Knob</label><input type="number" step="5" id="cfg-demo-mom-knob" value="35"></div>
+          <div class="config-item"><label>Recent Momentum Multiplier</label><input type="number" step="0.1" id="cfg-demo-momentum-mult" value="1.0"></div>
+        </div>
+        <table class="momentum-table">
+          <thead><tr><th>Period</th><th>Half-Life Steps</th><th>Max Tilt</th></tr></thead>
+          <tbody>
+            <tr><td>Quarterly</td><td><input type="number" step="0.5" id="demo-mom-hl-Quarterly" value="8.0"></td><td><input type="number" step="5" id="demo-mom-mt-Quarterly" value="50"></td></tr>
+            <tr><td>Annual</td><td><input type="number" step="0.5" id="demo-mom-hl-Annual" value="3.0"></td><td><input type="number" step="5" id="demo-mom-mt-Annual" value="35"></td></tr>
+            <tr><td>2Yr</td><td><input type="number" step="0.5" id="demo-mom-hl-2Yr" value="1.5"></td><td><input type="number" step="5" id="demo-mom-mt-2Yr" value="30"></td></tr>
+            <tr><td>3Yr</td><td><input type="number" step="0.5" id="demo-mom-hl-3Yr" value="1.0"></td><td><input type="number" step="5" id="demo-mom-mt-3Yr" value="30"></td></tr>
+            <tr><td>5Yr</td><td><input type="number" step="0.5" id="demo-mom-hl-5Yr" value="1.0"></td><td><input type="number" step="5" id="demo-mom-mt-5Yr" value="20"></td></tr>
+            <tr class="period-disabled"><td>10Yr</td><td><input type="number" step="0.5" id="demo-mom-hl-10Yr" value="0.0"></td><td><input type="number" step="5" id="demo-mom-mt-10Yr" value="0"></td></tr>
+            <tr class="period-disabled"><td>12Yr</td><td><input type="number" step="0.5" id="demo-mom-hl-12Yr" value="0.0"></td><td><input type="number" step="5" id="demo-mom-mt-12Yr" value="0"></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-tilt')">
+        <div class="config-section-title">Tilt Applicators</div>
+        <span class="accordion-chevron" id="demo-tilt-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="demo-tilt-body">
+        <div class="config-grid">
+          <div class="config-item"><label>Volatility Weight</label><input type="number" step="5" id="cfg-demo-vol-weight" value="35"></div>
+          <div class="config-item"><label>Category Weight</label><input type="number" step="5" id="cfg-demo-cat-weight" value="25"></div>
+          <div class="config-item"><label>Period Weight</label><input type="number" step="5" id="cfg-demo-period-weight" value="20"></div>
+          <div class="config-item"><label>Dispersion Weight</label><input type="number" step="5" min="0" max="100" id="cfg-demo-dispersion-weight" value="0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="accordion-toggle" onclick="toggleAccordion('demo-advanced')">
+        <div class="config-section-title">Advanced Settings</div>
+        <span class="accordion-chevron" id="demo-advanced-chevron">&#9660;</span>
+      </div>
+      <div class="accordion-body" id="demo-advanced-body">
+        <div class="config-grid">
+          <div class="config-item"><label>Total Z-Score Cap</label><input type="number" step="0.5" id="cfg-demo-z-cap" value="3.0"></div>
+          <div class="config-item"><label>Total Z-Score Floor</label><input type="number" step="0.5" id="cfg-demo-z-floor" value="-3.0"></div>
+        </div>
+        <hr style="margin:10px 0;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Signal Direction Overrides</div>
+        <div class="config-grid">
+          <div class="config-item" style="grid-column: 1/-1;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="cfg-demo-flip-inv-pop">
+              <span>Flip Inventory/Population Direction</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div><!-- /sidebar -->
+
+  <!-- Main Content Area -->
+  <div class="main-content">
+  <div class="stats-bar" id="stats-bar" style="display:none;">
+    <div class="stat-card"><div class="label">Markets Scored</div><div class="value" id="stat-count">--</div></div>
+    <div class="stat-card"><div class="label">Top Market</div><div class="value" id="stat-top" style="font-size:16px;">--</div><div class="sub" id="stat-top-score"></div></div>
+    <div class="stat-card"><div class="label">Avg MF Score</div><div class="value" id="stat-avg-mf">--</div></div>
+    <div class="stat-card"><div class="label">Score Range</div><div class="value" id="stat-range">--</div></div>
+    <div class="stat-card"><div class="label">Median MF</div><div class="value" id="stat-median">--</div></div>
+    <div class="stat-card"><div class="label">Std Dev</div><div class="value" id="stat-stddev">--</div></div>
+  </div>
+
+  <div id="view-tabs-wrap" style="display:none;">
+    <div class="view-tabs">
+      <button class="view-tab active" data-view="rankings" onclick="switchView('rankings')">Rankings</button>
+      <button class="view-tab" data-view="peer-group" onclick="switchView('peer-group')">Peer Group</button>
+      <button class="view-tab" data-view="distribution" onclick="switchView('distribution')">Distribution</button>
+      <button class="view-tab" data-view="compare" onclick="switchView('compare')">Compare</button>
+    </div>
+  </div>
+
+  <div class="view-panel active" id="view-rankings">
+    <div class="table-container" id="table-container">
+      <div class="table-toolbar">
+        <input type="text" placeholder="Search markets..." id="search-input" oninput="filterTable()">
+        <div class="toolbar-right">
+          <label><input type="checkbox" id="show-wb" onchange="renderTable()"> WB comparison</label>
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()" style="margin-left:8px;">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          Click "Run Scorecard" to compute scores
+        </div>
+        <table id="scores-table" style="display:none;">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="view-panel" id="view-distribution">
+    <div class="chart-panel">
+      <h2>MF Score Distribution</h2>
+      <div id="dist-chart-mf" class="distribution-chart"></div>
+      <div class="dist-axis" id="dist-axis-mf"></div>
+      <div class="dist-legend">
+        <div class="dist-legend-item"><div class="dist-legend-swatch" style="background: var(--success);"></div> Positive score</div>
+        <div class="dist-legend-item"><div class="dist-legend-swatch" style="background: var(--danger);"></div> Negative score</div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+      <div class="chart-panel"><h2>Supply &amp; Demand Score Distribution</h2><div id="dist-chart-ds" class="distribution-chart"></div><div class="dist-axis" id="dist-axis-ds"></div></div>
+      <div class="chart-panel"><h2>Occ Score Distribution</h2><div id="dist-chart-occ" class="distribution-chart"></div><div class="dist-axis" id="dist-axis-occ"></div></div>
+      <div class="chart-panel"><h2>Rent Score Distribution</h2><div id="dist-chart-rent" class="distribution-chart"></div><div class="dist-axis" id="dist-axis-rent"></div></div>
+    </div>
+  </div>
+
+  <div class="view-panel" id="view-compare">
+    <div class="compare-panel active" id="compare-panel">
+      <div class="compare-header"><h2>Market Comparison</h2></div>
+      <div class="compare-selectors">
+        <div class="compare-select-wrap">
+          <label class="color-a">Market A</label>
+          <select id="compare-a" onchange="renderComparison()"><option value="">Select a market...</option></select>
+        </div>
+        <div class="compare-select-wrap">
+          <label class="color-b">Market B</label>
+          <select id="compare-b" onchange="renderComparison()"><option value="">Select a market...</option></select>
+        </div>
+      </div>
+      <div id="compare-content"></div>
+    </div>
+  </div>
+
+  <div class="view-panel" id="view-peer-group">
+    <div class="chart-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h2 style="margin:0;">Peer Group Comparison</h2>
+        <button class="btn btn-sm btn-primary" onclick="runPeerGroup()">Generate</button>
+      </div>
+      <p id="pg-filter-context" style="font-size:11px;color:var(--muted);margin-bottom:8px;"></p>
+      <div id="pg-category-tabs" class="pg-category-tabs"></div>
+      <div id="pg-content">
+        <div style="text-align:center;padding:40px;color:var(--muted);">Select filters and click "Generate" to compare peer groups.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="view-panel" id="view-demographics">
+    <div class="stats-bar" id="demo-stats-bar" style="display:none;">
+      <div class="stat-card"><div class="label">Markets Scored</div><div class="value" id="demo-stat-count">--</div></div>
+      <div class="stat-card"><div class="label">Top Market</div><div class="value" id="demo-stat-top" style="font-size:16px;">--</div><div class="sub" id="demo-stat-top-score"></div></div>
+      <div class="stat-card"><div class="label">Avg Demo Score</div><div class="value" id="demo-stat-avg">--</div></div>
+      <div class="stat-card"><div class="label">Score Range</div><div class="value" id="demo-stat-range">--</div></div>
+      <div class="stat-card"><div class="label">Median Demo</div><div class="value" id="demo-stat-median">--</div></div>
+      <div class="stat-card"><div class="label">Std Dev</div><div class="value" id="demo-stat-stddev">--</div></div>
+    </div>
+    <div class="chart-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <h2 style="margin:0;">Demographics Rankings</h2>
+        <button class="btn btn-outline btn-sm" onclick="exportDemoCSV()" id="demo-export-btn" style="display:none;">Export CSV</button>
+      </div>
+      <div id="demo-content">
+        <div style="text-align:center;padding:40px;color:var(--muted);">Click "Run Scorecard" to compute demographics scores.</div>
+      </div>
+    </div>
+  </div>
+  </div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- Duration Weight Modal -->
+<div class="dw-modal-backdrop" id="dw-backdrop"></div>
+<div class="dw-modal" id="dw-modal">
+  <div class="dw-modal-header">
+    <h3>Duration Period Weights</h3>
+    <button class="dw-close-btn" onclick="dwRequestClose()">&times;</button>
+  </div>
+  <div class="dw-modal-body">
+    <div class="dw-hint">Customize how sub-period scores blend for each analysis duration.</div>
+    <table class="dw-table" id="dw-table"></table>
+  </div>
+  <div class="dw-modal-footer">
+    <button class="btn btn-outline" onclick="dwRequestClose()">Cancel</button>
+    <button class="dw-save-btn idle" id="dw-save-btn" onclick="dwSave()">Save</button>
+  </div>
+</div>
+
+</div><!-- /scorecard-root -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-wrap percentage inputs with % suffix
+(function() {
+  document.querySelectorAll('.scorecard-root .config-item input[type="number"][step="5"]').forEach(function(inp) {
+    var wrap = document.createElement('div');
+    wrap.className = 'pct-wrap';
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+  });
+  document.querySelectorAll('input[id^="mom-mt-"], input[id^="demo-mom-mt-"]').forEach(function(inp) {
+    var span = document.createElement('span');
+    span.className = 'pct-suffix';
+    span.textContent = '%';
+    inp.parentNode.insertBefore(span, inp.nextSibling);
+  });
+})();
+
+var scoreData = null;
+var sortCol = 'mf_rank';
+var sortDir = 'asc';
+var expandedMarket = null;
+var expandedDemoMarket = null;
+var expandedMetric = null;
+var currentView = 'rankings';
+var currentModule = 'mf';
+var demoScoreData = null;
+var peerGroupData = null;
+var pgActiveCategory = 'All';
+var FRED_EXCLUDE = new Set(['sf_permits_yoy', 'renter_weighted_pop_yoy', 'pop_20_34_share']);
+
+function toggleAccordion(id) {
+  var body = document.getElementById(id + '-body');
+  var chevron = document.getElementById(id + '-chevron');
+  if (body) body.classList.toggle('open');
+  if (chevron) chevron.classList.toggle('open');
+}
+
+var DEFAULT_CONFIG = {
+  'cfg-property-class': 'All',
+  'cfg-ds-weight': '35', 'cfg-occ-weight': '25', 'cfg-rg-weight': '40',
+  'cfg-rent-overall-weight': '50', 'cfg-actual-occ': '35', 'cfg-effective-occ': '65',
+  'cfg-vol-weight': '35', 'cfg-cat-weight': '25', 'cfg-period-weight': '20',
+  'cfg-z-cap': '3.0', 'cfg-z-floor': '-3.0',
+  'cfg-dispersion-weight': '0', 'cfg-dispersion-cap': '2.0', 'cfg-dispersion-floor': '0.5',
+  'cfg-duration-years': '10', 'cfg-period-mode': 'cumulative',
+  'cfg-auto-duration': true, 'cfg-mom-knob': '35', 'cfg-momentum-mult': '1.0',
+  'mom-hl-Quarterly': '8.0', 'mom-mt-Quarterly': '50',
+  'mom-hl-Annual': '3.0', 'mom-mt-Annual': '35',
+  'mom-hl-2Yr': '1.5', 'mom-mt-2Yr': '30',
+  'mom-hl-3Yr': '1.0', 'mom-mt-3Yr': '30',
+  'mom-hl-5Yr': '1.0', 'mom-mt-5Yr': '20',
+  'mom-hl-10Yr': '0.0', 'mom-mt-10Yr': '0',
+  'mom-hl-12Yr': '0.0', 'mom-mt-12Yr': '0',
+  'ds-mw-absorption': '1.0', 'ds-mw-deliveries': '1.0', 'ds-mw-abs_del': '1.0',
+  'occ-mw-blended_occ': '1.0', 'occ-mw-under_construction': '1.0', 'occ-mw-yrs_to_stab': '1.0',
+  'rent-mw-eff_rent_overall': '1.0', 'rent-mw-eff_rent_1br': '1.0',
+  'rent-mw-eff_rent_studio': '1.0', 'rent-mw-eff_rent_2br': '1.0', 'rent-mw-eff_rent_3br': '1.0',
+  'cfg-flip-deliveries': false,
+};
+
+var DEFAULT_DEMO_CONFIG = {
+  'cfg-demo-pop-weight': '30', 'cfg-demo-afford-weight': '35', 'cfg-demo-emp-weight': '35',
+  'cfg-demo-afford-overall-weight': '50', 'cfg-demo-afford-snapshot-weight': '60',
+  'cfg-demo-afford-dispersion-weight': '0', 'cfg-demo-dispersion-weight': '0',
+  'cfg-demo-pop-drv-weight': '80', 'cfg-demo-emp-drv-weight': '80',
+  'cfg-dgd-hhpop-weight': '1.0', 'cfg-dgd-hh-formation-weight': '1.0',
+  'cfg-dgd-income-weight': '1.0', 'cfg-dgd-emp-weight': '1.0',
+  'cfg-dgd-hh-weight': '1.0', 'cfg-dgd-pop-weight': '1.0',
+  'cfg-dgd-emp-total-weight': '1.0', 'cfg-dgd-emp-office-weight': '1.0',
+  'cfg-dgd-emp-industrial-weight': '1.0',
+  'cfg-demo-vol-weight': '35', 'cfg-demo-cat-weight': '25', 'cfg-demo-period-weight': '20',
+  'cfg-demo-mom-knob': '35', 'cfg-demo-momentum-mult': '1.0',
+  'cfg-demo-z-cap': '3.0', 'cfg-demo-z-floor': '-3.0',
+  'cfg-demo-flip-inv-pop': false, 'cfg-demo-duration-years': '10',
+  'demo-mom-hl-Quarterly': '8.0', 'demo-mom-mt-Quarterly': '50',
+  'demo-mom-hl-Annual': '3.0', 'demo-mom-mt-Annual': '35',
+  'demo-mom-hl-2Yr': '1.5', 'demo-mom-mt-2Yr': '30',
+  'demo-mom-hl-3Yr': '1.0', 'demo-mom-mt-3Yr': '30',
+  'demo-mom-hl-5Yr': '1.0', 'demo-mom-mt-5Yr': '20',
+  'demo-mom-hl-10Yr': '0.0', 'demo-mom-mt-10Yr': '0',
+  'demo-mom-hl-12Yr': '0.0', 'demo-mom-mt-12Yr': '0',
+};
+
+function runCurrentModule() {
+  if (!validateAllWeights()) {
+    if (!confirm('Some weight groups do not sum to 100%. Run anyway?')) return;
+  }
+  if (currentModule === 'demo') { runDemoScoring(); }
+  else { runScoring(); }
+}
+
+function switchModule(mod) {
+  currentModule = mod;
+  document.querySelectorAll('.scorecard-root .module-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.module === mod); });
+  document.getElementById('sidebar-title-mf').style.display = mod === 'mf' ? '' : 'none';
+  document.getElementById('sidebar-title-demo').style.display = mod === 'demo' ? '' : 'none';
+  document.getElementById('config-panel').style.display = mod === 'mf' ? '' : 'none';
+  document.getElementById('demo-config-panel').style.display = mod === 'demo' ? '' : 'none';
+  document.getElementById('view-tabs-wrap').style.display = mod === 'mf' && scoreData ? '' : 'none';
+  document.getElementById('stats-bar').style.display = (mod === 'mf' && scoreData) ? '' : 'none';
+  document.getElementById('demo-stats-bar').style.display = (mod === 'demo' && demoScoreData) ? '' : 'none';
+  document.getElementById('filter-duration-mf').style.display = mod === 'mf' ? '' : 'none';
+  document.getElementById('filter-duration-demo').style.display = mod === 'demo' ? '' : 'none';
+  document.getElementById('filter-period-mode-mf').style.display = mod === 'mf' ? '' : 'none';
+  if (mod === 'demo') {
+    document.querySelectorAll('.scorecard-root .view-panel').forEach(function(p) { p.style.display = 'none'; p.classList.remove('active'); });
+    document.getElementById('view-demographics').style.display = '';
+    document.getElementById('view-demographics').classList.add('active');
+  } else {
+    document.getElementById('view-demographics').style.display = 'none';
+    document.getElementById('view-demographics').classList.remove('active');
+    document.querySelectorAll('.scorecard-root .view-panel').forEach(function(p) {
+      if (p.id !== 'view-demographics') p.style.display = '';
+    });
+    document.querySelectorAll('.scorecard-root .view-panel').forEach(function(p) { if (p.id !== 'view-demographics') p.classList.remove('active'); });
+    var activeView = currentView || 'rankings';
+    document.getElementById('view-' + activeView).classList.add('active');
+  }
+}
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.scorecard-root .view-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.view === view); });
+  document.querySelectorAll('.scorecard-root .view-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById('view-' + view).classList.add('active');
+}
+
+async function runScoring() {
+  var btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  var loading = document.getElementById('loading');
+  var table = document.getElementById('scores-table');
+  loading.style.display = 'flex';
+  loading.innerHTML = '<div class="spinner"></div> Computing scores... (this may take a moment)';
+  table.style.display = 'none';
+  var config = getConfig();
+  try {
+    var resp = await fetch('/scorecard/api/score/costar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    scoreData = await resp.json();
+    if (scoreData.error) {
+      loading.innerHTML = '<span style="color:var(--danger)">Error: ' + scoreData.error + '</span>';
+      return;
+    }
+    document.getElementById('market-count').textContent = scoreData.market_count;
+    updateStats();
+    renderTable();
+    renderDistributions();
+    populateCompareSelects();
+    loading.style.display = 'none';
+    table.style.display = '';
+    document.getElementById('stats-bar').style.display = '';
+    document.getElementById('view-tabs-wrap').style.display = '';
+  } catch (e) {
+    loading.innerHTML = '<span style="color:var(--danger)">Connection error: ' + e.message + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Scorecard';
+  }
+}
+
+function exportCSV() {
+  var config = getConfig();
+  var params = new URLSearchParams(config);
+  window.location.href = '/scorecard/api/export/csv?' + params.toString();
+}
+
+function exportDemoCSV() {
+  if (!demoScoreData || !demoScoreData.markets) return;
+  var rows = demoScoreData.markets;
+  var metricKeys = rows.length ? Object.keys(rows[0].metrics || {}) : [];
+  var csv = 'Rank,Market,Demo Score,Percentile,Pop/HH,Afford,Employ';
+  for (var i = 0; i < metricKeys.length; i++) csv += ',' + metricKeys[i] + '_signal,' + metricKeys[i] + '_vol,' + metricKeys[i] + '_cat,' + metricKeys[i] + '_total';
+  csv += '\n';
+  for (var j = 0; j < rows.length; j++) {
+    var r = rows[j];
+    var vals = [
+      r.demo_rank, '"' + r.market.replace(/"/g, '""') + '"',
+      r.demo_score.toFixed(4), (r.demo_percentile || ''),
+      (r.pop_score != null ? r.pop_score.toFixed(4) : ''),
+      (r.afford_score != null ? r.afford_score.toFixed(4) : ''),
+      (r.emp_score != null ? r.emp_score.toFixed(4) : ''),
+    ];
+    for (var k = 0; k < metricKeys.length; k++) {
+      var m = (r.metrics || {})[metricKeys[k]] || {};
+      vals.push(m.signal_z != null ? m.signal_z.toFixed(4) : '');
+      vals.push(m.vol_z != null ? m.vol_z.toFixed(4) : '');
+      vals.push(m.cat_z != null ? m.cat_z.toFixed(4) : '');
+      vals.push(m.total_z != null ? m.total_z.toFixed(4) : '');
+    }
+    csv += vals.join(',') + '\n';
+  }
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'demographics_export.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+var WEIGHT_GROUPS = {
+  'mf-cat': { ids: ['cfg-ds-weight', 'cfg-occ-weight', 'cfg-rg-weight'], target: 100 },
+  'occ-sub': { ids: ['cfg-actual-occ', 'cfg-effective-occ'], target: 100 },
+  'demo-cat': { ids: ['cfg-demo-pop-weight', 'cfg-demo-afford-weight', 'cfg-demo-emp-weight'], target: 100 },
+};
+
+function validateWeightGroup(groupName) {
+  var group = WEIGHT_GROUPS[groupName];
+  if (!group) return true;
+  var vals = group.ids.map(function(id) { return parseFloat(document.getElementById(id).value); });
+  var anyEmpty = vals.some(function(v) { return isNaN(v); });
+  var sum = anyEmpty ? NaN : vals.reduce(function(a, b) { return a + b; }, 0);
+  var ok = !anyEmpty && Math.abs(sum - group.target) < 0.5;
+  var errEl = document.getElementById(groupName + '-weight-error');
+  if (errEl) {
+    if (anyEmpty) { errEl.style.display = 'none'; }
+    else if (!ok) { errEl.textContent = 'Weights sum to ' + Math.round(sum) + '% — must equal ' + Math.round(group.target) + '%'; errEl.style.display = 'block'; }
+    else { errEl.style.display = 'none'; }
+  }
+  group.ids.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.borderColor = (!anyEmpty && !ok) ? 'var(--danger)' : '';
+  });
+  return ok;
+}
+
+function validateAllWeights() {
+  var allOk = true;
+  for (var g in WEIGHT_GROUPS) { if (!validateWeightGroup(g)) allOk = false; }
+  return allOk;
+}
+
+function getConfig() {
+  var periods = ['Quarterly', 'Annual', '2Yr', '3Yr', '5Yr', '10Yr', '12Yr'];
+  var cfg = {
+    property_class: document.getElementById('cfg-property-class').value,
+    ds_weight: document.getElementById('cfg-ds-weight').value / 100,
+    occ_weight: document.getElementById('cfg-occ-weight').value / 100,
+    rg_weight: document.getElementById('cfg-rg-weight').value / 100,
+    rent_overall_weight: document.getElementById('cfg-rent-overall-weight').value / 100,
+    actual_occ_weight: document.getElementById('cfg-actual-occ').value / 100,
+    effective_occ_weight: document.getElementById('cfg-effective-occ').value / 100,
+    vol_weight: document.getElementById('cfg-vol-weight').value / 100,
+    cat_weight: document.getElementById('cfg-cat-weight').value / 100,
+    period_weight: document.getElementById('cfg-period-weight').value / 100,
+    total_z_cap: document.getElementById('cfg-z-cap').value,
+    total_z_floor: document.getElementById('cfg-z-floor').value,
+    dispersion_weight: document.getElementById('cfg-dispersion-weight').value / 100,
+    dispersion_cap: document.getElementById('cfg-dispersion-cap').value,
+    dispersion_floor: document.getElementById('cfg-dispersion-floor').value,
+    analysis_duration_years: document.getElementById('cfg-duration-years').value,
+    period_mode: document.getElementById('cfg-period-mode').value,
+    auto_duration_weights: true,
+    mom_knob: document.getElementById('cfg-mom-knob').value / 100,
+    recent_momentum_tilt_multiplier: document.getElementById('cfg-momentum-mult').value,
+    inventory_tier: document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All',
+    region_type: 'specific',
+    region: document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All',
+  };
+  for (var i = 0; i < periods.length; i++) {
+    var p = periods[i];
+    cfg['momentum_hl_' + p] = document.getElementById('mom-hl-' + p).value;
+    cfg['momentum_mt_' + p] = document.getElementById('mom-mt-' + p).value / 100;
+  }
+  var dsMetrics = ['absorption', 'deliveries', 'abs_del'];
+  var occMetrics = ['blended_occ', 'under_construction', 'yrs_to_stab'];
+  var rentMetrics = ['eff_rent_overall', 'eff_rent_studio', 'eff_rent_1br', 'eff_rent_2br', 'eff_rent_3br'];
+  for (var d = 0; d < dsMetrics.length; d++) cfg['ds_mw_' + dsMetrics[d]] = document.getElementById('ds-mw-' + dsMetrics[d]).value;
+  for (var o = 0; o < occMetrics.length; o++) cfg['occ_mw_' + occMetrics[o]] = document.getElementById('occ-mw-' + occMetrics[o]).value;
+  for (var rr = 0; rr < rentMetrics.length; rr++) cfg['rent_mw_' + rentMetrics[rr]] = document.getElementById('rent-mw-' + rentMetrics[rr]).value;
+  cfg.flip_deliveries = document.getElementById('cfg-flip-deliveries').checked;
+  if (dwCurrentValues) {
+    var dwOverrides = {};
+    for (var di = 0; di < DW_DURATIONS.length; di++) {
+      var dd = DW_DURATIONS[di];
+      dwOverrides[dd] = {};
+      for (var pi = 0; pi < DW_PERIODS.length; pi++) {
+        var pp = DW_PERIODS[pi];
+        var backendKey = pp === 'Quarterly' ? 'Q1' : pp;
+        dwOverrides[dd][backendKey] = (dwCurrentValues[dd][pp] || 0) / 100;
+      }
+    }
+    cfg.duration_weight_overrides = dwOverrides;
+  }
+  return cfg;
+}
+
+function getDemoConfig() {
+  var cfg = {
+    pop_weight: document.getElementById('cfg-demo-pop-weight').value / 100,
+    afford_weight: document.getElementById('cfg-demo-afford-weight').value / 100,
+    emp_weight: document.getElementById('cfg-demo-emp-weight').value / 100,
+    afford_overall_weight: document.getElementById('cfg-demo-afford-overall-weight').value / 100,
+    afford_snapshot_weight: document.getElementById('cfg-demo-afford-snapshot-weight').value / 100,
+    afford_unit_dispersion_weight: document.getElementById('cfg-demo-afford-dispersion-weight').value / 100,
+    pop_drivers_weight: document.getElementById('cfg-demo-pop-drv-weight').value / 100,
+    emp_drivers_weight: document.getElementById('cfg-demo-emp-drv-weight').value / 100,
+    dgd_hhpop_weight: document.getElementById('cfg-dgd-hhpop-weight').value,
+    dgd_hh_formation_weight: document.getElementById('cfg-dgd-hh-formation-weight').value,
+    dgd_income_weight: document.getElementById('cfg-dgd-income-weight').value,
+    dgd_emp_weight: document.getElementById('cfg-dgd-emp-weight').value,
+    dgd_hh_weight: document.getElementById('cfg-dgd-hh-weight').value,
+    dgd_pop_weight: document.getElementById('cfg-dgd-pop-weight').value,
+    dgd_emp_total_weight: document.getElementById('cfg-dgd-emp-total-weight').value,
+    dgd_emp_office_weight: document.getElementById('cfg-dgd-emp-office-weight').value,
+    dgd_emp_industrial_weight: document.getElementById('cfg-dgd-emp-industrial-weight').value,
+    vol_weight: document.getElementById('cfg-demo-vol-weight').value / 100,
+    cat_weight: document.getElementById('cfg-demo-cat-weight').value / 100,
+    period_weight: document.getElementById('cfg-demo-period-weight').value / 100,
+    demo_dispersion_weight: document.getElementById('cfg-demo-dispersion-weight').value / 100,
+    mom_knob: document.getElementById('cfg-demo-mom-knob').value / 100,
+    momentum_mult: document.getElementById('cfg-demo-momentum-mult').value,
+    z_cap: document.getElementById('cfg-demo-z-cap').value,
+    z_floor: document.getElementById('cfg-demo-z-floor').value,
+    flip_inv_pop: document.getElementById('cfg-demo-flip-inv-pop').checked,
+    duration_years: document.getElementById('cfg-demo-duration-years').value,
+    property_class: document.getElementById('cfg-property-class').value,
+  };
+  var demoPeriods = ['Quarterly','Annual','2Yr','3Yr','5Yr','10Yr','12Yr'];
+  cfg.momentum_config = {};
+  for (var i = 0; i < demoPeriods.length; i++) {
+    var p = demoPeriods[i];
+    var hl = parseFloat(document.getElementById('demo-mom-hl-' + p) ? document.getElementById('demo-mom-hl-' + p).value : 0) || 0;
+    var mt = (parseFloat(document.getElementById('demo-mom-mt-' + p) ? document.getElementById('demo-mom-mt-' + p).value : 0) || 0) / 100;
+    cfg.momentum_config[p] = [hl, mt];
+  }
+  return cfg;
+}
+
+function resetConfig() {
+  for (var id in DEFAULT_CONFIG) {
+    var el = document.getElementById(id);
+    if (!el) continue;
+    if (el.type === 'checkbox') { el.checked = !!DEFAULT_CONFIG[id]; }
+    else { el.value = DEFAULT_CONFIG[id]; }
+  }
+}
+
+function resetDemoConfig() {
+  for (var id in DEFAULT_DEMO_CONFIG) {
+    var el = document.getElementById(id);
+    if (!el) continue;
+    if (el.type === 'checkbox') { el.checked = !!DEFAULT_DEMO_CONFIG[id]; }
+    else { el.value = DEFAULT_DEMO_CONFIG[id]; }
+  }
+}
+
+function togglePeriodMode() {
+  var mode = document.getElementById('cfg-period-mode').value;
+  var isStandalone = mode === 'standalone';
+  var momSection = document.getElementById('momentum-settings-body');
+  if (momSection) {
+    var sec = momSection.closest('.config-section');
+    if (sec) sec.style.display = isStandalone ? 'none' : '';
+  }
+}
+
+function updateStats() {
+  if (!scoreData || !scoreData.markets) return;
+  var m = scoreData.markets;
+  document.getElementById('stat-count').textContent = m.length;
+  var propClass = scoreData.property_class || 'All';
+  document.getElementById('prop-class-label').textContent = propClass;
+  var topName = m[0] ? m[0].market.replace(/ - [A-Z]{2} USA$/, '') : '--';
+  document.getElementById('stat-top').textContent = topName;
+  document.getElementById('stat-top-score').textContent = m[0] ? 'Score: ' + m[0].dw_mf.toFixed(4) : '';
+  var scores = m.map(function(r) { return r.dw_mf; });
+  var avg = scores.reduce(function(s, v) { return s + v; }, 0) / scores.length;
+  document.getElementById('stat-avg-mf').textContent = avg.toFixed(3);
+  var min = Math.min.apply(null, scores);
+  var max = Math.max.apply(null, scores);
+  document.getElementById('stat-range').textContent = min.toFixed(2) + ' to ' + max.toFixed(2);
+  var sorted = scores.slice().sort(function(a, b) { return a - b; });
+  var mid = Math.floor(sorted.length / 2);
+  var median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  document.getElementById('stat-median').textContent = median.toFixed(3);
+  var variance = scores.reduce(function(s, v) { return s + Math.pow(v - avg, 2); }, 0) / scores.length;
+  document.getElementById('stat-stddev').textContent = Math.sqrt(variance).toFixed(3);
+}
+
+function updateDemoStats() {
+  if (!demoScoreData || !demoScoreData.markets) return;
+  var m = demoScoreData.markets;
+  document.getElementById('demo-stat-count').textContent = m.length;
+  var topName = m[0] ? m[0].market.replace(/ - [A-Z]{2} USA$/, '') : '--';
+  document.getElementById('demo-stat-top').textContent = topName;
+  document.getElementById('demo-stat-top-score').textContent = m[0] ? 'Score: ' + m[0].demo_score.toFixed(4) : '';
+  var scores = m.map(function(r) { return r.demo_score; });
+  var avg = scores.reduce(function(s, v) { return s + v; }, 0) / scores.length;
+  document.getElementById('demo-stat-avg').textContent = avg.toFixed(3);
+  var min = Math.min.apply(null, scores);
+  var max = Math.max.apply(null, scores);
+  document.getElementById('demo-stat-range').textContent = min.toFixed(2) + ' to ' + max.toFixed(2);
+  var sorted = scores.slice().sort(function(a, b) { return a - b; });
+  var mid = Math.floor(sorted.length / 2);
+  var median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  document.getElementById('demo-stat-median').textContent = median.toFixed(3);
+  var variance = scores.reduce(function(s, v) { return s + Math.pow(v - avg, 2); }, 0) / scores.length;
+  document.getElementById('demo-stat-stddev').textContent = Math.sqrt(variance).toFixed(3);
+  document.getElementById('demo-stats-bar').style.display = '';
+}
+
+function renderDistributions() {
+  if (!scoreData || !scoreData.markets) return;
+  renderDistChart('dist-chart-mf', 'dist-axis-mf', scoreData.markets.map(function(r) { return { val: r.dw_mf, name: r.market }; }));
+  renderDistChart('dist-chart-ds', 'dist-axis-ds', scoreData.markets.map(function(r) { return { val: r.dw_ds, name: r.market }; }));
+  renderDistChart('dist-chart-occ', 'dist-axis-occ', scoreData.markets.map(function(r) { return { val: r.dw_occ || 0, name: r.market }; }));
+  renderDistChart('dist-chart-rent', 'dist-axis-rent', scoreData.markets.map(function(r) { return { val: r.dw_rent, name: r.market }; }));
+}
+
+function renderDistChart(containerId, axisId, data) {
+  var container = document.getElementById(containerId);
+  var axis = document.getElementById(axisId);
+  if (!container) return;
+  var sorted = data.slice().sort(function(a, b) { return b.val - a.val; });
+  var maxAbs = Math.max.apply(null, sorted.map(function(d) { return Math.abs(d.val); }).concat([0.01]));
+  var html = '';
+  for (var i = 0; i < sorted.length; i++) {
+    var d = sorted[i];
+    var pct = Math.abs(d.val) / maxAbs * 100;
+    var color = d.val >= 0 ? 'var(--success)' : 'var(--danger)';
+    var shortName = d.name.replace(/ - [A-Z]{2} USA$/, '');
+    html += '<div class="dist-bar-wrap">';
+    html += '<div class="dist-tooltip">' + shortName + ': ' + d.val.toFixed(4) + '</div>';
+    html += '<div class="dist-bar" style="height:' + Math.max(pct, 2) + '%;background:' + color + ';opacity:0.7;"></div>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+  var maxVal = Math.max.apply(null, sorted.map(function(d) { return d.val; }));
+  var minVal = Math.min.apply(null, sorted.map(function(d) { return d.val; }));
+  axis.innerHTML = '<span>' + maxVal.toFixed(3) + ' (best)</span><span>' + sorted.length + ' markets</span><span>' + minVal.toFixed(3) + ' (worst)</span>';
+}
+
+function populateCompareSelects() {
+  if (!scoreData) return;
+  var markets = scoreData.markets.map(function(r) { return r.market; }).sort();
+  var html = '<option value="">Select a market...</option>' +
+    markets.map(function(m) { return '<option value="' + m + '">' + m.replace(/ - [A-Z]{2} USA$/, '') + '</option>'; }).join('');
+  document.getElementById('compare-a').innerHTML = html;
+  document.getElementById('compare-b').innerHTML = html;
+}
+
+function renderComparison() {
+  var nameA = document.getElementById('compare-a').value;
+  var nameB = document.getElementById('compare-b').value;
+  var content = document.getElementById('compare-content');
+  if (!nameA || !nameB || !scoreData) {
+    content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Select two markets to compare.</div>';
+    return;
+  }
+  var a = scoreData.markets.find(function(r) { return r.market === nameA; });
+  var b = scoreData.markets.find(function(r) { return r.market === nameB; });
+  if (!a || !b) { content.innerHTML = ''; return; }
+  var html = '';
+  html += '<div class="compare-summary">';
+  html += '<div class="compare-summary-item"><div class="csi-label">MF Score</div><div class="csi-values"><span class="csi-val color-a">' + a.dw_mf.toFixed(4) + '</span><span class="csi-val color-b">' + b.dw_mf.toFixed(4) + '</span></div></div>';
+  html += '<div class="compare-summary-item"><div class="csi-label">S&D Score</div><div class="csi-values"><span class="csi-val color-a">' + a.dw_ds.toFixed(4) + '</span><span class="csi-val color-b">' + b.dw_ds.toFixed(4) + '</span></div></div>';
+  html += '<div class="compare-summary-item"><div class="csi-label">Occ Score</div><div class="csi-values"><span class="csi-val color-a">' + (a.dw_occ || 0).toFixed(4) + '</span><span class="csi-val color-b">' + (b.dw_occ || 0).toFixed(4) + '</span></div></div>';
+  html += '<div class="compare-summary-item"><div class="csi-label">Rent Score</div><div class="csi-values"><span class="csi-val color-a">' + a.dw_rent.toFixed(4) + '</span><span class="csi-val color-b">' + b.dw_rent.toFixed(4) + '</span></div></div>';
+  html += '</div>';
+  var allMetricsRaw = new Set([].concat(Object.keys(a.metrics || {}), Object.keys(b.metrics || {})));
+  var allMetrics = Array.from(allMetricsRaw).filter(function(mk) { return !FRED_EXCLUDE.has(mk); });
+  if (allMetrics.length > 0) {
+    html += '<h3 style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Per-Metric Total Z Comparison</h3>';
+    var maxZ = Math.max.apply(null, allMetrics.flatMap(function(mk) {
+      var az = Math.abs((a.metrics[mk] || {}).total_z || 0);
+      var bz = Math.abs((b.metrics[mk] || {}).total_z || 0);
+      return [az, bz];
+    }).concat([0.01]));
+    for (var mi = 0; mi < allMetrics.length; mi++) {
+      var mk = allMetrics[mi];
+      var am = (a.metrics[mk] || {}).total_z || 0;
+      var bm = (b.metrics[mk] || {}).total_z || 0;
+      var aPct = (Math.abs(am) / maxZ * 100).toFixed(1);
+      var bPct = (Math.abs(bm) / maxZ * 100).toFixed(1);
+      var group = (a.metrics[mk] || b.metrics[mk] || {}).group || '';
+      var groupClass = group === 'S&D' ? 'group-ds' : (group === 'Occ' ? 'group-occ' : 'group-rent');
+      html += '<div class="compare-metric-row">';
+      html += '<div class="compare-metric-label">' + formatMetricName(mk) + ' <span class="group-tag ' + groupClass + '" style="font-size:9px;">' + group + '</span></div>';
+      html += '<div class="compare-bar-area left"><div class="compare-bar bg-a" style="width:' + aPct + '%;opacity:0.7;"></div></div>';
+      html += '<div class="compare-val color-a">' + am.toFixed(2) + '</div>';
+      html += '<div class="compare-val color-b">' + bm.toFixed(2) + '</div>';
+      html += '<div class="compare-bar-area right"><div class="compare-bar bg-b" style="width:' + bPct + '%;opacity:0.7;"></div></div>';
+      html += '</div>';
+    }
+  }
+  content.innerHTML = html;
+}
+
+function formatPercentile(v) {
+  if (v == null || isNaN(v)) return '<span class="score-neutral">--</span>';
+  var cls = v >= 75 ? 'pctl-high' : (v <= 25 ? 'pctl-low' : 'pctl-mid');
+  return '<span class="pctl-badge ' + cls + '">P' + v.toFixed(1) + '</span>';
+}
+
+function renderTable() {
+  if (!scoreData || !scoreData.markets) return;
+  var showWB = document.getElementById('show-wb').checked;
+  var thead = document.getElementById('table-head');
+  var tbody = document.getElementById('table-body');
+  var cols = [
+    { key: 'mf_rank', label: '#' }, { key: 'market', label: 'Market' },
+    { key: 'dw_mf', label: 'MF Score' }, { key: 'mf_percentile', label: 'Pctl' },
+    { key: 'dw_ds', label: 'S&D Score' }, { key: 'ds_rank', label: 'S&D #' },
+    { key: 'ds_percentile', label: 'Pctl' }, { key: 'dw_rent', label: 'Rent Score' },
+    { key: 'rent_rank', label: 'Rent #' }, { key: 'rent_percentile', label: 'Pctl' },
+    { key: 'ds_raw', label: 'S&D Raw' }, { key: 'rent_raw', label: 'Rent Raw' },
+  ];
+  if (showWB) {
+    cols.push({ key: 'wb_mf', label: 'WB MF' });
+    cols.push({ key: 'wb_ds_raw', label: 'WB S&D' });
+    cols.push({ key: 'wb_rent_raw', label: 'WB Rent' });
+  }
+  thead.innerHTML = '<tr>' + cols.map(function(c) {
+    return '<th onclick="sortTable(\'' + c.key + '\')">' + c.label + '</th>';
+  }).join('') + '</tr>';
+  var rows = scoreData.markets.slice();
+  rows.sort(function(a, b) {
+    var va = a[sortCol], vb = b[sortCol];
+    if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    va = va != null ? va : -Infinity;
+    vb = vb != null ? vb : -Infinity;
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+  var search = document.getElementById('search-input').value.toLowerCase();
+  var filtered = search ? rows.filter(function(r) { return r.market.toLowerCase().indexOf(search) !== -1; }) : rows;
+  var html = '';
+  for (var fi = 0; fi < filtered.length; fi++) {
+    var r = filtered[fi];
+    html += '<tr' + (expandedMarket === r.market ? ' class="expanded"' : '') + '>';
+    for (var ci = 0; ci < cols.length; ci++) {
+      var c = cols[ci];
+      if (c.key === 'market') {
+        html += '<td><span class="market-name" onclick="toggleDrill(\'' + r.market.replace(/'/g, "\\'") + '\')">' + r.market.replace(/ - ([A-Z]{2}) USA$/, ' <span style="color:var(--muted);font-size:11px;">$1</span>') + '</span></td>';
+      } else if (c.key === 'mf_rank' || c.key === 'ds_rank' || c.key === 'rent_rank') {
+        html += '<td class="rank">' + (r[c.key] != null ? r[c.key] : '') + '</td>';
+      } else if (c.key.indexOf('_percentile') !== -1) {
+        html += '<td>' + formatPercentile(r[c.key]) + '</td>';
+      } else {
+        var v = r[c.key];
+        if (v == null || isNaN(v)) {
+          html += '<td><span class="score-neutral">--</span></td>';
+        } else {
+          var cls = v > 0.01 ? 'score-positive' : (v < -0.01 ? 'score-negative' : 'score-neutral');
+          html += '<td><span class="' + cls + '">' + v.toFixed(4) + '</span></td>';
+        }
+      }
+    }
+    html += '</tr>';
+    if (expandedMarket === r.market) {
+      html += '<tr class="drill-down open"><td colspan="' + cols.length + '">' + renderDrillDown(r) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+function togglePeriodBreakdown(market, metric) {
+  var key = market + '::' + metric;
+  expandedMetric = expandedMetric === key ? null : key;
+  renderTable();
+}
+
+function renderDrillDown(row) {
+  var metrics = row.metrics || {};
+  var keys = Object.keys(metrics);
+  if (!keys.length) return '<div class="drill-content">No metric detail available.</div>';
+  var html = '<div class="drill-content">';
+  var marketShortName = row.market.replace(/ - [A-Z]{2} USA$/, '');
+  var marketEsc = row.market.replace(/'/g, "\\'");
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;">';
+  html += '<h3 style="margin:0;flex:1;">' + marketShortName + ' — Per-Metric Z-Score Detail</h3>';
+  html += '<button class="see-all-data-btn" onclick="openAllCategoryData(\'' + marketEsc + '\'); event.stopPropagation();" title="Open full rolling-window dataset">See All Category Data &rarr;</button>';
+  html += '</div>';
+  var dsKeys = [], occKeys = [], rentKeys = [];
+  var rentOrder = ['eff_rent_overall', 'eff_rent_studio', 'eff_rent_1br', 'eff_rent_2br', 'eff_rent_3br'];
+  for (var ki = 0; ki < keys.length; ki++) {
+    var mk = keys[ki];
+    if (FRED_EXCLUDE.has(mk)) continue;
+    if (metrics[mk].group === 'S&D') dsKeys.push(mk);
+    else if (metrics[mk].group === 'Occ') occKeys.push(mk);
+    else rentKeys.push(mk);
+  }
+  rentKeys.sort(function(a, b) {
+    var ai = rentOrder.indexOf(a), bi = rentOrder.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  function catSummary(metricKeys, weightPrefix) {
+    var sigSum = 0, volSum = 0, catSum = 0, totSum = 0, wSum = 0;
+    for (var i = 0; i < metricKeys.length; i++) {
+      var mk = metricKeys[i], m = metrics[mk];
+      var wEl = document.getElementById(weightPrefix + mk);
+      var w = wEl ? parseFloat(wEl.value) : 1.0;
+      sigSum += w * m.signal_z; volSum += w * m.vol_z; catSum += w * m.cat_z; totSum += w * m.total_z;
+      wSum += Math.abs(w);
+    }
+    if (wSum === 0) return { signal_z: 0, vol_z: 0, cat_z: 0, total_z: 0 };
+    return { signal_z: sigSum/wSum, vol_z: volSum/wSum, cat_z: catSum/wSum, total_z: totSum/wSum };
+  }
+  function renderMetricCard(mk, m) {
+    var groupClass = m.group === 'S&D' ? 'group-ds' : (m.group === 'Occ' ? 'group-occ' : 'group-rent');
+    var tip = MF_METRIC_TOOLTIPS[mk] || '';
+    var c = '<div class="metric-card" style="cursor:pointer;" onclick="openMetricCategoryData(\'' + marketEsc + '\', \'' + mk + '\'); event.stopPropagation();">';
+    c += '<div class="metric-name"><span>';
+    if (tip) c += '<span class="info-tip">i<span class="tip-text">' + tip + '</span></span> ';
+    c += formatMetricName(mk) + '</span><span class="group-tag ' + groupClass + '">' + m.group + '</span></div>';
+    if (m.percentile != null) c += '<div style="margin-bottom:6px;">' + formatPercentile(m.percentile) + '</div>';
+    c += renderMetricBars(m);
+    c += '</div>';
+    return c;
+  }
+  function renderCatSummaryCard(label, summary, bgColor, textColor, adjVal, rank) {
+    var c = '<div class="metric-card" style="background:' + bgColor + ';border-color:' + bgColor + ';">';
+    c += '<div class="metric-name"><span style="color:' + textColor + ';">' + label + '</span></div>';
+    c += '<div style="font-size:18px;font-weight:700;margin-bottom:6px;">' + formatScoreSpan(adjVal) + '</div>';
+    if (rank != null) c += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Rank #' + rank + '</div>';
+    c += renderMetricBars(summary);
+    c += '</div>';
+    return c;
+  }
+  function renderMetricBars(m) {
+    var vals = [m.signal_z, m.vol_z, m.cat_z, m.total_z];
+    var maxAbs = Math.max.apply(null, vals.map(function(v) { return Math.abs(v); }).concat([0.5]));
+    var b = '<div class="metric-bars">';
+    var barData = [{label:'Signal',val:m.signal_z},{label:'Vol',val:m.vol_z},{label:'Cat',val:m.cat_z},{label:'Total',val:m.total_z}];
+    for (var bi = 0; bi < barData.length; bi++) {
+      var bd = barData[bi];
+      var pct = (Math.abs(bd.val)/maxAbs*50).toFixed(1);
+      var cls = bd.val >= 0 ? 'positive' : 'negative';
+      var scoreClass = bd.val > 0.01 ? 'score-positive' : (bd.val < -0.01 ? 'score-negative' : 'score-neutral');
+      var isTotalRow = bd.label === 'Total';
+      b += '<div class="metric-bar-row"' + (isTotalRow ? ' style="margin-top:2px;padding-top:4px;border-top:1px solid var(--border);"' : '') + '>';
+      b += '<div class="metric-bar-label"' + (isTotalRow ? ' style="font-weight:700;"' : '') + '>' + bd.label + '</div>';
+      b += '<div class="metric-bar-track"><div class="metric-bar-center"></div><div class="metric-bar-fill ' + cls + '" style="width:' + pct + '%;"></div></div>';
+      b += '<div class="metric-bar-val ' + scoreClass + '"' + (isTotalRow ? ' style="font-weight:700;"' : '') + '>' + bd.val.toFixed(3) + '</div>';
+      b += '</div>';
+    }
+    b += '</div>';
+    return b;
+  }
+  function formatScoreSpan(val) {
+    var cls = val > 0.01 ? 'score-positive' : (val < -0.01 ? 'score-negative' : 'score-neutral');
+    return '<span class="' + cls + '">' + val.toFixed(4) + '</span>';
+  }
+  // Overall Composite
+  html += '<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px;border-bottom:2px solid var(--navy);padding-bottom:4px;">Overall MF Composite</div>';
+  html += '<div class="metric-grid">';
+  var dsW = parseFloat(document.getElementById('cfg-ds-weight') ? document.getElementById('cfg-ds-weight').value : '35') / 100;
+  var occW = parseFloat(document.getElementById('cfg-occ-weight') ? document.getElementById('cfg-occ-weight').value : '25') / 100;
+  var rgW = parseFloat(document.getElementById('cfg-rg-weight') ? document.getElementById('cfg-rg-weight').value : '40') / 100;
+  html += '<div class="metric-card" style="background:var(--cloud);border-color:#85B7EB;"><div class="metric-name"><span>Supply & Demand (' + (dsW*100).toFixed(0) + '%)</span></div><div style="font-size:18px;font-weight:700;margin-bottom:4px;">' + formatScoreSpan(row.dw_ds) + '</div><div style="font-size:11px;color:var(--muted);">Rank #' + row.ds_rank + ' &middot; Weighted: ' + formatScoreSpan(row.dw_ds*dsW) + '</div></div>';
+  html += '<div class="metric-card" style="background:var(--cloud);border-color:#85B7EB;"><div class="metric-name"><span>Occ & YtS (' + (occW*100).toFixed(0) + '%)</span></div><div style="font-size:18px;font-weight:700;margin-bottom:4px;">' + formatScoreSpan(row.dw_occ) + '</div><div style="font-size:11px;color:var(--muted);">Rank #' + row.occ_rank + ' &middot; Weighted: ' + formatScoreSpan(row.dw_occ*occW) + '</div></div>';
+  html += '<div class="metric-card" style="background:var(--cloud);border-color:#85B7EB;"><div class="metric-name"><span>Rent (' + (rgW*100).toFixed(0) + '%)</span></div><div style="font-size:18px;font-weight:700;margin-bottom:4px;">' + formatScoreSpan(row.dw_rent) + '</div><div style="font-size:11px;color:var(--muted);">Rank #' + row.rent_rank + ' &middot; Weighted: ' + formatScoreSpan(row.dw_rent*rgW) + '</div></div>';
+  html += '<div class="metric-card" style="background:var(--cloud);border-color:var(--primary);"><div class="metric-name"><span style="color:var(--navy);font-weight:700;">MF Score</span></div><div style="font-size:22px;font-weight:700;margin-bottom:4px;">' + formatScoreSpan(row.dw_mf) + '</div><div style="font-size:11px;color:var(--muted);">Rank #' + row.mf_rank + ' &middot; Percentile: ' + (row.mf_percentile != null ? row.mf_percentile.toFixed(1) + '%' : '--') + '</div></div>';
+  html += '</div></div>';
+  // S&D
+  var dsSummary = catSummary(dsKeys, 'ds-mw-');
+  html += '<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px;border-bottom:2px solid var(--primary);padding-bottom:4px;">Supply &amp; Demand</div>';
+  html += '<div class="metric-grid">';
+  for (var di = 0; di < dsKeys.length; di++) html += renderMetricCard(dsKeys[di], metrics[dsKeys[di]]);
+  html += renderCatSummaryCard('Supply & Demand Total', dsSummary, 'var(--cloud)', 'var(--primary)', row.dw_ds, row.ds_rank);
+  html += '</div></div>';
+  // Occ
+  var occSummary = catSummary(occKeys, 'occ-mw-');
+  html += '<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--signal);margin-bottom:6px;border-bottom:2px solid var(--signal);padding-bottom:4px;">Occupancy &amp; Years to Stabilization</div>';
+  html += '<div class="metric-grid">';
+  for (var oi = 0; oi < occKeys.length; oi++) html += renderMetricCard(occKeys[oi], metrics[occKeys[oi]]);
+  html += renderCatSummaryCard('Occ Category Total', occSummary, '#d1fae5', 'var(--signal)', row.dw_occ, row.occ_rank);
+  html += '</div></div>';
+  // Rent
+  var rentSummary = catSummary(rentKeys, 'rent-mw-');
+  html += '<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--active);margin-bottom:6px;border-bottom:2px solid var(--active);padding-bottom:4px;">Rent Growth</div>';
+  html += '<div class="metric-grid">';
+  for (var ri = 0; ri < rentKeys.length; ri++) html += renderMetricCard(rentKeys[ri], metrics[rentKeys[ri]]);
+  html += renderCatSummaryCard('Rent Category Total', rentSummary, 'var(--cloud)', 'var(--active)', row.dw_rent, row.rent_rank);
+  html += '</div></div>';
+  html += '</div>';
+  return html;
+}
+
+var MF_METRIC_TOOLTIPS = {
+  absorption: 'Absorption Units as a % of Inventory.',
+  deliveries: 'Net Delivered Units as a % of Inventory.',
+  abs_del: 'Absorption minus Deliveries (as % of Inventory).',
+  blended_occ: 'Blended Occupancy: actual vacancy rate adjusted by units under construction.',
+  under_construction: 'Units Under Construction as a % of Inventory.',
+  yrs_to_stab: 'Years to Stabilization: estimated time for a market to absorb its construction pipeline.',
+  eff_rent_overall: 'Effective Rent per Unit YoY growth (All unit types).',
+  eff_rent_studio: 'Effective Rent per Unit YoY growth (Studio).',
+  eff_rent_1br: 'Effective Rent per Unit YoY growth (1 Bedroom).',
+  eff_rent_2br: 'Effective Rent per Unit YoY growth (2 Bedroom).',
+  eff_rent_3br: 'Effective Rent per Unit YoY growth (3 Bedroom).',
+};
+
+var DEMO_METRIC_TOOLTIPS = {
+  pop_growth: 'Population YoY % change.',
+  hh_growth: 'Household YoY % change.',
+  hh_formation_trend: 'CAGR of Households/Population ratio.',
+  income_growth: 'Median Household Income YoY % change.',
+  mf_inv_pop: 'MF Inventory Units / Population.',
+  mf_inv_pop_growth: 'YoY change in MF Inventory/Population ratio.',
+  hh_pop_ratio: 'Households / Population ratio.',
+  afford_all: 'Rent-to-Income ratio (All units).',
+  afford_studio: 'Rent-to-Income ratio (Studio).',
+  afford_1br: 'Rent-to-Income ratio (1BR).',
+  afford_2br: 'Rent-to-Income ratio (2BR).',
+  afford_3br: 'Rent-to-Income ratio (3BR).',
+  afford_growth_all: 'YoY change in Rent-to-Income ratio (All).',
+  afford_growth_studio: 'YoY change in Rent-to-Income ratio (Studio).',
+  afford_growth_1br: 'YoY change in Rent-to-Income ratio (1BR).',
+  afford_growth_2br: 'YoY change in Rent-to-Income ratio (2BR).',
+  afford_growth_3br: 'YoY change in Rent-to-Income ratio (3BR).',
+  emp_total_growth: 'Total Employment YoY % change.',
+  emp_office_growth: 'Office Employment YoY % change.',
+  emp_industrial_growth: 'Industrial Employment YoY % change.',
+  job_support_total: 'Total Jobs per MF Inventory Unit.',
+  job_support_total_growth: 'YoY change in Total Jobs/MF Unit ratio.',
+  job_support_office: 'Office Jobs per MF Inventory Unit.',
+  job_support_office_growth: 'YoY change in Office Jobs/MF Unit ratio.',
+  job_support_industrial: 'Industrial Jobs per MF Inventory Unit.',
+  job_support_industrial_growth: 'YoY change in Industrial Jobs/MF Unit ratio.',
+};
+
+function formatMetricName(key) {
+  var names = {
+    absorption: 'Absorption', deliveries: 'Deliveries', abs_del: 'Abs - Del',
+    blended_occ: 'Blended Occ', under_construction: 'Under Construction',
+    yrs_to_stab: 'Years to Stabilization',
+    eff_rent_overall: 'Eff Rent (Overall)', eff_rent_1br: 'Eff Rent (1BR)',
+    eff_rent_studio: 'Eff Rent (Studio)', eff_rent_2br: 'Eff Rent (2BR)', eff_rent_3br: 'Eff Rent (3BR)',
+  };
+  return names[key] || key;
+}
+
+function sortTable(col) {
+  if (sortCol === col) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+  else { sortCol = col; sortDir = (col.indexOf('rank') !== -1 || col === 'market') ? 'asc' : 'desc'; }
+  renderTable();
+}
+
+function toggleDrill(market) {
+  expandedMarket = expandedMarket === market ? null : market;
+  renderTable();
+}
+
+function filterTable() { renderTable(); }
+
+// Duration Weight Modal
+var DW_DURATIONS = [1,2,3,4,5,6,9,10,12,15,20];
+var DW_PERIODS = ['Quarterly','Annual','2Yr','3Yr','5Yr','10Yr'];
+var DW_PERIOD_LABELS = {'Quarterly':'Quarterly','Annual':'Annual Avg','2Yr':'2 Year Avg','3Yr':'3 Year Avg','5Yr':'5 Year Avg','10Yr':'10 Year Avg'};
+var DW_DEFAULTS = {
+  1:  {Quarterly:75.0, Annual:25.0, '2Yr':0.0, '3Yr':0.0, '5Yr':0.0, '10Yr':0.0},
+  2:  {Quarterly:50.0, Annual:30.0, '2Yr':20.0, '3Yr':0.0, '5Yr':0.0, '10Yr':0.0},
+  3:  {Quarterly:25.0, Annual:25.0, '2Yr':25.0, '3Yr':25.0, '5Yr':0.0, '10Yr':0.0},
+  4:  {Quarterly:25.0, Annual:40.0, '2Yr':35.0, '3Yr':0.0, '5Yr':0.0, '10Yr':0.0},
+  5:  {Quarterly:25.0, Annual:50.0, '2Yr':0.0, '3Yr':0.0, '5Yr':25.0, '10Yr':0.0},
+  6:  {Quarterly:10.0, Annual:30.0, '2Yr':30.0, '3Yr':30.0, '5Yr':0.0, '10Yr':0.0},
+  9:  {Quarterly:0.0, Annual:30.0, '2Yr':0.0, '3Yr':70.0, '5Yr':0.0, '10Yr':0.0},
+  10: {Quarterly:0.0, Annual:10.0, '2Yr':15.0, '3Yr':0.0, '5Yr':25.0, '10Yr':50.0},
+  12: {Quarterly:0.0, Annual:25.0, '2Yr':40.0, '3Yr':35.0, '5Yr':0.0, '10Yr':0.0},
+  15: {Quarterly:0.0, Annual:10.0, '2Yr':0.0, '3Yr':30.0, '5Yr':60.0, '10Yr':0.0},
+  20: {Quarterly:0.0, Annual:0.0, '2Yr':20.0, '3Yr':0.0, '5Yr':30.0, '10Yr':50.0},
+};
+var dwCurrentValues = null;
+
+function dwOpenModal() {
+  var backdrop = document.getElementById('dw-backdrop');
+  var modal = document.getElementById('dw-modal');
+  backdrop.classList.add('visible');
+  modal.classList.add('visible');
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+  if (!dwCurrentValues) dwCurrentValues = JSON.parse(JSON.stringify(DW_DEFAULTS));
+  dwBuildTable();
+  dwClearError();
+}
+
+function dwBuildTable() {
+  var tableEl = document.getElementById('dw-table');
+  var html = '<thead><tr><th>Duration (Years)</th>';
+  for (var pi = 0; pi < DW_PERIODS.length; pi++) html += '<th>' + DW_PERIOD_LABELS[DW_PERIODS[pi]] + '</th>';
+  html += '<th>Total</th></tr></thead><tbody>';
+  for (var di = 0; di < DW_DURATIONS.length; di++) {
+    var d = DW_DURATIONS[di];
+    var rowTotal = dwRowTotal(d);
+    var rowOk = Math.abs(rowTotal - 100) < 0.01;
+    html += '<tr>';
+    html += '<td style="font-weight:600;">' + d + '</td>';
+    for (var pi2 = 0; pi2 < DW_PERIODS.length; pi2++) {
+      var p = DW_PERIODS[pi2];
+      var id = 'dw-' + d + '-' + p;
+      var val = (dwCurrentValues[d] && dwCurrentValues[d][p] != null) ? dwCurrentValues[d][p] : 0;
+      html += '<td><input type="number" step="5" id="' + id + '" value="' + val.toFixed(1) + '" oninput="dwOnInput(' + d + ')" style="width:62px;text-align:right;">%</td>';
+    }
+    html += '<td id="dw-total-' + d + '" style="font-weight:700;text-align:right;' + (rowOk ? 'color:var(--signal);' : 'color:var(--danger);') + '">' + rowTotal.toFixed(1) + '%</td>';
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  tableEl.innerHTML = html;
+}
+
+function dwUpdateRowTotal(d) {
+  var rowTotal = dwRowTotal(d);
+  var rowOk = Math.abs(rowTotal - 100) < 0.01;
+  var totalCell = document.getElementById('dw-total-' + d);
+  if (totalCell) {
+    totalCell.textContent = rowTotal.toFixed(1) + '%';
+    totalCell.style.color = rowOk ? 'var(--signal)' : 'var(--danger)';
+  }
+}
+
+function dwRowTotal(d) {
+  var sum = 0;
+  for (var i = 0; i < DW_PERIODS.length; i++) {
+    var p = DW_PERIODS[i];
+    sum += (dwCurrentValues[d] && dwCurrentValues[d][p] != null) ? dwCurrentValues[d][p] : 0;
+  }
+  return Math.round(sum * 10) / 10;
+}
+
+function dwOnInput(d) {
+  for (var i = 0; i < DW_PERIODS.length; i++) {
+    var p = DW_PERIODS[i];
+    var el = document.getElementById('dw-' + d + '-' + p);
+    if (el) dwCurrentValues[d][p] = parseFloat(el.value) || 0;
+  }
+  dwUpdateRowTotal(d);
+  dwClearError();
+  var saveBtn = document.getElementById('dw-save-btn');
+  saveBtn.classList.remove('idle');
+  saveBtn.classList.add('changed');
+}
+
+function dwAllRowsValid() {
+  for (var i = 0; i < DW_DURATIONS.length; i++) {
+    if (Math.abs(dwRowTotal(DW_DURATIONS[i]) - 100) > 0.01) return false;
+  }
+  return true;
+}
+
+function dwClearError() {
+  var errEl = document.getElementById('dw-error');
+  if (errEl) errEl.style.display = 'none';
+}
+
+function dwShowError(msg) {
+  var errEl = document.getElementById('dw-error');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'dw-error';
+    errEl.style.cssText = 'color:var(--danger);background:var(--danger-light);border:1px solid #fecaca;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:13px;';
+    document.querySelector('.scorecard-root .dw-modal-body').appendChild(errEl);
+  }
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+}
+
+function dwSave() {
+  if (!dwAllRowsValid()) {
+    var bad = [];
+    for (var i = 0; i < DW_DURATIONS.length; i++) {
+      var d = DW_DURATIONS[i];
+      var t = dwRowTotal(d);
+      if (Math.abs(t - 100) > 0.01) bad.push('Duration ' + d + ' = ' + t.toFixed(1) + '%');
+    }
+    dwShowError('Each row must total exactly 100%. Please adjust: ' + bad.join(', '));
+    return;
+  }
+  dwClearError();
+  var saveBtn = document.getElementById('dw-save-btn');
+  saveBtn.classList.remove('changed');
+  saveBtn.classList.add('idle');
+  dwDoClose();
+}
+
+function dwRequestClose() { dwDoClose(); }
+
+function dwDoClose() {
+  var backdrop = document.getElementById('dw-backdrop');
+  var modal = document.getElementById('dw-modal');
+  backdrop.classList.remove('visible');
+  modal.classList.remove('visible');
+  backdrop.style.display = 'none';
+  modal.style.display = 'none';
+  dwClearError();
+}
+
+// === Demographics Scoring ===
+async function runDemoScoring() {
+  var content = document.getElementById('demo-content');
+  content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);"><div class="spinner" style="display:inline-block;margin-right:8px;"></div> Computing demographics scores...</div>';
+  var duration = parseInt(document.getElementById('cfg-demo-duration-years').value) || 10;
+  var region = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All';
+  var invTier = document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All';
+  var demoCfg = getDemoConfig();
+  try {
+    var resp = await fetch('/scorecard/api/demo_scores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ analysis_duration_years: duration, inventory_tier: invTier, region_type: 'specific', region: region }, demoCfg)),
+    });
+    demoScoreData = await resp.json();
+    if (demoScoreData.error) { content.innerHTML = '<div style="color:var(--danger);">Error: ' + demoScoreData.error + '</div>'; return; }
+    renderDemoRankings();
+    updateDemoStats();
+    document.getElementById('demo-export-btn').style.display = '';
+  } catch (e) {
+    content.innerHTML = '<div style="color:var(--danger);">Connection error: ' + e.message + '</div>';
+  }
+}
+
+function renderDemoRankings() {
+  if (!demoScoreData || !demoScoreData.markets) return;
+  var content = document.getElementById('demo-content');
+  var rows = demoScoreData.markets;
+  var demoSearch = document.getElementById('demo-search-input');
+  var demoSearchVal = demoSearch ? demoSearch.value.toLowerCase() : '';
+  var filtered = demoSearchVal ? rows.filter(function(r) { return r.market.toLowerCase().indexOf(demoSearchVal) !== -1; }) : rows;
+  var html = '<div class="table-toolbar"><input type="text" placeholder="Search markets..." id="demo-search-input" value="' + (demoSearchVal || '') + '" oninput="renderDemoRankings()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:240px;"></div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  html += '<thead style="background:var(--cloud);position:sticky;top:0;"><tr>';
+  html += '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">#</th>';
+  html += '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Market</th>';
+  html += '<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Demo Score</th>';
+  html += '<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Pop/HH</th>';
+  html += '<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Afford</th>';
+  html += '<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Employ</th>';
+  html += '<th style="padding:8px 12px;text-align:center;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Pctl</th>';
+  html += '</tr></thead><tbody>';
+  for (var i = 0; i < filtered.length; i++) {
+    var r = filtered[i];
+    var cls = r.demo_score > 0.01 ? 'score-positive' : (r.demo_score < -0.01 ? 'score-negative' : 'score-neutral');
+    var shortName = r.market.replace(/ - [A-Z]{2} USA$/, '');
+    var marketEscDemo = r.market.replace(/'/g, "\\'");
+    html += '<tr style="cursor:pointer;" onclick="toggleDemoDrill(\'' + marketEscDemo + '\')">';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;font-family:var(--mono);font-size:12px;color:var(--muted);">' + r.demo_rank + '</td>';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;font-weight:500;color:var(--primary);cursor:pointer;">' + shortName + '</td>';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;" class="' + cls + '">' + r.demo_score.toFixed(4) + '</td>';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;">' + formatScoreCell(r.pop_score) + '</td>';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;">' + formatScoreCell(r.afford_score) + '</td>';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;">' + formatScoreCell(r.emp_score) + '</td>';
+    html += '<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">' + formatPercentile(r.demo_percentile) + '</td>';
+    html += '</tr>';
+    if (expandedDemoMarket === r.market) {
+      html += '<tr style="background:#fafbfc;"><td colspan="7">' + renderDemoDrillDown(r) + '</td></tr>';
+    }
+  }
+  html += '</tbody></table>';
+  content.innerHTML = html;
+  var newSearch = document.getElementById('demo-search-input');
+  if (newSearch && demoSearchVal) { newSearch.focus(); newSearch.setSelectionRange(newSearch.value.length, newSearch.value.length); }
+}
+
+function toggleDemoDrill(market) {
+  expandedDemoMarket = expandedDemoMarket === market ? null : market;
+  renderDemoRankings();
+}
+
+function renderDemoDrillDown(row) {
+  var metrics = row.metrics || {};
+  var keys = Object.keys(metrics);
+  var marketEscDemo = row.market.replace(/'/g, "\\'");
+  var shortName = row.market.replace(/ - [A-Z]{2} USA$/, '');
+  if (!keys.length) return '<div class="drill-content">No metric detail available.</div>';
+  var html = '<div class="drill-content">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;">';
+  html += '<h3 style="margin:0;flex:1;">' + shortName + ' — Demographics Z-Score Detail</h3>';
+  html += '<button class="see-all-data-btn" onclick="openAllDemoCategoryData(\'' + marketEscDemo + '\'); event.stopPropagation();" title="Open full rolling-window dataset">See All Category Data &rarr;</button>';
+  html += '</div>';
+  var popKeys = [], affordSnapKeys = [], affordGrowthKeys = [], empKeys = [];
+  var snapMetrics = ['afford_all','afford_studio','afford_1br','afford_2br','afford_3br'];
+  var growthMetrics = ['afford_growth_all','afford_growth_studio','afford_growth_1br','afford_growth_2br','afford_growth_3br'];
+  for (var ki = 0; ki < keys.length; ki++) {
+    var mk = keys[ki];
+    var g = metrics[mk].group;
+    if (g === 'Pop/HH') popKeys.push(mk);
+    else if (g === 'Afford') {
+      if (snapMetrics.indexOf(mk) !== -1) affordSnapKeys.push(mk);
+      else if (growthMetrics.indexOf(mk) !== -1) affordGrowthKeys.push(mk);
+      else affordSnapKeys.push(mk);
+    }
+    else empKeys.push(mk);
+  }
+  function demoCatSummary(metricKeys) {
+    var sigSum=0,volSum=0,catSum=0,totSum=0,cnt=0;
+    for (var i=0;i<metricKeys.length;i++) {
+      var m=metrics[metricKeys[i]];
+      sigSum+=(m.signal_z||0); volSum+=(m.vol_z||0); catSum+=(m.cat_z||0); totSum+=(m.total_z||0); cnt++;
+    }
+    if (!cnt) return {signal_z:0,vol_z:0,cat_z:0,total_z:0};
+    return {signal_z:sigSum/cnt,vol_z:volSum/cnt,cat_z:catSum/cnt,total_z:totSum/cnt};
+  }
+  function demoBars(m) {
+    var vals=[m.signal_z||0,m.vol_z||0,m.cat_z||0,m.total_z||0];
+    var maxAbs=Math.max.apply(null,vals.map(function(v){return Math.abs(v);}).concat([0.5]));
+    var b='<div class="metric-bars">';
+    var barData=[{label:'Signal',val:m.signal_z||0},{label:'Vol',val:m.vol_z||0},{label:'Cat',val:m.cat_z||0},{label:'Total',val:m.total_z||0}];
+    for(var bi=0;bi<barData.length;bi++){
+      var bd=barData[bi]; var pct=(Math.abs(bd.val)/maxAbs*50).toFixed(1);
+      var cls=bd.val>=0?'positive':'negative';
+      var sc=bd.val>0.01?'score-positive':(bd.val<-0.01?'score-negative':'score-neutral');
+      var isTotal=bd.label==='Total';
+      b+='<div class="metric-bar-row"'+(isTotal?' style="margin-top:2px;padding-top:4px;border-top:1px solid var(--border);"':'')+'>';
+      b+='<div class="metric-bar-label"'+(isTotal?' style="font-weight:700;"':'')+'>'+bd.label+'</div>';
+      b+='<div class="metric-bar-track"><div class="metric-bar-center"></div><div class="metric-bar-fill '+cls+'" style="width:'+pct+'%;"></div></div>';
+      b+='<div class="metric-bar-val '+sc+'"'+(isTotal?' style="font-weight:700;"':'')+'>'+bd.val.toFixed(3)+'</div>';
+      b+='</div>';
+    }
+    b+='</div>'; return b;
+  }
+  function demoScoreSpan(val) {
+    if(val==null)return '<span class="score-neutral">--</span>';
+    var cls=val>0.01?'score-positive':(val<-0.01?'score-negative':'score-neutral');
+    return '<span class="'+cls+'">'+val.toFixed(4)+'</span>';
+  }
+  function demoMetricCard(mk,groupClass,groupLabel) {
+    var m=metrics[mk]; var tip=DEMO_METRIC_TOOLTIPS[mk]||'';
+    var c='<div class="metric-card" style="cursor:pointer;" onclick="openDemoMetricCategoryData(\''+marketEscDemo+'\', \''+mk+'\'); event.stopPropagation();">';
+    c+='<div class="metric-name"><span>';
+    if(tip) c+='<span class="info-tip">i<span class="tip-text">'+tip+'</span></span> ';
+    c+=formatDemoMetricName(mk)+'</span><span class="group-tag '+groupClass+'">'+groupLabel+'</span></div>';
+    c+=demoBars(m); c+='</div>'; return c;
+  }
+  function demoCatCard(label,summary,bgColor,textColor,adjVal,rank) {
+    var c='<div class="metric-card" style="background:'+bgColor+';border-color:'+bgColor+';">';
+    c+='<div class="metric-name"><span style="color:'+textColor+';font-weight:600;">'+label+'</span></div>';
+    c+='<div style="font-size:18px;font-weight:700;margin-bottom:6px;">'+demoScoreSpan(adjVal)+'</div>';
+    if(rank!=null) c+='<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Rank #'+rank+'</div>';
+    c+=demoBars(summary); c+='</div>'; return c;
+  }
+  var popW=parseFloat(document.getElementById('cfg-demo-pop-weight')?document.getElementById('cfg-demo-pop-weight').value:'30')/100;
+  var affW=parseFloat(document.getElementById('cfg-demo-afford-weight')?document.getElementById('cfg-demo-afford-weight').value:'35')/100;
+  var empW=parseFloat(document.getElementById('cfg-demo-emp-weight')?document.getElementById('cfg-demo-emp-weight').value:'35')/100;
+  var snapW=parseFloat(document.getElementById('cfg-demo-afford-snapshot-weight')?document.getElementById('cfg-demo-afford-snapshot-weight').value:'60')/100;
+  var growthW=1.0-snapW;
+  // Demographics Composite
+  html+='<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px;border-bottom:2px solid var(--navy);padding-bottom:4px;">Demographics Composite</div>';
+  html+='<div class="metric-grid" style="grid-template-columns:repeat(4, 1fr);">';
+  html+='<div class="metric-card" style="background:var(--cloud);border-color:#85B7EB;"><div class="metric-name"><span>Pop/HH <span class="weight-badge">'+(popW*100).toFixed(0)+'%</span></span></div><div style="font-size:18px;font-weight:700;margin-bottom:4px;">'+demoScoreSpan(row.pop_score)+'</div><div style="font-size:11px;color:var(--muted);">Rank #'+(row.pop_rank||'--')+' &middot; Weighted: '+demoScoreSpan(row.pop_score*popW)+'</div></div>';
+  html+='<div class="metric-card" style="background:var(--cloud);border-color:#85B7EB;"><div class="metric-name"><span>Affordability <span class="weight-badge">'+(affW*100).toFixed(0)+'%</span></span></div><div style="font-size:18px;font-weight:700;margin-bottom:4px;">'+demoScoreSpan(row.afford_score)+'</div><div style="font-size:11px;color:var(--muted);">Rank #'+(row.afford_rank||'--')+' &middot; Weighted: '+demoScoreSpan(row.afford_score*affW)+'</div></div>';
+  html+='<div class="metric-card" style="background:var(--cloud);border-color:#85B7EB;"><div class="metric-name"><span>Employment <span class="weight-badge">'+(empW*100).toFixed(0)+'%</span></span></div><div style="font-size:18px;font-weight:700;margin-bottom:4px;">'+demoScoreSpan(row.emp_score)+'</div><div style="font-size:11px;color:var(--muted);">Rank #'+(row.emp_rank||'--')+' &middot; Weighted: '+demoScoreSpan(row.emp_score*empW)+'</div></div>';
+  html+='<div class="metric-card" style="background:var(--cloud);border-color:var(--primary);"><div class="metric-name"><span style="color:var(--navy);font-weight:700;">Demo Score</span></div><div style="font-size:22px;font-weight:700;margin-bottom:4px;">'+demoScoreSpan(row.demo_score)+'</div><div style="font-size:11px;color:var(--muted);">Rank #'+row.demo_rank+' &middot; Percentile: '+(row.demo_percentile!=null?row.demo_percentile.toFixed(1)+'%':'--')+'</div></div>';
+  html+='</div></div>';
+  // Demographic Growth Drivers
+  var dgdHHPopKeys=popKeys.filter(function(k){return k==='hh_growth'||k==='pop_growth';});
+  var dgdHHFormKeys=popKeys.filter(function(k){return k==='hh_formation_trend';});
+  var dgdIncomeKeys=popKeys.filter(function(k){return k==='income_growth';});
+  var dgdEmpKeys=empKeys.filter(function(k){return k==='emp_total_growth'||k==='emp_office_growth'||k==='emp_industrial_growth';});
+  var contextKeys=popKeys.filter(function(k){return ['mf_inv_pop','mf_inv_pop_growth','hh_pop_ratio'].indexOf(k)!==-1;});
+  html+='<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px;border-bottom:2px solid var(--primary);padding-bottom:4px;">Demographic Growth Drivers</div>';
+  if(dgdHHPopKeys.length){
+    html+='<div style="font-size:11px;font-weight:600;color:var(--primary);margin:4px 0 2px;opacity:0.8;">HH / Population Growth</div>';
+    html+='<div class="metric-grid" style="grid-template-columns:repeat(3, 1fr);">';
+    for(var i=0;i<dgdHHPopKeys.length;i++) html+=demoMetricCard(dgdHHPopKeys[i],'group-pop','DGD');
+    var hhpopSummary=demoCatSummary(dgdHHPopKeys);
+    html+=demoCatCard('HH/Pop Avg',hhpopSummary,'var(--cloud)','var(--primary)',hhpopSummary.total_z,null);
+    html+='</div>';
+  }
+  if(dgdHHFormKeys.length){
+    html+='<div style="font-size:11px;font-weight:600;color:var(--primary);margin:4px 0 2px;opacity:0.8;">HH Formation Growth</div>';
+    html+='<div class="metric-grid" style="grid-template-columns:repeat(2, 1fr);">';
+    for(var i=0;i<dgdHHFormKeys.length;i++) html+=demoMetricCard(dgdHHFormKeys[i],'group-pop','DGD');
+    html+='</div>';
+  }
+  if(dgdIncomeKeys.length){
+    html+='<div style="font-size:11px;font-weight:600;color:var(--primary);margin:4px 0 2px;opacity:0.8;">Income Growth</div>';
+    html+='<div class="metric-grid" style="grid-template-columns:repeat(2, 1fr);">';
+    for(var i=0;i<dgdIncomeKeys.length;i++) html+=demoMetricCard(dgdIncomeKeys[i],'group-pop','DGD');
+    html+='</div>';
+  }
+  if(dgdEmpKeys.length){
+    html+='<div style="font-size:11px;font-weight:600;color:var(--primary);margin:4px 0 2px;opacity:0.8;">Employment Growth</div>';
+    html+='<div class="metric-grid" style="grid-template-columns:repeat(4, 1fr);">';
+    for(var i=0;i<dgdEmpKeys.length;i++) html+=demoMetricCard(dgdEmpKeys[i],'group-pop','DGD');
+    var dgdEmpSummary=demoCatSummary(dgdEmpKeys);
+    html+=demoCatCard('Emp Growth Avg',dgdEmpSummary,'var(--cloud)','var(--primary)',dgdEmpSummary.total_z,null);
+    html+='</div>';
+  }
+  html+='</div>';
+  if(contextKeys.length){
+    html+='<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--active);margin-bottom:6px;border-bottom:2px solid var(--active);padding-bottom:4px;">Structural Context</div>';
+    html+='<div class="metric-grid" style="grid-template-columns:repeat(4, 1fr);">';
+    for(var i=0;i<contextKeys.length;i++) html+=demoMetricCard(contextKeys[i],'group-pop','Ctx');
+    var popSummary=demoCatSummary(popKeys);
+    html+=demoCatCard('Pop/HH Avg',popSummary,'var(--cloud)','var(--primary)',row.pop_score,row.pop_rank);
+    html+='</div></div>';
+  }
+  // Affordability Snapshot
+  var snapSummary=demoCatSummary(affordSnapKeys);
+  html+='<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px;border-bottom:2px solid var(--navy);padding-bottom:4px;">Rent Affordability — Snapshot <span class="weight-badge">'+(snapW*100).toFixed(0)+'%</span></div>';
+  html+='<div class="metric-grid" style="grid-template-columns:repeat(6, 1fr);">';
+  for(var i=0;i<affordSnapKeys.length;i++) html+=demoMetricCard(affordSnapKeys[i],'group-afford-snap','Snap');
+  html+=demoCatCard('Snapshot Avg',snapSummary,'var(--cloud)','var(--navy)',snapSummary.total_z,null);
+  html+='</div></div>';
+  // Affordability Growth
+  var growthSummary=demoCatSummary(affordGrowthKeys);
+  html+='<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px;border-bottom:2px solid var(--primary);padding-bottom:4px;">Rent Affordability — Growth <span class="weight-badge">'+(growthW*100).toFixed(0)+'%</span></div>';
+  html+='<div class="metric-grid" style="grid-template-columns:repeat(6, 1fr);">';
+  for(var i=0;i<affordGrowthKeys.length;i++) html+=demoMetricCard(affordGrowthKeys[i],'group-afford-growth','Growth');
+  html+=demoCatCard('Growth Avg',growthSummary,'var(--cloud)','var(--primary)',growthSummary.total_z,null);
+  html+='</div></div>';
+  // Employment
+  var empSummary=demoCatSummary(empKeys);
+  html+='<div style="margin-bottom:6px;"><div style="font-size:13px;font-weight:700;color:var(--signal);margin-bottom:6px;border-bottom:2px solid var(--signal);padding-bottom:4px;">Employment Growth</div>';
+  html+='<div class="metric-grid" style="grid-template-columns:repeat(5, 1fr);">';
+  for(var i=0;i<empKeys.length;i++) html+=demoMetricCard(empKeys[i],'group-emp','Emp');
+  html+=demoCatCard('Employment Avg',empSummary,'#d1fae5','var(--signal)',row.emp_score,row.emp_rank);
+  html+='</div></div>';
+  html+='</div>';
+  return html;
+}
+
+function formatDemoMetricName(key) {
+  var names = {
+    pop_growth:'Population Growth', hh_growth:'Household Growth',
+    hh_formation_trend:'HH Formation Trend', income_growth:'Income Growth',
+    mf_inv_pop:'MF Inv / Population', mf_inv_pop_growth:'MF Inv/Pop Growth',
+    hh_pop_ratio:'HH / Population',
+    afford_all:'Affordability (All)', afford_studio:'Affordability (Studio)',
+    afford_1br:'Affordability (1BR)', afford_2br:'Affordability (2BR)', afford_3br:'Affordability (3BR)',
+    afford_growth_all:'Afford Growth (All)', afford_growth_studio:'Afford Growth (Studio)',
+    afford_growth_1br:'Afford Growth (1BR)', afford_growth_2br:'Afford Growth (2BR)', afford_growth_3br:'Afford Growth (3BR)',
+    emp_total_growth:'Total Emp Growth', emp_office_growth:'Office Emp Growth', emp_industrial_growth:'Industrial Emp Growth',
+    job_support_total:'Job Support Total', job_support_total_growth:'Job Support Total Growth',
+    job_support_office:'Job Support Office', job_support_office_growth:'Job Support Office Growth',
+    job_support_industrial:'Job Support Industrial', job_support_industrial_growth:'Job Support Industrial Growth',
+  };
+  return names[key] || key;
+}
+
+function formatScoreCell(v) {
+  if (v == null || isNaN(v)) return '<span class="score-neutral">--</span>';
+  var cls = v > 0.01 ? 'score-positive' : (v < -0.01 ? 'score-negative' : 'score-neutral');
+  return '<span class="' + cls + '">' + v.toFixed(4) + '</span>';
+}
+
+// === Category Data Links (remapped to platform URLs) ===
+function openMetricCategoryData(marketName, metricKey) {
+  var duration = parseInt(document.getElementById('cfg-duration-years').value) || 10;
+  var propertyClass = document.getElementById('cfg-property-class') ? document.getElementById('cfg-property-class').value : 'All';
+  var invTier = document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All';
+  var regionType = document.getElementById('filter-region-type') ? document.getElementById('filter-region-type').value : 'specific';
+  var region = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All';
+  var qs = new URLSearchParams({
+    market: marketName, duration_years: String(duration), property_class: propertyClass,
+    inventory_tier: invTier, region_type: regionType, region: region, metric: metricKey,
+  });
+  if (document.getElementById('cfg-flip-deliveries').checked) qs.set('flip_deliveries', '1');
+  window.open('/scorecard/category_data?' + qs.toString(), '_blank', 'noopener');
+}
+
+function openAllCategoryData(marketName) {
+  var duration = parseInt(document.getElementById('cfg-duration-years').value) || 10;
+  var propertyClass = document.getElementById('cfg-property-class') ? document.getElementById('cfg-property-class').value : 'All';
+  var invTier = document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All';
+  var regionType = document.getElementById('filter-region-type') ? document.getElementById('filter-region-type').value : 'specific';
+  var region = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All';
+  var qs = new URLSearchParams({
+    market: marketName, duration_years: String(duration), property_class: propertyClass,
+    inventory_tier: invTier, region_type: regionType, region: region,
+  });
+  if (document.getElementById('cfg-flip-deliveries').checked) qs.set('flip_deliveries', '1');
+  window.open('/scorecard/category_data?' + qs.toString(), '_blank', 'noopener');
+}
+
+function openAllDemoCategoryData(marketName) {
+  var duration = parseInt(document.getElementById('cfg-demo-duration-years') ? document.getElementById('cfg-demo-duration-years').value : document.getElementById('cfg-duration-years').value) || 10;
+  var propertyClass = document.getElementById('cfg-property-class') ? document.getElementById('cfg-property-class').value : 'All';
+  var invTier = document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All';
+  var regionType = document.getElementById('filter-region-type') ? document.getElementById('filter-region-type').value : 'specific';
+  var region = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All';
+  var qs = new URLSearchParams({
+    market: marketName, module: 'demo', duration_years: String(duration),
+    property_class: propertyClass, inventory_tier: invTier, region_type: regionType, region: region,
+  });
+  if (document.getElementById('cfg-demo-flip-inv-pop').checked) qs.set('flip_inv_pop', '1');
+  window.open('/scorecard/category_data?' + qs.toString(), '_blank', 'noopener');
+}
+
+function openDemoMetricCategoryData(marketName, metricKey) {
+  var duration = parseInt(document.getElementById('cfg-demo-duration-years') ? document.getElementById('cfg-demo-duration-years').value : document.getElementById('cfg-duration-years').value) || 10;
+  var propertyClass = document.getElementById('cfg-property-class') ? document.getElementById('cfg-property-class').value : 'All';
+  var invTier = document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All';
+  var regionType = document.getElementById('filter-region-type') ? document.getElementById('filter-region-type').value : 'specific';
+  var region = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All';
+  var qs = new URLSearchParams({
+    market: marketName, module: 'demo', duration_years: String(duration),
+    property_class: propertyClass, inventory_tier: invTier, region_type: regionType, region: region, metric: metricKey,
+  });
+  if (document.getElementById('cfg-demo-flip-inv-pop').checked) qs.set('flip_inv_pop', '1');
+  window.open('/scorecard/category_data?' + qs.toString(), '_blank', 'noopener');
+}
+
+// === Peer Group ===
+async function runPeerGroup() {
+  var content = document.getElementById('pg-content');
+  content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);"><div class="spinner" style="display:inline-block;margin-right:8px;"></div> Generating peer group comparison...</div>';
+  var invTier = document.getElementById('filter-inventory-tier') ? document.getElementById('filter-inventory-tier').value : 'All';
+  var unitTier = document.getElementById('cfg-property-class') ? document.getElementById('cfg-property-class').value : 'All';
+  var region = document.getElementById('filter-region') ? document.getElementById('filter-region').value : 'All';
+  var duration = parseInt(document.getElementById('cfg-duration-years') ? document.getElementById('cfg-duration-years').value : '10') || 10;
+  try {
+    var resp = await fetch('/scorecard/api/peer_group_summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inventory_tier: invTier, property_class: unitTier, region: region,
+        region_type: 'specific', analysis_duration_years: duration,
+      }),
+    });
+    peerGroupData = await resp.json();
+    if (peerGroupData.error) { content.innerHTML = '<div style="color:var(--danger);">Error: ' + peerGroupData.error + '</div>'; return; }
+    var af = peerGroupData.active_filters || {};
+    var ctx = [];
+    if (af.inventory_tier && af.inventory_tier !== 'All') ctx.push('Inventory: ' + af.inventory_tier);
+    if (af.unit_tier && af.unit_tier !== 'All') ctx.push('Unit: ' + af.unit_tier);
+    if (af.region && af.region !== 'All') ctx.push('Region: ' + af.region);
+    document.getElementById('pg-filter-context').textContent = ctx.length ? 'Active filters: ' + ctx.join(' | ') : 'No filters active — showing all dimensions';
+    buildPGFilterTabs();
+    renderPeerGroupTable();
+  } catch (e) {
+    content.innerHTML = '<div style="color:var(--danger);">Connection error: ' + e.message + '</div>';
+  }
+}
+
+function buildPGFilterTabs() {
+  var container = document.getElementById('pg-category-tabs');
+  if (!peerGroupData || !peerGroupData.groups) { container.innerHTML = ''; return; }
+  var seen = new Set();
+  var cats = [];
+  for (var i = 0; i < peerGroupData.groups.length; i++) {
+    var g = peerGroupData.groups[i];
+    if (!seen.has(g.category)) { seen.add(g.category); cats.push(g.category); }
+  }
+  var html = '<button class="pg-cat-tab' + (pgActiveCategory === 'All' ? ' active' : '') + '" onclick="pgActiveCategory=\'All\';renderPeerGroupTable();buildPGFilterTabs();">All</button>';
+  for (var ci = 0; ci < cats.length; ci++) {
+    var c = cats[ci];
+    var esc = c.replace(/'/g, "\\'");
+    html += '<button class="pg-cat-tab' + (pgActiveCategory === c ? ' active' : '') + '" onclick="pgActiveCategory=\'' + esc + '\';renderPeerGroupTable();buildPGFilterTabs();">' + c + '</button>';
+  }
+  container.innerHTML = html;
+}
+
+function renderPeerGroupTable() {
+  if (!peerGroupData || !peerGroupData.groups) return;
+  var content = document.getElementById('pg-content');
+  var groups = peerGroupData.groups;
+  var filtered = pgActiveCategory === 'All' ? groups : groups.filter(function(g) { return g.category === pgActiveCategory; });
+  if (!filtered.length) { content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">No data for this category.</div>'; return; }
+  var avgKeys = ['mf_mean','ds_mean','occ_mean','rent_mean','demo_mean'];
+  function renderSummaryRow(catSlices,catName) {
+    var html='<tr class="pg-summary-row"><td colspan="2" style="text-align:left;">'+catName+' Average</td>';
+    for(var k=0;k<avgKeys.length;k++){var vals=catSlices.map(function(s){return s[avgKeys[k]];}).filter(function(v){return v!=null&&!isNaN(v);});var avg=vals.length?vals.reduce(function(a,b){return a+b;},0)/vals.length:null;html+='<td style="text-align:right;font-family:var(--mono);font-size:12px;">'+(avg!=null?formatScoreCell(avg):'--')+'</td>';}
+    html+='<td></td><td></td></tr>'; return html;
+  }
+  function renderSubgroupSummaryRow(subSlices,subName) {
+    var html='<tr class="pg-subgroup-summary"><td colspan="2" style="text-align:left;">'+subName+' Avg</td>';
+    for(var k=0;k<avgKeys.length;k++){var vals=subSlices.map(function(s){return s[avgKeys[k]];}).filter(function(v){return v!=null&&!isNaN(v);});var avg=vals.length?vals.reduce(function(a,b){return a+b;},0)/vals.length:null;html+='<td style="text-align:right;font-family:var(--mono);font-size:12px;">'+(avg!=null?formatScoreCell(avg):'--')+'</td>';}
+    html+='<td></td><td></td></tr>'; return html;
+  }
+  var html='<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead style="background:var(--cloud);"><tr>';
+  html+='<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Slice</th>';
+  html+='<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Category</th>';
+  var colLabels=['MF Mean','S&D Mean','Occ Mean','Rent Mean','Demo Mean'];
+  for(var ci=0;ci<colLabels.length;ci++) html+='<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">'+colLabels[ci]+'</th>';
+  html+='<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Markets</th>';
+  html+='<th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);">Std Dev</th></tr></thead><tbody>';
+  var unitOrder={'4 & 5 Star':0,'3 Star':1,'1 & 2 Star':2};
+  var catMap={};
+  for(var i=0;i<filtered.length;i++){var g=filtered[i]; if(!catMap[g.category])catMap[g.category]=[]; catMap[g.category].push(g);}
+  for(var cat in catMap){
+    var catSlices=catMap[cat];
+    if(cat==='Unit Tier') catSlices.sort(function(a,b){return (unitOrder[a.label]!=null?unitOrder[a.label]:99)-(unitOrder[b.label]!=null?unitOrder[b.label]:99);});
+    if(cat==='Region + Unit'){
+      var subMap={};var subOrder=['4 & 5 Star','3 Star','1 & 2 Star'];
+      for(var j=0;j<catSlices.length;j++){var sg=catSlices[j].subgroup||'Other';if(!subMap[sg])subMap[sg]=[];subMap[sg].push(catSlices[j]);}
+      for(var si=0;si<subOrder.length;si++){if(!subMap[subOrder[si]])continue;var subSlices=subMap[subOrder[si]];for(var k=0;k<subSlices.length;k++)html+=renderPGDataRow(subSlices[k]);html+=renderSubgroupSummaryRow(subSlices,subOrder[si]);}
+      for(var sg2 in subMap){if(subOrder.indexOf(sg2)===-1){for(var k2=0;k2<subMap[sg2].length;k2++)html+=renderPGDataRow(subMap[sg2][k2]);html+=renderSubgroupSummaryRow(subMap[sg2],sg2);}}
+      html+=renderSummaryRow(catSlices,cat);
+    } else {
+      for(var gi=0;gi<catSlices.length;gi++) html+=renderPGDataRow(catSlices[gi]);
+      html+=renderSummaryRow(catSlices,cat);
+    }
+  }
+  html+='</tbody></table>';
+  content.innerHTML=html;
+}
+
+function renderPGDataRow(g) {
+  var html='<tr>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;font-weight:500;">'+g.label+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:var(--muted);font-size:12px;">'+g.category+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;">'+formatScoreCell(g.mf_mean)+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;">'+formatScoreCell(g.ds_mean)+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;">'+(g.occ_mean!=null?formatScoreCell(g.occ_mean):'--')+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;">'+formatScoreCell(g.rent_mean)+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;">'+(g.demo_mean!=null?formatScoreCell(g.demo_mean):'--')+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;color:var(--muted);">'+g.market_count+'</td>';
+  html+='<td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:var(--mono);font-size:12px;color:var(--muted);">'+(g.mf_std!=null?g.mf_std.toFixed(4):'--')+'</td>';
+  html+='</tr>';
+  return html;
+}
+
+// Tooltip auto-reposition
+document.addEventListener('mouseover', function(e) {
+  var tip = e.target.closest('.info-tip');
+  if (!tip) return;
+  var tt = tip.querySelector('.tip-text');
+  if (!tt) return;
+  tt.style.left = '50%';
+  tt.style.right = 'auto';
+  tt.style.transform = 'translateX(-50%)';
+  tt.style.display = 'block';
+  var rect = tt.getBoundingClientRect();
+  var pad = 8;
+  var nudge = 0;
+  if (rect.left < pad) nudge = pad - rect.left;
+  else if (rect.right > window.innerWidth - pad) nudge = -(rect.right - (window.innerWidth - pad));
+  if (nudge !== 0) {
+    tt.style.transform = 'translateX(calc(-50% + ' + nudge + 'px))';
+    var tipRect = tip.getBoundingClientRect();
+    var iconCenter = tipRect.left + tipRect.width / 2;
+    var ttLeft = rect.left + nudge;
+    var arrowLeft = iconCenter - ttLeft;
+    tt.style.setProperty('--arrow-left', arrowLeft + 'px');
+  } else {
+    tt.style.removeProperty('--arrow-left');
+  }
+  tt.style.display = '';
+}, true);
+</script>
+{% endblock %}

@@ -1,0 +1,1010 @@
+{% extends "base.html" %}
+
+{% block title %}Office Inventory — capactive{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   OFFICE MODULE — Scoped Styles
+   ═══════════════════════════════════════════════════════════════ */
+.office-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+
+  --navy: var(--brand-navy);
+  --active: var(--brand-active);
+  --light-blue: var(--brand-light);
+  --cloud: var(--brand-cloud);
+  --signal: var(--brand-signal);
+  --primary: var(--brand-primary);
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --fg: var(--brand-ink);
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --danger-light: #fef2f2;
+  --warning: #d97706;
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* ── Header ── */
+.office-root .sc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.office-root .sc-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+.office-root .sc-header .subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── Stats Bar ── */
+.office-root .stats-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.office-root .stat-card {
+  flex: 1;
+  min-width: 110px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.office-root .stat-card .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.office-root .stat-card .value {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--navy);
+}
+.office-root .stat-card .sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── View Tabs ── */
+.office-root .view-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+.office-root .view-tab {
+  padding: 8px 18px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+}
+.office-root .view-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.office-root .view-tab:hover:not(.active) { color: var(--text); }
+.office-root .view-panel { display: none; }
+.office-root .view-panel.active { display: block; }
+
+/* ── Filters ── */
+.office-root .filters-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.office-root .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.office-root .filter-group label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+.office-root .filter-group select,
+.office-root .filter-group input[type="text"] {
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: #fff;
+  color: var(--text);
+  min-width: 140px;
+}
+.office-root .filter-group select:focus,
+.office-root .filter-group input:focus {
+  outline: none;
+  border-color: var(--active);
+}
+
+/* ── Table ── */
+.office-root .table-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.office-root table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.office-root thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.office-root th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--cloud);
+  border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.office-root th:hover { color: var(--primary); }
+.office-root th .sort-arrow { font-size: 9px; margin-left: 3px; }
+.office-root td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.office-root tr.data-row { cursor: pointer; }
+.office-root tr.data-row:hover td { background: rgba(24, 95, 165, 0.03); }
+.office-root tr.expanded td { background: var(--cloud); }
+.office-root td.rank {
+  font-weight: 700;
+  color: var(--primary);
+  text-align: center;
+  width: 40px;
+}
+.office-root .prop-name {
+  font-family: var(--font);
+  font-weight: 500;
+  color: var(--primary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.office-root .prop-addr {
+  font-family: var(--font);
+  color: var(--text);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Score coloring */
+.office-root .score-positive { color: var(--success); }
+.office-root .score-negative { color: var(--danger); }
+.office-root .score-neutral { color: var(--muted); }
+
+/* ── Drill-Down Panel ── */
+.office-root .drill-row { display: none; }
+.office-root .drill-row.open { display: table-row; }
+.office-root .drill-content {
+  padding: 16px 20px;
+  background: #fafbfc;
+}
+.office-root .drill-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .office-root .drill-grid { grid-template-columns: 1fr; }
+}
+
+/* Property card */
+.office-root .prop-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.office-root .prop-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--navy);
+}
+.office-root .prop-card .prop-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.office-root .prop-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+.office-root .prop-stat {
+  text-align: center;
+}
+.office-root .prop-stat .ps-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.office-root .prop-stat .ps-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--navy);
+}
+
+/* Z-score bars */
+.office-root .z-bars-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.office-root .z-bars-card h4 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0 0 10px;
+}
+.office-root .z-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.office-root .z-bar-label {
+  width: 120px;
+  font-size: 11px;
+  color: var(--text);
+  flex-shrink: 0;
+  text-align: right;
+  font-family: var(--font);
+}
+.office-root .z-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.office-root .z-bar-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--muted);
+  opacity: 0.4;
+}
+.office-root .z-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.office-root .z-bar-fill.positive { left: 50%; background: var(--success); }
+.office-root .z-bar-fill.negative { right: 50%; background: var(--danger); }
+.office-root .z-bar-val {
+  width: 52px;
+  font-size: 11px;
+  font-family: var(--mono);
+  text-align: right;
+  flex-shrink: 0;
+}
+.office-root .z-bar-n {
+  width: 40px;
+  font-size: 10px;
+  color: var(--muted);
+  flex-shrink: 0;
+  text-align: right;
+}
+.office-root .z-bar-collapsed {
+  font-size: 9px;
+  color: var(--warning);
+  margin-left: 4px;
+}
+
+/* Tenant summary */
+.office-root .tenant-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+.office-root .tenant-card h4 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0 0 8px;
+}
+.office-root .tenant-list {
+  font-size: 12px;
+}
+.office-root .tenant-list table {
+  width: 100%;
+}
+.office-root .tenant-list th {
+  background: var(--cloud);
+  padding: 6px 10px;
+  font-size: 10px;
+}
+.office-root .tenant-list td {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+/* Peer health */
+.office-root .peer-health-table {
+  font-size: 12px;
+}
+.office-root .ph-stable {
+  color: var(--success);
+  font-weight: 600;
+}
+.office-root .ph-collapsed {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Pagination */
+.office-root .pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.office-root .pagination button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  font-weight: 600;
+}
+.office-root .pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.office-root .pagination button:hover:not(:disabled) {
+  background: var(--cloud);
+}
+
+/* Loading */
+.office-root .loading-msg {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+  font-size: 13px;
+}
+</style>
+
+<div class="office-root">
+
+  <div class="sc-header">
+    <div>
+      <h1>Office Inventory</h1>
+      <div class="subtitle">Z-score benchmarking across 8 measures and 7 peer lenses</div>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar" id="off-stats-bar">
+    <div class="stat-card"><div class="label">Properties</div><div class="value" id="off-stat-total">--</div></div>
+    <div class="stat-card"><div class="label">Class A</div><div class="value" id="off-stat-a">--</div></div>
+    <div class="stat-card"><div class="label">Class B</div><div class="value" id="off-stat-b">--</div></div>
+    <div class="stat-card"><div class="label">Class C</div><div class="value" id="off-stat-c">--</div></div>
+    <div class="stat-card"><div class="label">Tenant Match</div><div class="value" id="off-stat-tenant">--</div><div class="sub" id="off-stat-tenant-sub"></div></div>
+    <div class="stat-card"><div class="label">Avg Rent $/SF</div><div class="value" id="off-stat-rent">--</div></div>
+  </div>
+
+  <!-- View Tabs -->
+  <div class="view-tabs">
+    <button class="view-tab active" data-tab="rankings" onclick="offSwitchTab('rankings')">Rankings</button>
+    <button class="view-tab" data-tab="peer-health" onclick="offSwitchTab('peer-health')">Peer Health</button>
+  </div>
+
+  <!-- Rankings Panel -->
+  <div class="view-panel active" id="off-panel-rankings">
+
+    <!-- Filters -->
+    <div class="filters-bar">
+      <div class="filter-group">
+        <label>Measure</label>
+        <select id="off-measure" onchange="offLoadProperties()"></select>
+      </div>
+      <div class="filter-group">
+        <label>Peer Lens</label>
+        <select id="off-lens" onchange="offLoadProperties()"></select>
+      </div>
+      <div class="filter-group">
+        <label>Building Class</label>
+        <select id="off-class" onchange="offLoadProperties()">
+          <option value="">All Classes</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Submarket</label>
+        <select id="off-submarket" onchange="offLoadProperties()">
+          <option value="">All Submarkets</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Status</label>
+        <select id="off-status" onchange="offLoadProperties()">
+          <option value="">All Statuses</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Search</label>
+        <input type="text" id="off-search" placeholder="Name or address..." onkeyup="offDebounceSearch()">
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th data-sort="name" onclick="offSort('name')">Property Name <span class="sort-arrow" id="off-arrow-name"></span></th>
+            <th data-sort="address" onclick="offSort('address')">Address <span class="sort-arrow" id="off-arrow-address"></span></th>
+            <th data-sort="class" onclick="offSort('class')">Class <span class="sort-arrow" id="off-arrow-class"></span></th>
+            <th data-sort="submarket" onclick="offSort('submarket')">Submarket <span class="sort-arrow" id="off-arrow-submarket"></span></th>
+            <th data-sort="stories" onclick="offSort('stories')">Stories <span class="sort-arrow" id="off-arrow-stories"></span></th>
+            <th data-sort="rba" onclick="offSort('rba')">RBA (SF) <span class="sort-arrow" id="off-arrow-rba"></span></th>
+            <th data-sort="rent" onclick="offSort('rent')">Rent $/SF <span class="sort-arrow" id="off-arrow-rent"></span></th>
+            <th data-sort="vacancy" onclick="offSort('vacancy')">Vacancy% <span class="sort-arrow" id="off-arrow-vacancy"></span></th>
+            <th data-sort="z_score" onclick="offSort('z_score')">Z-Score <span class="sort-arrow" id="off-arrow-z_score"></span></th>
+          </tr>
+        </thead>
+        <tbody id="off-tbody">
+          <tr><td colspan="10" class="loading-msg">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <span id="off-page-info"></span>
+      <div style="display:flex;gap:6px;">
+        <button id="off-prev" onclick="offPrevPage()" disabled>Prev</button>
+        <button id="off-next" onclick="offNextPage()" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Peer Health Panel -->
+  <div class="view-panel" id="off-panel-peer-health">
+    <div class="table-wrap">
+      <table class="peer-health-table">
+        <thead>
+          <tr>
+            <th>Lens</th>
+            <th>Quality Tier</th>
+            <th>Lens Value</th>
+            <th>N</th>
+            <th>Engine Stable</th>
+          </tr>
+        </thead>
+        <tbody id="off-ph-tbody">
+          <tr><td colspan="5" class="loading-msg">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  "use strict";
+
+  // ─── State ──────────────────────────────────────────────────────
+  var offState = {
+    sort: "z_score",
+    order: "desc",
+    page: 0,
+    pageSize: 50,
+    total: 0,
+    expandedPid: null,
+    searchTimer: null,
+    meta: null,
+    statsLoaded: false,
+    peerHealthLoaded: false
+  };
+
+  // ─── Helpers ────────────────────────────────────────────────────
+  function fmt(v, decimals) {
+    if (v === null || v === undefined) return "--";
+    if (typeof decimals === "number") return Number(v).toFixed(decimals);
+    return String(v);
+  }
+  function fmtNum(v) {
+    if (v === null || v === undefined) return "--";
+    return Number(v).toLocaleString();
+  }
+  function fmtPct(v) {
+    if (v === null || v === undefined) return "--";
+    return Number(v).toFixed(1) + "%";
+  }
+  function scoreClass(z) {
+    if (z === null || z === undefined) return "score-neutral";
+    if (z > 0.25) return "score-positive";
+    if (z < -0.25) return "score-negative";
+    return "score-neutral";
+  }
+  function escHtml(s) {
+    if (!s) return "";
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+  }
+
+  // ─── Init ───────────────────────────────────────────────────────
+  function offInit() {
+    // Load meta (measures, lenses, labels)
+    fetch("/office/api/meta")
+      .then(function(r) { return r.json(); })
+      .then(function(meta) {
+        offState.meta = meta;
+        var mSel = document.getElementById("off-measure");
+        var lSel = document.getElementById("off-lens");
+        meta.measures.forEach(function(m) {
+          var o = document.createElement("option");
+          o.value = m;
+          o.textContent = meta.measure_labels[m] || m;
+          mSel.appendChild(o);
+        });
+        meta.lenses.forEach(function(l) {
+          var o = document.createElement("option");
+          o.value = l;
+          o.textContent = meta.lens_labels[l] || l;
+          lSel.appendChild(o);
+        });
+        mSel.value = "rent_sf_yr_mid";
+        lSel.value = "status";
+      })
+      .then(function() {
+        offLoadStats();
+        offLoadProperties();
+      });
+
+    // Check for detail_pid from server-side template
+    {% if detail_pid is defined and detail_pid %}
+    setTimeout(function() {
+      offLoadPropertyDetail({{ detail_pid }});
+    }, 500);
+    {% endif %}
+  }
+
+  // ─── Stats ──────────────────────────────────────────────────────
+  function offLoadStats() {
+    fetch("/office/api/stats")
+      .then(function(r) { return r.json(); })
+      .then(function(stats) {
+        document.getElementById("off-stat-total").textContent = fmtNum(stats.total);
+        document.getElementById("off-stat-a").textContent = fmtNum(stats.by_class["A"] || 0);
+        document.getElementById("off-stat-b").textContent = fmtNum(stats.by_class["B"] || 0);
+        document.getElementById("off-stat-c").textContent = fmtNum(stats.by_class["C"] || 0);
+        document.getElementById("off-stat-tenant").textContent = fmtPct(stats.tenant_match_rate);
+        document.getElementById("off-stat-tenant-sub").textContent = fmtNum(stats.tenant_matched) + " matched";
+        document.getElementById("off-stat-rent").textContent = "$" + fmt(stats.avg_rent, 2);
+
+        // Populate filter dropdowns
+        var cSel = document.getElementById("off-class");
+        (stats.filter_options.building_classes || []).forEach(function(c) {
+          var o = document.createElement("option");
+          o.value = c;
+          o.textContent = "Class " + c;
+          cSel.appendChild(o);
+        });
+        var sSel = document.getElementById("off-submarket");
+        (stats.filter_options.submarkets || []).forEach(function(s) {
+          var o = document.createElement("option");
+          o.value = s;
+          o.textContent = s;
+          sSel.appendChild(o);
+        });
+        var stSel = document.getElementById("off-status");
+        (stats.filter_options.building_statuses || []).forEach(function(st) {
+          var o = document.createElement("option");
+          o.value = st;
+          o.textContent = st;
+          stSel.appendChild(o);
+        });
+        offState.statsLoaded = true;
+      });
+  }
+
+  // ─── Properties ─────────────────────────────────────────────────
+  window.offLoadProperties = function() {
+    var measure = document.getElementById("off-measure").value || "rent_sf_yr_mid";
+    var lens = document.getElementById("off-lens").value || "status";
+    var bc = document.getElementById("off-class").value;
+    var sub = document.getElementById("off-submarket").value;
+    var st = document.getElementById("off-status").value;
+    var search = document.getElementById("off-search").value.trim();
+
+    var params = new URLSearchParams();
+    params.set("measure", measure);
+    params.set("lens", lens);
+    params.set("sort", offState.sort);
+    params.set("order", offState.order);
+    params.set("limit", offState.pageSize);
+    params.set("offset", offState.page * offState.pageSize);
+    if (bc) params.set("building_class", bc);
+    if (sub) params.set("submarket", sub);
+    if (st) params.set("status", st);
+    if (search) params.set("search", search);
+
+    var tbody = document.getElementById("off-tbody");
+    tbody.innerHTML = '<tr><td colspan="10" class="loading-msg">Loading...</td></tr>';
+    offState.expandedPid = null;
+
+    fetch("/office/api/properties?" + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        offState.total = data.total;
+        offRenderTable(data.rows);
+        offUpdatePagination();
+        offUpdateSortArrows();
+      });
+  };
+
+  function offRenderTable(rows) {
+    var tbody = document.getElementById("off-tbody");
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="loading-msg">No properties found</td></tr>';
+      return;
+    }
+    var html = "";
+    var startRank = offState.page * offState.pageSize + 1;
+    rows.forEach(function(r, i) {
+      var pid = r.pid;
+      var z = r.z_score;
+      var zStr = z !== null && z !== undefined ? Number(z).toFixed(3) : "--";
+      var zCls = scoreClass(z);
+      html += '<tr class="data-row" data-pid="' + pid + '" onclick="offToggleDrill(' + pid + ')">';
+      html += '<td class="rank">' + (startRank + i) + '</td>';
+      html += '<td class="prop-name">' + escHtml(r["Property Name"]) + '</td>';
+      html += '<td class="prop-addr">' + escHtml(r["Property Address"]) + '</td>';
+      html += '<td>' + escHtml(r["Building Class"]) + '</td>';
+      html += '<td style="font-family:var(--font);font-size:11px;">' + escHtml(r["Submarket Name"]) + '</td>';
+      html += '<td>' + fmt(r["Number of Stories"]) + '</td>';
+      html += '<td>' + fmtNum(r["RBA"]) + '</td>';
+      html += '<td>' + (r.rent_mid !== null && r.rent_mid !== undefined ? "$" + fmt(r.rent_mid, 2) : "--") + '</td>';
+      html += '<td>' + (r.vac_pct_derived !== null && r.vac_pct_derived !== undefined ? fmt(r.vac_pct_derived, 1) + "%" : "--") + '</td>';
+      html += '<td class="' + zCls + '">' + zStr + '</td>';
+      html += '</tr>';
+      // Drill-down placeholder row
+      html += '<tr class="drill-row" id="off-drill-' + pid + '"><td colspan="10"></td></tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  // ─── Sorting ────────────────────────────────────────────────────
+  window.offSort = function(col) {
+    if (offState.sort === col) {
+      offState.order = offState.order === "asc" ? "desc" : "asc";
+    } else {
+      offState.sort = col;
+      offState.order = (col === "z_score" || col === "rba" || col === "rent" || col === "stories") ? "desc" : "asc";
+    }
+    offState.page = 0;
+    offLoadProperties();
+  };
+
+  function offUpdateSortArrows() {
+    var ids = ["name", "address", "class", "submarket", "stories", "rba", "rent", "vacancy", "z_score"];
+    ids.forEach(function(id) {
+      var el = document.getElementById("off-arrow-" + id);
+      if (!el) return;
+      if (offState.sort === id) {
+        el.textContent = offState.order === "asc" ? "▲" : "▼";
+      } else {
+        el.textContent = "";
+      }
+    });
+  }
+
+  // ─── Pagination ─────────────────────────────────────────────────
+  function offUpdatePagination() {
+    var start = offState.page * offState.pageSize + 1;
+    var end = Math.min(start + offState.pageSize - 1, offState.total);
+    document.getElementById("off-page-info").textContent =
+      offState.total > 0 ? (start + " - " + end + " of " + fmtNum(offState.total)) : "No results";
+    document.getElementById("off-prev").disabled = offState.page === 0;
+    document.getElementById("off-next").disabled = end >= offState.total;
+  }
+  window.offPrevPage = function() {
+    if (offState.page > 0) { offState.page--; offLoadProperties(); }
+  };
+  window.offNextPage = function() {
+    if ((offState.page + 1) * offState.pageSize < offState.total) { offState.page++; offLoadProperties(); }
+  };
+
+  // ─── Search debounce ───────────────────────────────────────────
+  window.offDebounceSearch = function() {
+    clearTimeout(offState.searchTimer);
+    offState.searchTimer = setTimeout(function() {
+      offState.page = 0;
+      offLoadProperties();
+    }, 350);
+  };
+
+  // ─── Drill-Down ────────────────────────────────────────────────
+  window.offToggleDrill = function(pid) {
+    var drillEl = document.getElementById("off-drill-" + pid);
+    if (!drillEl) return;
+
+    // Close previously expanded
+    if (offState.expandedPid !== null && offState.expandedPid !== pid) {
+      var prev = document.getElementById("off-drill-" + offState.expandedPid);
+      if (prev) { prev.classList.remove("open"); prev.querySelector("td").innerHTML = ""; }
+      var prevRow = document.querySelector('tr[data-pid="' + offState.expandedPid + '"]');
+      if (prevRow) prevRow.classList.remove("expanded");
+    }
+
+    if (offState.expandedPid === pid) {
+      drillEl.classList.remove("open");
+      drillEl.querySelector("td").innerHTML = "";
+      var row = document.querySelector('tr[data-pid="' + pid + '"]');
+      if (row) row.classList.remove("expanded");
+      offState.expandedPid = null;
+      return;
+    }
+
+    offState.expandedPid = pid;
+    var row = document.querySelector('tr[data-pid="' + pid + '"]');
+    if (row) row.classList.add("expanded");
+    drillEl.classList.add("open");
+    drillEl.querySelector("td").innerHTML = '<div class="drill-content"><div class="loading-msg">Loading property detail...</div></div>';
+
+    offLoadPropertyDetail(pid);
+  };
+
+  function offLoadPropertyDetail(pid) {
+    var drillEl = document.getElementById("off-drill-" + pid);
+    var lens = document.getElementById("off-lens").value || "status";
+
+    Promise.all([
+      fetch("/office/api/property/" + pid).then(function(r) { return r.json(); }),
+      fetch("/office/api/property/" + pid + "/tenants").then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var prop = results[0];
+      var tenants = results[1];
+      if (prop.error) {
+        if (drillEl) drillEl.querySelector("td").innerHTML = '<div class="drill-content">Property not found</div>';
+        return;
+      }
+      offRenderDrill(pid, prop, tenants, lens);
+    });
+  }
+
+  function offRenderDrill(pid, prop, tenants, lens) {
+    var drillEl = document.getElementById("off-drill-" + pid);
+    if (!drillEl) return;
+    var meta = offState.meta || {};
+    var measureLabels = meta.measure_labels || {};
+    var lensLabels = meta.lens_labels || {};
+
+    // Property card
+    var html = '<div class="drill-content"><div class="drill-grid">';
+
+    // Left: Property summary
+    html += '<div class="prop-card">';
+    html += '<h3>' + escHtml(prop["Property Name"]) + '</h3>';
+    html += '<div class="prop-meta">' + escHtml(prop["Property Address"]) + ', ' + escHtml(prop["City"]) + ' ' + escHtml(prop["State"]) + ' ' + escHtml(prop["Zip"]) + '</div>';
+    html += '<div class="prop-stats-grid">';
+    html += offStatBox("Class", prop["Building Class"]);
+    html += offStatBox("Status", prop["Building Status"]);
+    html += offStatBox("RBA", fmtNum(prop["RBA"]));
+    html += offStatBox("Stories", fmt(prop["Number of Stories"]));
+    html += offStatBox("Year Built", fmt(prop["Year Built"]));
+    html += offStatBox("Rent $/SF", prop.rent_mid !== null ? "$" + fmt(prop.rent_mid, 2) : "--");
+    html += offStatBox("Vacancy", prop.vac_pct_derived !== null ? fmt(prop.vac_pct_derived, 1) + "%" : "--");
+    html += offStatBox("Leased", prop["Percent Leased"] !== null ? fmt(prop["Percent Leased"], 1) + "%" : "--");
+    html += offStatBox("Parking", fmt(prop["Parking Ratio"], 2));
+    html += offStatBox("Submarket", prop["Submarket Name"]);
+    html += '</div></div>';
+
+    // Right: Z-score bars for selected lens
+    html += '<div class="z-bars-card">';
+    html += '<h4>Z-Scores (' + escHtml(lensLabels[lens] || lens) + ' lens)</h4>';
+
+    var zScores = prop.z_scores || {};
+    var measures = (meta.measures || []);
+    measures.forEach(function(m) {
+      var data = (zScores[m] || {})[lens] || {};
+      var z = data.z;
+      var n = data.n;
+      var collapsed = data.collapsed;
+      var zVal = z !== null && z !== undefined ? Number(z).toFixed(3) : "--";
+      var zCls = scoreClass(z);
+      var barHtml = offZBarHtml(z);
+      html += '<div class="z-bar-row">';
+      html += '<div class="z-bar-label">' + escHtml(measureLabels[m] || m) + '</div>';
+      html += barHtml;
+      html += '<div class="z-bar-val ' + zCls + '">' + zVal + '</div>';
+      html += '<div class="z-bar-n">n=' + (n !== null ? n : "?") + '</div>';
+      if (collapsed) html += '<span class="z-bar-collapsed" title="Thin cell collapsed">!</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    html += '</div>'; // close drill-grid
+
+    // Tenant info (full width below)
+    var rollup = prop.tenant_rollup;
+    if (rollup) {
+      html += '<div class="tenant-card">';
+      html += '<h4>Tenant Summary</h4>';
+      html += '<div class="prop-stats-grid" style="margin-bottom:10px;">';
+      html += offStatBox("Tenants", fmt(rollup.ten_count));
+      html += offStatBox("Occ SF/Floor", fmtNum(rollup.ten_sf_floor));
+      html += offStatBox("Owner Share", rollup.ten_owned_share !== null ? fmt(rollup.ten_owned_share * 100, 1) + "%" : "--");
+      html += offStatBox("Top Industry", rollup.ten_top_industry || "--");
+      html += offStatBox("Sector HHI", fmt(rollup.ten_sector_hhi, 3));
+      html += '</div>';
+
+      if (tenants && tenants.length > 0) {
+        html += '<div class="tenant-list"><table><thead><tr>';
+        html += '<th>Tenant</th><th>SF</th><th>Floor</th><th>Industry</th><th>% Bldg</th>';
+        html += '</tr></thead><tbody>';
+        tenants.forEach(function(t) {
+          html += '<tr>';
+          html += '<td style="font-family:var(--font);">' + escHtml(t["Tenant Name"]) + '</td>';
+          html += '<td>' + fmtNum(t["SF Occupied"]) + '</td>';
+          html += '<td>' + fmt(t["Floor"]) + '</td>';
+          html += '<td style="font-family:var(--font);font-size:11px;">' + escHtml(t["Industry"]) + '</td>';
+          html += '<td>' + (t.pct_building !== null ? fmt(t.pct_building, 1) + "%" : "--") + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      html += '</div>';
+    }
+
+    html += '</div>'; // close drill-content
+    drillEl.querySelector("td").innerHTML = html;
+  }
+
+  function offStatBox(label, value) {
+    return '<div class="prop-stat"><div class="ps-label">' + escHtml(label) + '</div><div class="ps-value">' + escHtml(String(value || "--")) + '</div></div>';
+  }
+
+  function offZBarHtml(z) {
+    if (z === null || z === undefined) {
+      return '<div class="z-bar-track"><div class="z-bar-center"></div></div>';
+    }
+    var pct = Math.min(Math.abs(z) / 3 * 50, 50);
+    var cls = z >= 0 ? "positive" : "negative";
+    var style = "";
+    if (z >= 0) {
+      style = "width:" + pct + "%;";
+    } else {
+      style = "width:" + pct + "%;";
+    }
+    return '<div class="z-bar-track"><div class="z-bar-center"></div><div class="z-bar-fill ' + cls + '" style="' + style + '"></div></div>';
+  }
+
+  // ─── Tab Switching ──────────────────────────────────────────────
+  window.offSwitchTab = function(tab) {
+    document.querySelectorAll(".office-root .view-tab").forEach(function(el) {
+      el.classList.toggle("active", el.getAttribute("data-tab") === tab);
+    });
+    document.querySelectorAll(".office-root .view-panel").forEach(function(el) {
+      el.classList.toggle("active", el.id === "off-panel-" + tab);
+    });
+    if (tab === "peer-health" && !offState.peerHealthLoaded) {
+      offLoadPeerHealth();
+    }
+  };
+
+  // ─── Peer Health ───────────────────────────────────────────────
+  function offLoadPeerHealth() {
+    fetch("/office/api/peer-health")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var tbody = document.getElementById("off-ph-tbody");
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="loading-msg">No peer health data</td></tr>';
+          return;
+        }
+        var html = "";
+        data.forEach(function(r) {
+          var stableCls = r.engine_stable ? "ph-stable" : "ph-collapsed";
+          var stableLabel = r.engine_stable ? "Stable" : "Collapsed";
+          html += "<tr>";
+          html += "<td style='font-family:var(--font);'>" + escHtml(r.lens) + "</td>";
+          html += "<td>" + escHtml(r.quality_tier) + "</td>";
+          html += "<td style='font-family:var(--font);font-size:11px;'>" + escHtml(r.lens_value) + "</td>";
+          html += "<td>" + r.n + "</td>";
+          html += '<td class="' + stableCls + '">' + stableLabel + "</td>";
+          html += "</tr>";
+        });
+        tbody.innerHTML = html;
+        offState.peerHealthLoaded = true;
+      });
+  }
+
+  // ─── Boot ──────────────────────────────────────────────────────
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", offInit);
+  } else {
+    offInit();
+  }
+
+})();
+</script>
+{% endblock %}

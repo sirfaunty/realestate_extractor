@@ -90,6 +90,29 @@
             </a></li>
         </ul>
 
+        <div class="sidebar-section-label">Market Analytics</div>
+        <ul class="sidebar-nav" style="padding-top: 0;">
+            <li><a href="{{ url_for('scorecard.scorecard_index') }}" class="{% if request.endpoint and request.endpoint.startswith('scorecard.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14V8l3-2 3 2 3-4 3 2v8H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="5" cy="6" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="11" cy="4" r="1" fill="currentColor"/></svg>
+                </span> Market Scorecard
+            </a></li>
+            <li><a href="{{ url_for('office.office_index') }}" class="{% if request.endpoint and request.endpoint.startswith('office.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 14V3a1 1 0 011-1h8a1 1 0 011 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M1 14h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </span> Office Inventory
+            </a></li>
+        </ul>
+
+        <div class="sidebar-section-label">Deal Documents</div>
+        <ul class="sidebar-nav" style="padding-top: 0;">
+            <li><a href="{{ url_for('closing_books.closing_books_index') }}" class="{% if request.endpoint and request.endpoint.startswith('closing_books.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 8h4M6 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </span> Closing Books
+            </a></li>
+        </ul>
+
         {% if current_user and current_user.role == 'admin' %}
         <div class="sidebar-section-label">Admin</div>
         <ul class="sidebar-nav sidebar-nav-admin">

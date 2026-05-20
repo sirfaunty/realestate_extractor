@@ -22,6 +22,8 @@ INSTALLED_MODULES = [
     'modules.scorecard',
     'modules.lease_analysis',
     'modules.market_intel',
+    'modules.office',
+    'modules.closing_books',
 ]
 
 
