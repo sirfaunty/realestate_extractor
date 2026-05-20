@@ -326,10 +326,12 @@ def allowed_file(filename):
 def is_archive(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ARCHIVE_EXTENSIONS
 
-def extract_zip(zip_path, dest_dir):
+def extract_zip(zip_path, dest_dir, _depth=0):
     """Extract a zip file, return list of (filepath, ext) for all files found.
-    Skips __MACOSX and hidden files. Flattens nested folders."""
+    Skips __MACOSX and hidden files. Flattens nested folders.
+    Recursively expands nested ZIP files up to 3 levels deep."""
     import zipfile
+    MAX_DEPTH = 3
     extracted = []
     skipped = []
     with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -360,7 +362,18 @@ def extract_zip(zip_path, dest_dir):
             with zf.open(member) as src, open(dest_path, 'wb') as dst:
                 dst.write(src.read())
 
-            if ext in ALLOWED_EXTENSIONS:
+            # Recursively expand nested ZIP files
+            if ext == 'zip' and _depth < MAX_DEPTH:
+                try:
+                    nested_extracted, nested_skipped = extract_zip(dest_path, dest_dir, _depth + 1)
+                    extracted.extend(nested_extracted)
+                    skipped.extend(nested_skipped)
+                    # Remove the nested zip after expansion
+                    os.remove(dest_path)
+                except Exception as e:
+                    logger.warning(f"Failed to expand nested ZIP {basename}: {e}")
+                    skipped.append((basename, ext))
+            elif ext in ALLOWED_EXTENSIONS:
                 extracted.append((dest_path, ext))
             else:
                 skipped.append((basename, ext))
