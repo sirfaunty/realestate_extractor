@@ -1209,7 +1209,383 @@ class Database:
         """, (property_id,))
         summary['operating_expenses'] = [dict(row) for row in cur.fetchall()]
 
+        # Segment classification for unit mix rent roll entries
+        summary['rent_roll_segments'] = self._classify_rent_roll_segments(
+            summary['rent_roll'])
+
+        # Extraction-derived fallbacks (when units table is empty)
+        summary['extracted'] = self._get_extracted_property_metrics(property_id)
+
         return summary
+
+    @staticmethod
+    def _classify_rent_roll_segments(rent_roll: List[Dict]) -> Dict:
+        """
+        Organize rent roll entries into structured groups.
+
+        Separates entries by source (unit_mix, renewals, ntv, other) and
+        applies appropriate grouping within each:
+
+        Unit Mix:
+          - Mixed-income properties (VG-style): segment by Vintage Affordable
+            (code ends 'a'), New Affordable ('HP'), Market Rate (rest)
+          - Other properties: group by bedroom count / unit type
+
+        Renewals: group by status (renewed, move_out, pending, undecided)
+        NTV: kept as-is (typically small)
+        Other: group by bedroom count / unit type
+
+        Returns dict with:
+          segments: unit mix asset segments (VG-style) or bedroom groups
+          has_segments: bool (multiple asset segments)
+          renewals: latest month's renewal entries grouped by status
+          ntv: latest month's NTV entries
+          renewals_summary: {total, renewed, move_out, pending}
+          ntv_summary: {total, avg_rent}
+        """
+        import json
+
+        # ── 1. Separate entries by source, keeping only latest doc per source ──
+        latest_doc = {}    # source → most recent document_id
+        all_entries = {}   # source → list of (entry, meta)
+
+        for entry in rent_roll:
+            raw_meta = entry.get('metadata')
+            if not raw_meta:
+                continue
+            meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
+            source = meta.get('source', 'other')
+            if source not in latest_doc:
+                # rent_roll ordered by processed_at DESC; first hit = latest
+                latest_doc[source] = entry.get('document_id')
+            all_entries.setdefault(source, []).append((entry, meta))
+
+        def _latest_only(source):
+            """Filter to most recent document's entries for a given source."""
+            doc_id = latest_doc.get(source)
+            return [
+                (e, m) for e, m in all_entries.get(source, [])
+                if e.get('document_id') == doc_id
+            ]
+
+        # ── 2. Unit Mix: asset segments or bedroom groups ──
+        unit_mix = _latest_only('unit_mix')
+
+        # Detect if this is a mixed-income property (VG-style codes)
+        has_affordable_codes = False
+        for entry, meta in unit_mix:
+            style = entry.get('unit_number') or ''
+            code = style.split(' - ')[0].strip() if ' - ' in style else style.strip()
+            if (code and code[-1] == 'a' and len(code) > 1) or 'HP' in code:
+                has_affordable_codes = True
+                break
+
+        if has_affordable_codes:
+            segments = Database._build_asset_segments(unit_mix)
+        else:
+            segments = Database._build_bedroom_groups(unit_mix)
+
+        has_segments = len([s for s in segments if s['entries']]) > 1
+
+        # ── 3. Renewals: group by status ──
+        renewals_raw = _latest_only('renewals')
+        renewals = []
+        renewals_summary = {'total': 0, 'renewed': 0, 'move_out': 0, 'pending': 0}
+        # Filter out summary/header rows
+        for entry, meta in renewals_raw:
+            tenant = (entry.get('tenant_name') or '').lower()
+            unit = entry.get('unit_number') or ''
+            # Skip summary rows (total, averages, retention stats, headers)
+            if any(kw in tenant for kw in [
+                'total', 'average', 'retention', 'undecided',
+                'pending', 'leases renewed', 'leases vacating',
+                'leases expiring', 'monthly renewals',
+            ]):
+                continue
+            if not unit or not unit[0].isdigit():
+                continue
+            e = dict(entry)
+            e['_meta'] = meta
+            renewals.append(e)
+            status = (entry.get('status') or '').lower()
+            renewals_summary['total'] += 1
+            if status == 'occupied' or 'renew' in status:
+                renewals_summary['renewed'] += 1
+            elif 'move' in status or 'vacat' in status:
+                renewals_summary['move_out'] += 1
+            else:
+                renewals_summary['pending'] += 1
+
+        # Group renewals by status for display
+        renewals_grouped = {}
+        status_order = ['occupied', 'move_out', 'unknown']
+        for e in renewals:
+            st = e.get('status') or 'unknown'
+            renewals_grouped.setdefault(st, []).append(e)
+
+        # ── 4. NTV ──
+        ntv_raw = _latest_only('ntv')
+        ntv = []
+        for entry, meta in ntv_raw:
+            tenant = (entry.get('tenant_name') or '').lower()
+            unit = entry.get('unit_number') or ''
+            if 'average' in tenant or not unit or not unit[0].isdigit():
+                continue
+            e = dict(entry)
+            e['_meta'] = meta
+            ntv.append(e)
+        ntv_summary = {
+            'total': len(ntv),
+            'avg_rent': round(
+                sum(e.get('monthly_rent') or 0 for e in ntv) / len(ntv)
+            ) if ntv else 0,
+        }
+
+        # ── 5. Other (traditional rent roll entries) ──
+        other_raw = _latest_only('other')
+        other_entries = []
+        for entry, meta in other_raw:
+            e = dict(entry)
+            e['_meta'] = meta
+            other_entries.append(e)
+
+        return {
+            'segments': segments,
+            'has_segments': has_segments,
+            'renewals': renewals,
+            'renewals_grouped': renewals_grouped,
+            'renewals_summary': renewals_summary,
+            'ntv': ntv,
+            'ntv_summary': ntv_summary,
+            'other': other_entries,
+        }
+
+    @staticmethod
+    def _build_asset_segments(unit_mix):
+        """Build VG-style asset segments (Vintage Affordable / New Affordable / Market)."""
+        buckets = {
+            'Vintage Affordable': [],
+            'New Affordable': [],
+            'Market Rate': [],
+        }
+        for entry, meta in unit_mix:
+            style = entry.get('unit_number') or ''
+            code = style.split(' - ')[0].strip() if ' - ' in style else style.strip()
+
+            if code and code[-1] == 'a' and code[-2:] != 'Ha':
+                segment = 'Vintage Affordable'
+            elif 'HP' in code:
+                segment = 'New Affordable'
+            else:
+                segment = 'Market Rate'
+
+            entry_copy = dict(entry)
+            entry_copy['_segment'] = segment
+            entry_copy['_meta'] = meta
+            buckets[segment].append(entry_copy)
+
+        segments = []
+        for name in ('Vintage Affordable', 'New Affordable', 'Market Rate'):
+            entries = buckets[name]
+            if not entries:
+                continue
+            segments.append(Database._summarize_unit_mix_group(name, entries))
+        return segments
+
+    @staticmethod
+    def _build_bedroom_groups(unit_mix):
+        """Group unit mix entries by bedroom count."""
+        buckets = {}
+        bed_order = []  # preserve discovery order
+        for entry, meta in unit_mix:
+            beds = meta.get('beds')
+            size = meta.get('size', '')
+            if beds is not None and beds != '':
+                try:
+                    beds = int(beds)
+                except (ValueError, TypeError):
+                    beds = None
+
+            if beds == 0 or (size and 'studio' in size.lower()):
+                group = 'Studio'
+            elif beds == 1:
+                group = '1 Bedroom'
+            elif beds == 2:
+                group = '2 Bedroom'
+            elif beds == 3:
+                group = '3 Bedroom'
+            elif beds is not None and beds >= 4:
+                group = f'{beds} Bedroom'
+            elif size and 'alcove' in size.lower():
+                group = 'Alcove / Studio'
+            else:
+                group = 'Other'
+
+            if group not in buckets:
+                bed_order.append(group)
+                buckets[group] = []
+
+            entry_copy = dict(entry)
+            entry_copy['_segment'] = group
+            entry_copy['_meta'] = meta
+            buckets[group].append(entry_copy)
+
+        # Sort by standard order
+        standard_order = [
+            'Studio', 'Alcove / Studio', '1 Bedroom', '2 Bedroom',
+            '3 Bedroom', '4 Bedroom', '5 Bedroom', 'Other',
+        ]
+        ordered = [g for g in standard_order if g in buckets]
+        ordered += [g for g in bed_order if g not in ordered]
+
+        segments = []
+        for name in ordered:
+            entries = buckets[name]
+            if not entries:
+                continue
+            segments.append(Database._summarize_unit_mix_group(name, entries))
+        return segments
+
+    @staticmethod
+    def _summarize_unit_mix_group(name, entries):
+        """Compute summary stats for a group of unit mix entries."""
+        total_qty = sum((e['_meta'].get('quantity') or 0) for e in entries)
+        total_occ = sum((e['_meta'].get('occupied') or 0) for e in entries)
+        total_vac = sum((e['_meta'].get('vacant') or 0) for e in entries)
+        total_rent_weighted = sum(
+            (e.get('monthly_rent') or 0) * (e['_meta'].get('quantity') or 0)
+            for e in entries
+        )
+        avg_rent = round(total_rent_weighted / total_qty) if total_qty else 0
+        occ_rate = round(total_occ / total_qty * 100, 1) if total_qty else 0
+        return {
+            'name': name,
+            'entries': entries,
+            'summary': {
+                'total_units': total_qty,
+                'occupied': total_occ,
+                'vacant': total_vac,
+                'occupancy_rate': occ_rate,
+                'avg_rent': avg_rent,
+                'styles': len(entries),
+            },
+        }
+
+    def _get_extracted_property_metrics(self, property_id: int) -> Dict:
+        """
+        Property-scoped extraction metrics from rent_roll_entries,
+        financial_terms, and operating_statement_items.
+        Used as fallback when the manual units table is empty.
+        """
+        metrics = {}
+
+        # Total units from financial_terms
+        cur = self.conn.execute("""
+            SELECT ft.value_numeric FROM financial_terms ft
+            JOIN documents d ON ft.document_id = d.id
+            WHERE d.property_id = ? AND ft.term_type = 'total_units'
+            ORDER BY ft.id DESC LIMIT 1
+        """, (property_id,))
+        row = cur.fetchone()
+        metrics['total_units'] = int(row['value_numeric']) if row and row['value_numeric'] else None
+
+        # Occupancy rate (prefer computed-from-unit-mix, then Current, then any)
+        cur = self.conn.execute("""
+            SELECT ft.value_numeric FROM financial_terms ft
+            JOIN documents d ON ft.document_id = d.id
+            WHERE d.property_id = ? AND ft.term_type = 'occupancy_rate'
+            AND ft.term_label LIKE '%Computed%'
+            ORDER BY ft.id DESC LIMIT 1
+        """, (property_id,))
+        row = cur.fetchone()
+        metrics['occupancy_rate'] = row['value_numeric'] if row else None
+
+        if metrics['occupancy_rate'] is None:
+            cur = self.conn.execute("""
+                SELECT ft.value_numeric FROM financial_terms ft
+                JOIN documents d ON ft.document_id = d.id
+                WHERE d.property_id = ? AND ft.term_type = 'occupancy_rate'
+                AND ft.term_label LIKE '%Current%'
+                ORDER BY ft.id DESC LIMIT 1
+            """, (property_id,))
+            row = cur.fetchone()
+            metrics['occupancy_rate'] = row['value_numeric'] if row else None
+
+        if metrics['occupancy_rate'] is None:
+            cur = self.conn.execute("""
+                SELECT ft.value_numeric FROM financial_terms ft
+                JOIN documents d ON ft.document_id = d.id
+                WHERE d.property_id = ? AND ft.term_type = 'occupancy_rate'
+                ORDER BY ft.id DESC LIMIT 1
+            """, (property_id,))
+            row = cur.fetchone()
+            metrics['occupancy_rate'] = row['value_numeric'] if row else None
+
+        # Monthly GPR
+        cur = self.conn.execute("""
+            SELECT ft.value_numeric FROM financial_terms ft
+            JOIN documents d ON ft.document_id = d.id
+            WHERE d.property_id = ? AND ft.term_type = 'gross_potential_rent'
+            AND ft.term_label LIKE '%Monthly%'
+            ORDER BY ft.id DESC LIMIT 1
+        """, (property_id,))
+        row = cur.fetchone()
+        metrics['monthly_gpr'] = row['value_numeric'] if row and row['value_numeric'] else None
+
+        # Annual NOI from operating_statement_items
+        cur = self.conn.execute("""
+            SELECT os.amount FROM operating_statement_items os
+            JOIN documents d ON os.document_id = d.id
+            WHERE d.property_id = ?
+            AND LOWER(os.line_item) LIKE '%net operating income%'
+            AND os.period = 'Total'
+            ORDER BY os.id DESC LIMIT 1
+        """, (property_id,))
+        row = cur.fetchone()
+        metrics['annual_noi'] = row['amount'] if row else None
+
+        # Average rent from unit_mix rent_roll_entries
+        cur = self.conn.execute("""
+            SELECT AVG(rr.monthly_rent) as avg_rent
+            FROM rent_roll_entries rr
+            JOIN documents d ON rr.document_id = d.id
+            WHERE d.property_id = ?
+            AND rr.monthly_rent IS NOT NULL
+            AND rr.metadata LIKE '%"source": "unit_mix"%'
+            AND rr.document_id = (
+                SELECT rr2.document_id FROM rent_roll_entries rr2
+                JOIN documents d2 ON rr2.document_id = d2.id
+                WHERE d2.property_id = ?
+                AND rr2.metadata LIKE '%"source": "unit_mix"%'
+                ORDER BY rr2.id DESC LIMIT 1
+            )
+        """, (property_id, property_id))
+        row = cur.fetchone()
+        metrics['avg_monthly_rent'] = round(row['avg_rent'], 0) if row and row['avg_rent'] else None
+
+        # Occupied / vacant from occupancy financial terms
+        cur = self.conn.execute("""
+            SELECT ft.term_label, ft.value_numeric FROM financial_terms ft
+            JOIN documents d ON ft.document_id = d.id
+            WHERE d.property_id = ?
+            AND ft.term_type = 'occupancy_count'
+            ORDER BY ft.id DESC
+        """, (property_id,))
+        for row in cur.fetchall():
+            label = (row['term_label'] or '').lower()
+            if 'occupied' in label and 'occupied' not in metrics:
+                metrics['occupied'] = int(row['value_numeric']) if row['value_numeric'] else None
+            elif 'vacant' in label and 'vacant' not in metrics:
+                metrics['vacant'] = int(row['value_numeric']) if row['value_numeric'] else None
+
+        # Derive occupied/vacant from total_units and occupancy_rate if not directly available
+        if metrics.get('total_units') and metrics.get('occupancy_rate'):
+            if 'occupied' not in metrics:
+                metrics['occupied'] = round(metrics['total_units'] * metrics['occupancy_rate'] / 100)
+            if 'vacant' not in metrics:
+                metrics['vacant'] = metrics['total_units'] - metrics.get('occupied', 0)
+
+        return metrics
 
     def get_property_debt_summary(self, property_id: int) -> Dict:
         """Debt bucket: loan terms, guarantees, covenants."""
@@ -2462,7 +2838,109 @@ class Database:
         """)
         stats['upcoming_expirations'] = [dict(row) for row in cur.fetchall()]
 
+        # ── Extraction-derived metrics (fallback when units table is sparse) ──
+        # These pull from extracted rent_roll_entries and financial_terms to
+        # surface monthly report data on the dashboard even before units are
+        # manually created.
+        stats['extracted'] = self._get_extracted_dashboard_metrics()
+
         return stats
+
+    def _get_extracted_dashboard_metrics(self) -> Dict:
+        """
+        Compute dashboard metrics from extracted data (rent_roll_entries,
+        financial_terms, operating_statement_items).
+
+        Returns dict with keys:
+          total_units, occupancy_rate, monthly_gpr, annual_noi,
+          rent_roll_entries, os_items, financial_terms
+        """
+        metrics = {}
+
+        # Total units from financial_terms (total_units term type)
+        cur = self.conn.execute("""
+            SELECT value_numeric FROM financial_terms
+            WHERE term_type = 'total_units'
+            ORDER BY id DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        metrics['total_units'] = int(row['value_numeric']) if row and row['value_numeric'] else None
+
+        # Occupancy rate from financial_terms (prefer computed, then Current, then any)
+        cur = self.conn.execute("""
+            SELECT value_numeric FROM financial_terms
+            WHERE term_type = 'occupancy_rate'
+            AND term_label LIKE '%Computed%'
+            ORDER BY id DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        metrics['occupancy_rate'] = row['value_numeric'] if row else None
+
+        if metrics['occupancy_rate'] is None:
+            cur = self.conn.execute("""
+                SELECT value_numeric FROM financial_terms
+                WHERE term_type = 'occupancy_rate'
+                AND term_label LIKE '%Current%'
+                ORDER BY id DESC LIMIT 1
+            """)
+            row = cur.fetchone()
+            metrics['occupancy_rate'] = row['value_numeric'] if row else None
+
+        if metrics['occupancy_rate'] is None:
+            cur = self.conn.execute("""
+                SELECT value_numeric FROM financial_terms
+                WHERE term_type = 'occupancy_rate'
+                ORDER BY id DESC LIMIT 1
+            """)
+            row = cur.fetchone()
+            metrics['occupancy_rate'] = row['value_numeric'] if row else None
+
+        # Monthly GPR from financial_terms
+        cur = self.conn.execute("""
+            SELECT value_numeric FROM financial_terms
+            WHERE term_type = 'gross_potential_rent'
+            AND term_label LIKE '%Monthly%'
+            ORDER BY id DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        metrics['monthly_gpr'] = row['value_numeric'] if row and row['value_numeric'] else None
+
+        # Annual NOI from operating_statement_items (latest Total period)
+        cur = self.conn.execute("""
+            SELECT amount FROM operating_statement_items
+            WHERE LOWER(line_item) LIKE '%net operating income%'
+            AND period = 'Total'
+            ORDER BY id DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        metrics['annual_noi'] = row['amount'] if row else None
+
+        # Counts
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM rent_roll_entries")
+        metrics['rent_roll_entries'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM operating_statement_items")
+        metrics['os_items'] = cur.fetchone()['cnt']
+
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM financial_terms")
+        metrics['financial_terms'] = cur.fetchone()['cnt']
+
+        # Average rent from rent_roll_entries (unit_mix source, most recent doc)
+        cur = self.conn.execute("""
+            SELECT AVG(monthly_rent) as avg_rent
+            FROM rent_roll_entries
+            WHERE monthly_rent IS NOT NULL
+            AND metadata LIKE '%"source": "unit_mix"%'
+            AND document_id = (
+                SELECT document_id FROM rent_roll_entries
+                WHERE metadata LIKE '%"source": "unit_mix"%'
+                ORDER BY id DESC LIMIT 1
+            )
+        """)
+        row = cur.fetchone()
+        metrics['avg_monthly_rent'] = round(row['avg_rent'], 0) if row and row['avg_rent'] else None
+
+        return metrics
 
     def export_to_csv(self, table: str, filepath: str, filters: Dict = None):
         """Export any table to CSV with optional filters."""

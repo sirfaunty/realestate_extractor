@@ -24,6 +24,7 @@ INSTALLED_MODULES = [
     'modules.market_intel',
     'modules.office',
     'modules.closing_books',
+    'modules.tif_analysis',
 ]
 
 
