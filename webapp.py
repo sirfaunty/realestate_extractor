@@ -2234,6 +2234,206 @@ def api_reextract(doc_id):
         db.close()
 
 
+# ─── Bulk Re-extract & Document Groups ─────────────────────────────
+
+@app.route('/api/documents/groups')
+@login_required
+def api_document_groups():
+    """List documents grouped by upload directory (batch) for management.
+
+    Returns groups with doc counts, type breakdown, and extraction status.
+    """
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        docs = db.list_documents()
+        # Group by the directory portion of filepath
+        groups = {}
+        for doc in docs:
+            fp = doc.get('filepath', '')
+            # Extract the batch/upload directory
+            dir_path = os.path.dirname(fp)
+            dir_name = os.path.basename(dir_path) if dir_path else 'ungrouped'
+
+            if dir_name not in groups:
+                groups[dir_name] = {
+                    'name': dir_name,
+                    'dir_path': dir_path,
+                    'doc_count': 0,
+                    'doc_ids': [],
+                    'types': {},
+                    'properties': set(),
+                    'oldest': None,
+                    'newest': None,
+                    'has_files': True,
+                }
+            g = groups[dir_name]
+            g['doc_count'] += 1
+            g['doc_ids'].append(doc['id'])
+            dtype = doc.get('document_type', 'unknown')
+            g['types'][dtype] = g['types'].get(dtype, 0) + 1
+            if doc.get('property_name'):
+                g['properties'].add(doc['property_name'])
+            ts = doc.get('processed_at', '')
+            if ts:
+                if not g['oldest'] or ts < g['oldest']:
+                    g['oldest'] = ts
+                if not g['newest'] or ts > g['newest']:
+                    g['newest'] = ts
+
+        # Check if source files still exist for each group
+        for g in groups.values():
+            if g['dir_path'] and not os.path.isdir(g['dir_path']):
+                # Check if any individual doc files exist
+                g['has_files'] = False
+                for doc in docs:
+                    if os.path.dirname(doc.get('filepath', '')) == g['dir_path']:
+                        if os.path.exists(doc['filepath']):
+                            g['has_files'] = True
+                            break
+
+        # Convert sets to lists for JSON
+        result = []
+        for name, g in sorted(groups.items(), key=lambda x: x[1].get('newest', ''), reverse=True):
+            result.append({
+                'name': g['name'],
+                'dir_path': g['dir_path'],
+                'doc_count': g['doc_count'],
+                'doc_ids': g['doc_ids'],
+                'types': g['types'],
+                'properties': sorted(g['properties']),
+                'oldest': g['oldest'],
+                'newest': g['newest'],
+                'has_files': g['has_files'],
+            })
+        return jsonify({'groups': result, 'total_docs': len(docs)})
+    finally:
+        db.close()
+
+
+@app.route('/api/documents/bulk-reextract', methods=['POST'])
+@login_required
+def api_bulk_reextract():
+    """Re-extract multiple documents by ID list.
+
+    JSON body:
+      doc_ids: list of document IDs to re-extract
+    """
+    org_id = session['org_id']
+    user_id = session['user_id']
+    data = request.get_json()
+    if not data or 'doc_ids' not in data:
+        return jsonify({'error': 'doc_ids required'}), 400
+
+    doc_ids = data['doc_ids']
+    if not doc_ids:
+        return jsonify({'error': 'No documents specified'}), 400
+
+    # Cap at 500 docs per batch for safety
+    if len(doc_ids) > 500:
+        return jsonify({'error': f'Too many documents ({len(doc_ids)}), max 500'}), 400
+
+    # Validate all docs exist and collect file info
+    db = get_org_db(org_id)
+    try:
+        doc_infos = []
+        missing_files = []
+        for doc_id in doc_ids:
+            doc = db.get_document(doc_id)
+            if not doc:
+                continue
+            fp = doc.get('filepath', '')
+            if not fp or not os.path.exists(fp):
+                missing_files.append({'id': doc_id, 'filename': doc.get('filename', '?')})
+                continue
+            doc_infos.append({
+                'id': doc_id,
+                'filepath': fp,
+                'property_name': doc.get('property_name'),
+                'filename': doc.get('filename', os.path.basename(fp)),
+            })
+
+        if not doc_infos:
+            return jsonify({
+                'error': 'No documents have source files on disk',
+                'missing_files': missing_files
+            }), 400
+
+        # Delete all extractions first (batch delete)
+        deleted_count = 0
+        for info in doc_infos:
+            result = db.delete_document_extractions(info['id'])
+            if result:
+                deleted_count += 1
+
+    finally:
+        db.close()
+
+    # Create a job for the bulk re-extract
+    _cleanup_expired_jobs()
+    job_id = str(uuid.uuid4())[:8]
+    total = len(doc_infos)
+    jobs[job_id] = {
+        'id': job_id,
+        'org_id': org_id,
+        'status': 'processing',
+        'type': 'bulk_reextract',
+        'filename': f'Re-extracting {total} documents',
+        'total': total,
+        'progress': 0,
+        'results': [],
+        'error': None,
+        'started': datetime.now().isoformat(),
+        'step': 'reprocessing',
+        'step_detail': f'Queued {total} documents for re-extraction...',
+        'steps_log': [{'step': 'reprocessing',
+                       'detail': f'Starting re-extraction of {total} documents',
+                       'time': datetime.now().isoformat()}],
+    }
+
+    def process_bulk():
+        results_list = []
+        errors = 0
+        for i, info in enumerate(doc_infos):
+            fname = info['filename']
+            jobs[job_id]['step_detail'] = f'Processing {i+1}/{total}: {fname}'
+            jobs[job_id]['steps_log'].append({
+                'step': 'reprocessing',
+                'detail': f'Processing {fname}',
+                'time': datetime.now().isoformat()
+            })
+
+            result, had_error = _process_single_doc_thread(
+                org_id, user_id,
+                info['filepath'],
+                None,  # let classifier re-detect type
+                info['property_name']
+            )
+
+            results_list.append(_result_to_dict(result))
+            if had_error:
+                errors += 1
+            jobs[job_id]['progress'] = i + 1
+
+        jobs[job_id]['results'] = results_list
+        jobs[job_id]['status'] = 'completed' if errors == 0 else 'completed_with_errors'
+        jobs[job_id]['step'] = 'complete'
+        jobs[job_id]['step_detail'] = (
+            f'Re-extracted {total} documents'
+            + (f' ({errors} errors)' if errors else '')
+        )
+
+    enqueue_job(job_id, process_bulk)
+
+    return jsonify({
+        'success': True,
+        'job_id': job_id,
+        'doc_count': total,
+        'missing_files': missing_files,
+        'deleted_extractions': deleted_count,
+    })
+
+
 @app.route('/api/property/<int:property_id>/analyze', methods=['POST'])
 @login_required
 def api_analyze_property(property_id):
