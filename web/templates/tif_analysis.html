@@ -176,6 +176,7 @@
 </style>
 
 <div class="tif-root">
+  <div class="xref-bar" id="xrefBar"></div>
 
   <!-- ── Header ── -->
   <div class="tif-header">
@@ -737,6 +738,12 @@
   });
 
   // ─── Init ─────────────────────────────────────────────────────
+  capactive.renderModuleLinks('xrefBar', [
+    {label:'Partnership Dashboard', url:'/partnership/'},
+    {label:'Distribution & Surplus Cash', url:'/distribution/'},
+    {label:'Debt & Loan Analysis', url:'/debt/'},
+    {label:'Proforma', url:'/proforma/'},
+  ]);
   loadScenarios();
   loadSensitivity();
   loadBreakeven();

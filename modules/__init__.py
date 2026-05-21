@@ -25,6 +25,9 @@ INSTALLED_MODULES = [
     'modules.office',
     'modules.closing_books',
     'modules.tif_analysis',
+    'modules.distribution',
+    'modules.debt_analysis',
+    'modules.partnership_dashboard',
 ]
 
 

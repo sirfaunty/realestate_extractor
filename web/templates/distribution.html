@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+
+{% block title %}Distribution & Surplus Cash — capactive{% endblock %}
+
+{% block content %}
+<script>document.querySelector('.main').classList.add('main-wide');</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   DISTRIBUTION MODULE — Scoped Styles
+   ═══════════════════════════════════════════════════════════════ */
+.dist-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+  --navy: var(--brand-navy);
+  --active: var(--brand-active);
+  --primary: var(--brand-primary);
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --ka-color: #185FA5;
+  --idp-color: #d97706;
+  --mono: 'SF Mono', Consolas, monospace;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* ── Header ── */
+.dist-root .dist-header { margin-bottom: 16px; }
+.dist-root .dist-header h1 { font-size: 22px; font-weight: 700; margin: 0; color: var(--navy); }
+.dist-root .dist-header .subtitle { font-size: 14px; color: var(--text); margin-top: 4px; font-weight: 500; }
+.dist-root .dist-header .source-attr { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── Stats Bar ── */
+.dist-root .stats-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.dist-root .stat-card {
+  flex: 1; min-width: 140px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; text-align: center;
+}
+.dist-root .stat-card .stat-value { font-size: 22px; font-weight: 700; color: var(--navy); }
+.dist-root .stat-card .stat-label {
+  font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.4px; margin-top: 2px;
+}
+.dist-root .stat-card.ka .stat-value { color: var(--ka-color); }
+.dist-root .stat-card.idp .stat-value { color: var(--idp-color); }
+
+/* ── Section Panels ── */
+.dist-root .panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+}
+.dist-root .panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  background: #f9fafb;
+}
+.dist-root .panel-header h2 {
+  font-size: 15px; font-weight: 700; margin: 0; color: var(--navy);
+}
+.dist-root .panel-body { padding: 0; }
+.dist-root .panel-body-padded { padding: 18px; }
+
+/* ── Tables ── */
+.dist-root .dist-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.dist-root .dist-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.dist-root .dist-table th {
+  text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted);
+  border-bottom: 2px solid var(--border); white-space: nowrap;
+}
+.dist-root .dist-table th.right, .dist-root .dist-table td.right { text-align: right; }
+.dist-root .dist-table td {
+  padding: 8px 12px; border-bottom: 1px solid #f0f1f3; font-variant-numeric: tabular-nums;
+}
+.dist-root .dist-table tr:last-child td { border-bottom: none; }
+.dist-root .dist-table tr:hover td { background: #fafbfc; }
+.dist-root .dist-table .row-total td { font-weight: 700; border-top: 2px solid var(--border); background: #f9fafb; }
+
+/* ── Waterfall Diagram ── */
+.dist-root .waterfall-tiers {
+  display: flex; gap: 0; margin: 0; padding: 18px;
+}
+.dist-root .waterfall-tier {
+  flex: 1; text-align: center; padding: 16px 12px;
+  border: 2px solid var(--border); position: relative;
+}
+.dist-root .waterfall-tier:first-child { border-radius: 8px 0 0 8px; }
+.dist-root .waterfall-tier:last-child { border-radius: 0 8px 8px 0; }
+.dist-root .waterfall-tier:not(:first-child) { border-left: none; }
+.dist-root .waterfall-tier .tier-order {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  background: var(--navy); color: #fff; width: 20px; height: 20px;
+  border-radius: 50%; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.dist-root .waterfall-tier .tier-name {
+  font-weight: 700; font-size: 13px; color: var(--navy); margin-top: 8px;
+}
+.dist-root .waterfall-tier .tier-type {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
+.dist-root .waterfall-tier .tier-alloc {
+  font-size: 12px; margin-top: 8px; font-weight: 500;
+}
+.dist-root .waterfall-tier .tier-provision {
+  font-size: 10px; color: var(--muted); margin-top: 4px; font-style: italic;
+}
+.dist-root .waterfall-arrow {
+  display: flex; align-items: center; color: var(--muted); font-size: 18px; padding: 0 2px;
+}
+
+/* ── Chart ── */
+.dist-root .chart-container { padding: 18px; }
+.dist-root canvas { max-height: 300px; }
+
+/* ── Partner Tags ── */
+.dist-root .partner-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+.dist-root .partner-tag.ka { background: #E6F1FB; color: var(--ka-color); }
+.dist-root .partner-tag.idp { background: #FEF3C7; color: var(--idp-color); }
+
+/* ── Toggle ── */
+.dist-root .toggle-btn {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 12px; font-size: 11px; cursor: pointer; color: var(--muted);
+}
+.dist-root .toggle-btn:hover { border-color: var(--active); color: var(--active); }
+.dist-root .toggle-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+/* ── Scenario Selector ── */
+.dist-root .scenario-selector {
+  display: flex; gap: 8px; align-items: center;
+}
+.dist-root .scenario-selector label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.dist-root .scenario-selector select {
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; background: #fff; cursor: pointer;
+}
+.dist-root .source-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+}
+.dist-root .source-badge.live { background: #D1FAE5; color: #065F46; }
+.dist-root .source-badge.defaults { background: #FEF3C7; color: #92400E; }
+
+/* ── Sale Toggle ── */
+.dist-root .sale-toggle { display: flex; gap: 6px; align-items: center; }
+.dist-root .sale-toggle label { font-size: 11px; color: var(--muted); }
+
+/* ── Loading ── */
+.dist-root .loading { text-align: center; padding: 40px; color: var(--muted); }
+
+/* ── Grid ── */
+.dist-root .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .dist-root .grid-2 { grid-template-columns: 1fr; } }
+
+/* ── Proforma Context Table ── */
+.dist-root .context-row td { font-size: 11px; color: var(--muted); }
+.dist-root .context-row td.val { color: var(--text); font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="dist-root">
+  <div class="xref-bar" id="xrefBar"></div>
+  <!-- Header -->
+  <div class="dist-header">
+    <h1>Distribution & Surplus Cash</h1>
+    <div class="subtitle">Chamberlain Apartments LLC — Partnership Waterfall Analysis</div>
+    <div class="source-attr">Source: LLC Agreement §5.2 &middot; Amended & Restated Surplus Cash Note &middot; <span id="sourceLabel"></span></div>
+  </div>
+
+  <!-- Controls Bar -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+    <div class="scenario-selector">
+      <label>TIF Scenario:</label>
+      <select id="tifSelect" onchange="onTifChange()">
+        <option value="baseline">Baseline (No Appeal)</option>
+      </select>
+      <div class="sale-toggle">
+        <input type="checkbox" id="saleToggle" checked onchange="onSaleToggle()">
+        <label for="saleToggle">Include Year-10 Sale Proceeds</label>
+      </div>
+    </div>
+    <span id="sourceBadge" class="source-badge defaults">Loading...</span>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="loading">Loading distribution data...</div>
+  </div>
+
+  <!-- Waterfall Structure -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Waterfall Structure</h2>
+    </div>
+    <div class="panel-body" id="waterfallDiagram">
+      <div class="loading">Loading waterfall...</div>
+    </div>
+  </div>
+
+  <!-- Two-column: Partner Summary + Return Metrics -->
+  <div class="grid-2">
+    <!-- Partner Summary -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Partner Summary</h2>
+      </div>
+      <div class="panel-body" id="partnerSummary">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Return Metrics -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Return Metrics</h2>
+      </div>
+      <div class="panel-body panel-body-padded" id="returnMetrics">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Year-by-Year Distribution with proforma context -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Year-by-Year Distribution</h2>
+      <div style="display:flex; gap:6px;">
+        <button class="toggle-btn" id="btnProforma" onclick="toggleProformaContext()">Show Proforma</button>
+        <button class="toggle-btn" id="btnTier" onclick="toggleTierDetail()">Show Tier Detail</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="dist-table-wrap">
+        <table class="dist-table" id="yearTable">
+          <thead><tr><td colspan="8" class="loading">Loading...</td></tr></thead>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Distribution Chart -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Distribution by Partner — Annual</h2>
+    </div>
+    <div class="panel-body chart-container">
+      <canvas id="distChart"></canvas>
+    </div>
+  </div>
+
+  <!-- TIF Scenario Comparison -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>TIF Scenario Comparison</h2>
+    </div>
+    <div class="panel-body">
+      <div class="dist-table-wrap">
+        <table class="dist-table" id="scenarioTable">
+          <thead><tr><td colspan="8" class="loading">Loading...</td></tr></thead>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Surplus Cash Note -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Surplus Cash Note Amortization</h2>
+    </div>
+    <div class="panel-body">
+      <div class="dist-table-wrap">
+        <table class="dist-table" id="surplusTable">
+          <thead><tr><td colspan="6" class="loading">Loading...</td></tr></thead>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sensitivity -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Cash Flow Sensitivity</h2>
+    </div>
+    <div class="panel-body">
+      <div class="dist-table-wrap">
+        <table class="dist-table" id="sensitivityTable">
+          <thead><tr><td colspan="7" class="loading">Loading...</td></tr></thead>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+(function() {
+  const $ = s => document.querySelector(s);
+  const fmt = n => n == null ? '—' : '$' + Math.round(n).toLocaleString();
+  const fmtM = n => n == null ? '—' : '$' + (n/1e6).toFixed(2) + 'M';
+  const fmtPct = (n, d=1) => n == null ? '—' : (n * 100).toFixed(d) + '%';
+  const fmtX = n => n == null ? '—' : n.toFixed(2) + 'x';
+
+  let _data = null;
+  let _showTierDetail = false;
+  let _showProforma = false;
+  let _chart = null;
+  let _tifScenario = capactive.getTif();
+  let _includeSale = true;
+
+  async function loadAssumptions() {
+    try {
+      const r = await fetch('/distribution/api/assumptions');
+      const data = await r.json();
+      if (data.tif_scenarios && data.tif_scenarios.length > 0) {
+        const sel = $('#tifSelect');
+        sel.innerHTML = '';
+        data.tif_scenarios.forEach(sc => {
+          const opt = document.createElement('option');
+          opt.value = sc.id;
+          opt.textContent = sc.label;
+          sel.appendChild(opt);
+        });
+        // Restore TIF from URL param
+        if (_tifScenario !== 'baseline') sel.value = _tifScenario;
+      }
+    } catch(e) { console.warn('Could not load assumptions:', e); }
+  }
+
+  async function load() {
+    try {
+      const tif = _tifScenario;
+      const sale = _includeSale;
+      const [wfRes, sensRes, noteRes, scRes] = await Promise.all([
+        fetch(`/distribution/api/waterfall?tif_scenario=${tif}&include_sale=${sale}`),
+        fetch(`/distribution/api/sensitivity?tif_scenario=${tif}`),
+        fetch('/distribution/api/surplus-note'),
+        fetch('/distribution/api/scenarios'),
+      ]);
+      _data = {
+        waterfall: await wfRes.json(),
+        sensitivity: await sensRes.json(),
+        surplusNote: await noteRes.json(),
+        scenarios: await scRes.json(),
+      };
+      render();
+    } catch (e) {
+      console.error('Load error:', e);
+      $('#statsBar').innerHTML = '<div class="loading" style="color:var(--danger)">Error loading data</div>';
+    }
+  }
+
+  function render() {
+    const d = _data.waterfall;
+    const src = d.proforma_source || 'defaults';
+    const badge = $('#sourceBadge');
+    badge.className = 'source-badge ' + src;
+    badge.textContent = src === 'live' ? 'Live Proforma' : 'Default Estimates';
+    $('#sourceLabel').textContent = src === 'live'
+      ? 'Proforma Engine (' + (d.tif_scenario || 'baseline').replace(/_/g, ' ') + ')'
+      : 'Default CF estimates';
+
+    renderStats(d);
+    renderWaterfallDiagram(d.waterfall_structure);
+    renderPartnerSummary(d.partner_summary);
+    renderReturns(d.returns, d.proforma_context);
+    renderYearTable(d.years, d.proforma_context);
+    renderChart(d.years);
+    renderSurplusNote(_data.surplusNote);
+    renderSensitivity(_data.sensitivity);
+    renderScenarioComparison(_data.scenarios);
+  }
+
+  function renderStats(d) {
+    const ret = d.returns;
+    const deal = ret.deal;
+    const ka = ret.by_partner.KA || {};
+    const idp = ret.by_partner.IDP || {};
+    const ctx = d.proforma_context;
+    let saleHtml = '';
+    if (ctx && ctx.net_sale_proceeds > 0 && _includeSale) {
+      saleHtml = `<div class="stat-card">
+        <div class="stat-value">${fmtM(ctx.net_sale_proceeds)}</div>
+        <div class="stat-label">Net Sale Proceeds</div>
+      </div>`;
+    }
+    $('#statsBar').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-value">${fmtM(deal.total_distributed)}</div>
+        <div class="stat-label">Total Distributed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${fmtX(deal.equity_multiple)}</div>
+        <div class="stat-label">Deal EM</div>
+      </div>
+      <div class="stat-card ka">
+        <div class="stat-value">${fmtX(ka.equity_multiple)}</div>
+        <div class="stat-label">KA Equity Multiple</div>
+      </div>
+      <div class="stat-card idp">
+        <div class="stat-value">${fmtX(idp.equity_multiple)}</div>
+        <div class="stat-label">IDP Equity Multiple</div>
+      </div>
+      <div class="stat-card ka">
+        <div class="stat-value">${fmtPct(ka.irr)}</div>
+        <div class="stat-label">KA IRR</div>
+      </div>
+      <div class="stat-card idp">
+        <div class="stat-value">${fmtPct(idp.irr)}</div>
+        <div class="stat-label">IDP IRR</div>
+      </div>
+      ${saleHtml}
+    `;
+  }
+
+  function renderWaterfallDiagram(tiers) {
+    if (!tiers || !tiers.length) {
+      $('#waterfallDiagram').innerHTML = '<div class="loading">No waterfall configured</div>';
+      return;
+    }
+    let html = '<div class="waterfall-tiers">';
+    tiers.forEach(t => {
+      const allocStr = Object.entries(t.allocation)
+        .filter(([,v]) => v > 0)
+        .map(([k, v]) => `<span class="partner-tag ${k.toLowerCase()}">${k} ${(v*100).toFixed(0)}%</span>`)
+        .join(' ');
+      const typeLabel = t.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      html += `
+        <div class="waterfall-tier">
+          <div class="tier-order">${t.order}</div>
+          <div class="tier-name">${t.name}</div>
+          <div class="tier-type">${typeLabel}</div>
+          <div class="tier-alloc">${allocStr}</div>
+          ${t.provision ? `<div class="tier-provision">${t.provision}</div>` : ''}
+        </div>`;
+    });
+    html += '</div>';
+    $('#waterfallDiagram').innerHTML = html;
+  }
+
+  function renderPartnerSummary(partners) {
+    let html = '<table class="dist-table"><thead><tr>';
+    html += '<th>Partner</th><th>Role</th><th class="right">Ownership</th>';
+    html += '<th class="right">Initial Equity</th><th class="right">Total Dist.</th>';
+    html += '<th class="right">EM</th><th class="right">Unpaid Pref</th>';
+    html += '</tr></thead><tbody>';
+    partners.forEach(p => {
+      const cls = p.id.toLowerCase();
+      html += `<tr>
+        <td><span class="partner-tag ${cls}">${p.id}</span> ${p.name}</td>
+        <td>${p.role}</td>
+        <td class="right">${fmtPct(p.ownership_pct, 0)}</td>
+        <td class="right">${fmt(p.initial_equity)}</td>
+        <td class="right">${fmt(p.total_distributions)}</td>
+        <td class="right" style="font-weight:700">${fmtX(p.equity_multiple)}</td>
+        <td class="right" style="color:${p.unpaid_pref > 0 ? 'var(--warning)' : 'var(--success)'}">${fmt(p.unpaid_pref)}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    $('#partnerSummary').innerHTML = html;
+  }
+
+  function renderReturns(ret, ctx) {
+    const deal = ret.deal;
+    const ka = ret.by_partner.KA || {};
+    const idp = ret.by_partner.IDP || {};
+
+    let html = '<table class="dist-table"><thead><tr>';
+    html += '<th>Metric</th><th class="right">Deal</th>';
+    html += '<th class="right"><span class="partner-tag ka">KA</span></th>';
+    html += '<th class="right"><span class="partner-tag idp">IDP</span></th>';
+    html += '</tr></thead><tbody>';
+
+    html += row('Total Equity', fmt(deal.total_equity), fmt(ka.initial_equity), fmt(idp.initial_equity));
+    html += row('Total Distributions', fmt(deal.total_distributed), fmt(ka.total_distributions), fmt(idp.total_distributions));
+    html += row('Equity Multiple', fmtX(deal.equity_multiple), fmtX(ka.equity_multiple), fmtX(idp.equity_multiple));
+    html += row('IRR', fmtPct(deal.irr), fmtPct(ka.irr), fmtPct(idp.irr));
+    html += row('Avg Cash-on-Cash', '—', fmtPct(ka.avg_cash_on_cash), fmtPct(idp.avg_cash_on_cash));
+
+    if (ctx) {
+      html += '<tr><td colspan="4" style="border-top:2px solid var(--border);font-size:11px;color:var(--muted);padding-top:8px">Proforma Benchmarks</td></tr>';
+      html += row('Proforma IRR', fmtPct(ctx.proforma_irr), '—', '—');
+      html += row('Proforma EM', fmtX(ctx.proforma_em), '—', '—');
+      if (ctx.exit_cap_rate) html += row('Exit Cap Rate', fmtPct(ctx.exit_cap_rate), '—', '—');
+    }
+
+    html += '</tbody></table>';
+    $('#returnMetrics').innerHTML = html;
+
+    function row(label, d, k, i) {
+      return `<tr><td style="font-weight:600">${label}</td><td class="right">${d}</td><td class="right">${k}</td><td class="right">${i}</td></tr>`;
+    }
+  }
+
+  function renderYearTable(years, ctx) {
+    const hasCtx = _showProforma && ctx;
+    let html = '<thead><tr>';
+    html += '<th>Year</th>';
+    if (hasCtx) html += '<th class="right" style="color:var(--muted)">NOI</th><th class="right" style="color:var(--muted)">Debt Svc</th>';
+    html += '<th class="right">Distributable CF</th>';
+    html += '<th class="right">Surplus Note</th><th class="right">Net Distributable</th>';
+    html += '<th class="right"><span class="partner-tag ka">KA</span></th>';
+    html += '<th class="right"><span class="partner-tag idp">IDP</span></th>';
+    html += '<th class="right">KA CoC</th><th class="right">IDP CoC</th>';
+    if (_showTierDetail) html += '<th>Tier Breakdown</th>';
+    html += '</tr></thead><tbody>';
+
+    let totals = { cf: 0, note: 0, net: 0, ka: 0, idp: 0 };
+
+    years.forEach(yr => {
+      const ka = yr.distributions_by_partner.KA || 0;
+      const idp = yr.distributions_by_partner.IDP || 0;
+      totals.cf += yr.distributable_cash;
+      totals.note += yr.surplus_cash_note_payment;
+      totals.net += yr.net_distributable;
+      totals.ka += ka;
+      totals.idp += idp;
+
+      html += `<tr>
+        <td style="font-weight:600">Y${yr.year} <span style="color:var(--muted);font-weight:400">(${yr.calendar_year})</span></td>`;
+      if (hasCtx) {
+        const noi = ctx.noi_by_year ? ctx.noi_by_year[yr.year] : null;
+        const ds = ctx.debt_service_by_year ? ctx.debt_service_by_year[yr.year] : null;
+        html += `<td class="right" style="color:var(--muted)">${noi != null ? fmt(noi) : '—'}</td>`;
+        html += `<td class="right" style="color:var(--muted)">${ds != null ? fmt(ds) : '—'}</td>`;
+      }
+      html += `
+        <td class="right">${fmt(yr.distributable_cash)}</td>
+        <td class="right" style="color:var(--warning)">${fmt(yr.surplus_cash_note_payment)}</td>
+        <td class="right">${fmt(yr.net_distributable)}</td>
+        <td class="right">${fmt(ka)}</td>
+        <td class="right">${fmt(idp)}</td>
+        <td class="right">${fmtPct(yr.coc_by_partner.KA)}</td>
+        <td class="right">${fmtPct(yr.coc_by_partner.IDP)}</td>`;
+      if (_showTierDetail) {
+        const detail = yr.tier_detail.map(td =>
+          `${td.tier}: <span class="partner-tag ${td.partner.toLowerCase()}">${td.partner}</span> ${fmt(td.amount)}`
+        ).join('<br>');
+        html += `<td style="font-size:11px">${detail || '—'}</td>`;
+      }
+      html += '</tr>';
+    });
+
+    const colSpan = 2 + (hasCtx ? 2 : 0);
+    html += `<tr class="row-total">
+      <td>Total</td>
+      ${hasCtx ? '<td class="right">—</td><td class="right">—</td>' : ''}
+      <td class="right">${fmt(totals.cf)}</td>
+      <td class="right">${fmt(totals.note)}</td>
+      <td class="right">${fmt(totals.net)}</td>
+      <td class="right">${fmt(totals.ka)}</td>
+      <td class="right">${fmt(totals.idp)}</td>
+      <td class="right">—</td><td class="right">—</td>
+      ${_showTierDetail ? '<td>—</td>' : ''}
+    </tr>`;
+    html += '</tbody>';
+    $('#yearTable').innerHTML = html;
+  }
+
+  function renderChart(years) {
+    const labels = years.map(y => y.calendar_year);
+    const kaData = years.map(y => Math.round(y.distributions_by_partner.KA || 0));
+    const idpData = years.map(y => Math.round(y.distributions_by_partner.IDP || 0));
+    const noteData = years.map(y => Math.round(y.surplus_cash_note_payment || 0));
+
+    if (_chart) _chart.destroy();
+    _chart = new Chart($('#distChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'KA Distribution', data: kaData, backgroundColor: '#185FA5', stack: 'dist' },
+          { label: 'IDP Distribution', data: idpData, backgroundColor: '#d97706', stack: 'dist' },
+          { label: 'Surplus Cash Note', data: noteData, backgroundColor: '#dc262688', stack: 'note' },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(ctx.raw) } }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: {
+            ticks: {
+              callback: v => Math.abs(v) >= 1e6
+                ? '$' + (v/1e6).toFixed(1) + 'M'
+                : '$' + (v/1000).toFixed(0) + 'K'
+            },
+            grid: { color: '#f0f1f3' }
+          }
+        }
+      }
+    });
+  }
+
+  function renderScenarioComparison(data) {
+    if (!data || !data.scenario_names || data.scenario_names.length < 2) {
+      $('#scenarioTable').innerHTML = '<tbody><tr><td class="loading">Proforma required for TIF scenario comparison</td></tr></tbody>';
+      return;
+    }
+    const names = data.scenario_names;
+    let html = '<thead><tr><th>Metric</th>';
+    names.forEach(n => { html += `<th class="right">${n}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    function scRow(label, fn) {
+      html += `<tr><td style="font-weight:600">${label}</td>`;
+      names.forEach(n => {
+        const sc = data.scenarios[n];
+        html += `<td class="right">${fn(sc)}</td>`;
+      });
+      html += '</tr>';
+    }
+
+    scRow('Deal IRR', sc => fmtPct(sc.returns.deal.irr));
+    scRow('Deal EM', sc => fmtX(sc.returns.deal.equity_multiple));
+    scRow('Total Distributed', sc => fmtM(sc.returns.deal.total_distributed));
+    scRow('KA Total', sc => fmt(sc.returns.by_partner.KA.total_distributions));
+    scRow('KA EM', sc => fmtX(sc.returns.by_partner.KA.equity_multiple));
+    scRow('KA IRR', sc => fmtPct(sc.returns.by_partner.KA.irr));
+    scRow('IDP Total', sc => fmt(sc.returns.by_partner.IDP.total_distributions));
+    scRow('IDP EM', sc => fmtX(sc.returns.by_partner.IDP.equity_multiple));
+    scRow('IDP IRR', sc => fmtPct(sc.returns.by_partner.IDP.irr));
+
+    if (data.proforma_source === 'live') {
+      scRow('Proforma IRR', sc => sc.proforma_context ? fmtPct(sc.proforma_context.proforma_irr) : '—');
+      scRow('Net Sale Proceeds', sc => sc.proforma_context ? fmtM(sc.proforma_context.net_sale_proceeds) : '—');
+    }
+
+    html += '</tbody>';
+    $('#scenarioTable').innerHTML = html;
+  }
+
+  function renderSurplusNote(data) {
+    const schedule = data.schedule || [];
+    const info = data.note_info;
+    let html = '<thead><tr>';
+    html += '<th>Year</th><th class="right">Beg. Balance</th>';
+    html += '<th class="right">Interest (2.0%)</th><th class="right">Payment</th>';
+    html += '<th class="right">Principal</th><th class="right">End Balance</th>';
+    html += '</tr></thead><tbody>';
+    schedule.forEach(s => {
+      if (s.beginning_balance <= 0 && s.payment <= 0) return;
+      html += `<tr>
+        <td style="font-weight:600">Y${s.year} <span style="color:var(--muted);font-weight:400">(${s.calendar_year})</span></td>
+        <td class="right">${fmt(s.beginning_balance)}</td>
+        <td class="right">${fmt(s.interest)}</td>
+        <td class="right" style="color:var(--warning)">${fmt(s.payment)}</td>
+        <td class="right">${fmt(s.principal_applied)}</td>
+        <td class="right" style="font-weight:600">${fmt(s.ending_balance)}</td>
+      </tr>`;
+    });
+    if (info) {
+      html += `<tr class="row-total">
+        <td colspan="2">Original Principal: ${fmt(info.principal)}</td>
+        <td colspan="2">Rate: ${fmtPct(info.rate, 1)}</td>
+        <td colspan="2">Annual Payment: ${fmt(info.annual_payment)}</td>
+      </tr>`;
+    }
+    html += '</tbody>';
+    $('#surplusTable').innerHTML = html;
+  }
+
+  function renderSensitivity(data) {
+    const rows = data.rows || data;
+    let html = '<thead><tr>';
+    html += '<th>CF Level</th><th class="right">Total Dist.</th>';
+    html += '<th class="right">KA Total</th><th class="right">IDP Total</th>';
+    html += '<th class="right">KA EM</th><th class="right">IDP EM</th>';
+    html += '<th class="right">KA Unpaid Pref</th>';
+    html += '</tr></thead><tbody>';
+    rows.forEach(row => {
+      const isBase = row.multiplier === 1.0;
+      const style = isBase ? 'font-weight:700; background:#f9fafb' : '';
+      html += `<tr style="${style}">
+        <td style="font-weight:600">${row.label}${isBase ? ' (Base)' : ''}</td>
+        <td class="right">${fmtM(row.total_distributable)}</td>
+        <td class="right">${fmtM(row.ka_total)}</td>
+        <td class="right">${fmtM(row.idp_total)}</td>
+        <td class="right">${fmtX(row.ka_em)}</td>
+        <td class="right">${fmtX(row.idp_em)}</td>
+        <td class="right" style="color:${row.ka_unpaid_pref > 0 ? 'var(--warning)' : 'var(--success)'}">${fmt(row.ka_unpaid_pref)}</td>
+      </tr>`;
+    });
+    html += '</tbody>';
+    $('#sensitivityTable').innerHTML = html;
+  }
+
+  window.toggleTierDetail = function() {
+    _showTierDetail = !_showTierDetail;
+    $('#btnTier').classList.toggle('active', _showTierDetail);
+    if (_data) renderYearTable(_data.waterfall.years, _data.waterfall.proforma_context);
+  };
+  window.toggleProformaContext = function() {
+    _showProforma = !_showProforma;
+    $('#btnProforma').classList.toggle('active', _showProforma);
+    if (_data) renderYearTable(_data.waterfall.years, _data.waterfall.proforma_context);
+  };
+  window.onTifChange = function() {
+    _tifScenario = $('#tifSelect').value;
+    capactive.setTif(_tifScenario);
+    load();
+  };
+  window.onSaleToggle = function() {
+    _includeSale = $('#saleToggle').checked;
+    load();
+  };
+
+  capactive.renderModuleLinks('xrefBar', [
+    {label:'Partnership Dashboard', url:'/partnership/'},
+    {label:'Debt & Loan Analysis', url:'/debt/'},
+    {label:'TIF / Tax Analysis', url:'/tif-analysis/'},
+    {label:'Proforma', url:'/proforma/'},
+  ]);
+  loadAssumptions().then(() => load());
+})();
+</script>
+{% endblock %}

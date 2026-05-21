@@ -179,6 +179,104 @@
     </button>
 </form>
 
+<!-- ─── Batch Management ─────────────────────────────────────────── -->
+<div class="card" id="batch-section" style="margin-top: 32px;">
+    <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <span>Document Batches</span>
+        <button class="btn btn-sm" onclick="loadBatches()" title="Refresh" style="padding: 4px 10px; font-size: 12px;">&#8635; Refresh</button>
+    </div>
+    <div id="batch-loading" style="padding: 20px; text-align: center; color: var(--text-muted, #6b7685); font-size: 13px;">
+        Loading batches…
+    </div>
+    <div id="batch-empty" style="display: none; padding: 24px; text-align: center; color: var(--text-muted, #6b7685); font-size: 13px;">
+        No document batches found. Upload documents above to get started.
+    </div>
+    <div id="batch-list" style="display: none;"></div>
+</div>
+
+<style>
+    .batch-item {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--cap-border, #e2e6ea);
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        transition: background 0.1s;
+    }
+    .batch-item:last-child { border-bottom: none; }
+    .batch-item:hover { background: var(--cap-cloud, #f4f6f8); }
+
+    .batch-icon {
+        font-size: 28px;
+        line-height: 1;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .batch-info { flex: 1; min-width: 0; }
+    .batch-name {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--cap-text, #1a2332);
+        margin-bottom: 4px;
+        word-break: break-all;
+    }
+    .batch-meta {
+        font-size: 12px;
+        color: var(--text-muted, #6b7685);
+        line-height: 1.5;
+    }
+    .batch-meta .tag {
+        display: inline-block;
+        background: var(--cap-cloud, #f4f6f8);
+        border-radius: 4px;
+        padding: 1px 6px;
+        margin-right: 4px;
+        font-size: 11px;
+    }
+    .batch-actions {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-end;
+    }
+    .batch-actions .btn-sm {
+        padding: 5px 12px;
+        font-size: 12px;
+        border-radius: 6px;
+        border: 1px solid var(--cap-border, #e2e6ea);
+        background: #fff;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s;
+    }
+    .batch-actions .btn-sm:hover {
+        border-color: var(--cap-blue, #3A8FD4);
+        color: var(--cap-blue, #3A8FD4);
+    }
+    .batch-actions .btn-reextract {
+        background: var(--cap-blue, #3A8FD4);
+        color: #fff;
+        border-color: var(--cap-blue, #3A8FD4);
+    }
+    .batch-actions .btn-reextract:hover {
+        background: #2d7bc0;
+    }
+    .batch-actions .btn-reextract:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .batch-status-msg {
+        font-size: 11px;
+        color: var(--text-muted, #6b7685);
+        margin-top: 2px;
+    }
+    .batch-no-files {
+        font-size: 11px;
+        color: #c0392b;
+    }
+</style>
+
 {% endblock %}
 
 {% block scripts %}
@@ -450,5 +548,138 @@ form.addEventListener('submit', function(e) {
         setTimeout(() => { list.style.display = 'none'; }, 150);
     });
 })();
+
+// ─── Batch Management ─────────────────────────────────────────────
+function loadBatches() {
+    const loading = document.getElementById('batch-loading');
+    const empty = document.getElementById('batch-empty');
+    const list = document.getElementById('batch-list');
+    loading.style.display = 'block';
+    empty.style.display = 'none';
+    list.style.display = 'none';
+
+    fetch('/api/documents/groups')
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(data => {
+            loading.style.display = 'none';
+            const groups = data.groups || [];
+            if (!groups.length) {
+                empty.style.display = 'block';
+                return;
+            }
+            list.style.display = 'block';
+            list.innerHTML = groups.map(g => renderBatchItem(g)).join('');
+        })
+        .catch(err => {
+            loading.style.display = 'none';
+            list.style.display = 'block';
+            list.innerHTML = '<div style="padding:20px;color:#c0392b;font-size:13px;">Failed to load batches: ' + err.message + '</div>';
+            console.error('Batch load error:', err);
+        });
+}
+
+function renderBatchItem(g) {
+    const icon = g.has_files ? '&#128193;' : '&#128194;';
+    const typeTags = Object.entries(g.types)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([t, n]) => '<span class="tag">' + esc(t) + ' (' + n + ')</span>')
+        .join('');
+    const propList = (g.properties || []).slice(0, 3).map(p => esc(p)).join(', ');
+    const dateStr = g.newest ? new Date(g.newest).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+    const noFiles = g.has_files ? '' : '<div class="batch-no-files">&#9888; Source files not found on disk</div>';
+    const reextractBtn = g.has_files
+        ? '<button class="btn-sm btn-reextract" onclick="reextractBatch(this, ' + JSON.stringify(g.doc_ids).replace(/"/g, '&quot;') + ', \'' + esc(g.name) + '\')">Re-extract All</button>'
+        : '<button class="btn-sm btn-reextract" disabled title="Source files missing">Re-extract All</button>';
+
+    return '<div class="batch-item">' +
+        '<div class="batch-icon">' + icon + '</div>' +
+        '<div class="batch-info">' +
+            '<div class="batch-name">' + esc(g.name) + '</div>' +
+            '<div class="batch-meta">' +
+                '<strong>' + g.doc_count + '</strong> document' + (g.doc_count !== 1 ? 's' : '') +
+                ' &middot; Last processed ' + dateStr +
+                (propList ? ' &middot; ' + propList : '') +
+            '</div>' +
+            '<div class="batch-meta" style="margin-top:3px;">' + typeTags + '</div>' +
+            noFiles +
+        '</div>' +
+        '<div class="batch-actions">' +
+            reextractBtn +
+            '<div class="batch-status-msg" id="batch-status-' + esc(g.name) + '"></div>' +
+        '</div>' +
+    '</div>';
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function reextractBatch(btn, docIds, batchName) {
+    if (!confirm('Re-extract all ' + docIds.length + ' documents in "' + batchName + '"?\n\nThis will delete existing extractions and reprocess each document through the current extractors.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    const statusEl = document.getElementById('batch-status-' + batchName);
+
+    fetch('/api/documents/bulk-reextract', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({doc_ids: docIds})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            btn.disabled = false;
+            btn.textContent = 'Re-extract All';
+            if (statusEl) statusEl.textContent = 'Error: ' + data.error;
+            return;
+        }
+        btn.textContent = 'Processing…';
+        if (statusEl) {
+            statusEl.innerHTML = 'Queued ' + data.doc_count + ' docs &middot; <a href="/job/' + data.job_id + '" style="color:var(--cap-blue,#3A8FD4);">View Progress</a>';
+        }
+        // Poll for completion
+        if (data.job_id) pollBatchJob(data.job_id, btn, statusEl);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = 'Re-extract All';
+        if (statusEl) statusEl.textContent = 'Failed: ' + err.message;
+    });
+}
+
+function pollBatchJob(jobId, btn, statusEl) {
+    const poll = setInterval(() => {
+        fetch('/api/job/' + jobId)
+            .then(r => r.json())
+            .then(job => {
+                if (!job || job.error) { clearInterval(poll); return; }
+                const done = job.progress || 0;
+                const pct = job.total > 0 ? Math.round((done / job.total) * 100) : 0;
+                if (statusEl) {
+                    statusEl.innerHTML = pct + '% (' + done + '/' + job.total + ') &middot; <a href="/job/' + jobId + '" style="color:var(--cap-blue,#3A8FD4);">View</a>';
+                }
+                if (job.status === 'completed' || job.status === 'failed') {
+                    clearInterval(poll);
+                    btn.disabled = false;
+                    btn.textContent = 'Re-extract All';
+                    if (statusEl) {
+                        statusEl.innerHTML = (job.status === 'completed' ? '&#10003; ' : '&#10007; ') +
+                            'Done — ' + done + '/' + job.total + ' processed &middot; <a href="/job/' + jobId + '" style="color:var(--cap-blue,#3A8FD4);">Details</a>';
+                    }
+                }
+            })
+            .catch(() => clearInterval(poll));
+    }, 3000);
+}
+
+// Load batches on page ready
+document.addEventListener('DOMContentLoaded', loadBatches);
 </script>
 {% endblock %}

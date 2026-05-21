@@ -1,0 +1,542 @@
+{% extends "base.html" %}
+
+{% block title %}Partnership Dashboard — capactive{% endblock %}
+
+{% block content %}
+<script>document.querySelector('.main').classList.add('main-wide');</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   PARTNERSHIP DASHBOARD — Scoped Styles
+   ═══════════════════════════════════════════════════════════════ */
+.pd-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --mono: 'SF Mono', Consolas, monospace;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font);
+  color: var(--text);
+}
+
+.pd-root .page-hdr { display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+.pd-root .page-hdr h1 { font-size:22px; font-weight:700; margin:0; }
+.pd-root .page-hdr .entity { font-size:14px; color:var(--muted); }
+.pd-root .page-hdr .scenario-pick { margin-left:auto; }
+.pd-root .page-hdr select { padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:#fff; }
+
+.pd-root .loading-msg { text-align:center; padding:60px 20px; color:var(--muted); font-size:15px; }
+
+/* ─── Stats Grid ─────────────────────────────────────────────── */
+.pd-root .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:24px; }
+.pd-root .stat-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+.pd-root .stat-card .stat-label { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin-bottom:4px; }
+.pd-root .stat-card .stat-value { font-size:22px; font-weight:700; font-family:var(--mono); line-height:1.2; }
+.pd-root .stat-card .stat-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+.pd-root .stat-card.highlight { border-left:3px solid var(--brand-primary); }
+.pd-root .stat-value.positive { color:var(--success); }
+.pd-root .stat-value.negative { color:var(--danger); }
+.pd-root .stat-value.caution { color:var(--warning); }
+
+/* ─── Partner Cards ──────────────────────────────────────────── */
+.pd-root .partner-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; margin-bottom:24px; }
+.pd-root .partner-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px; }
+.pd-root .partner-card h3 { font-size:15px; font-weight:700; margin:0 0 4px; }
+.pd-root .partner-card .partner-role { font-size:12px; color:var(--muted); margin-bottom:14px; }
+.pd-root .partner-card .partner-metrics { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+.pd-root .partner-card .pm { text-align:center; }
+.pd-root .partner-card .pm-label { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+.pd-root .partner-card .pm-value { font-size:18px; font-weight:700; font-family:var(--mono); }
+.pd-root .partner-card .pref-status { margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); display:flex; gap:16px; }
+
+/* ─── Section Panels ─────────────────────────────────────────── */
+.pd-root .section-panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:20px; }
+.pd-root .section-panel h2 { font-size:16px; font-weight:700; margin:0 0 16px; display:flex; align-items:center; gap:8px; }
+.pd-root .section-panel h2 .badge { font-size:10px; background:var(--brand-cloud); color:var(--brand-primary); padding:2px 8px; border-radius:10px; font-weight:600; }
+
+/* ─── Tables ─────────────────────────────────────────────────── */
+.pd-root table { width:100%; border-collapse:collapse; font-size:13px; }
+.pd-root th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); padding:8px 10px; border-bottom:2px solid var(--border); font-weight:600; }
+.pd-root td { padding:8px 10px; border-bottom:1px solid #f0f0f0; font-family:var(--mono); font-size:12px; }
+.pd-root tr:hover td { background:#fafbfc; }
+.pd-root .right { text-align:right; }
+.pd-root td.delta-pos { color:var(--success); }
+.pd-root td.delta-neg { color:var(--danger); }
+.pd-root .table-scroll { overflow-x:auto; }
+
+/* ─── Comparison Table ───────────────────────────────────────── */
+.pd-root .comparison-grid { display:grid; grid-template-columns:1fr; gap:16px; }
+.pd-root .scenario-col { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.pd-root .scenario-col.is-baseline { border-left:3px solid var(--brand-primary); }
+.pd-root .scenario-col h3 { font-size:14px; font-weight:700; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+.pd-root .scenario-col .base-tag { font-size:9px; background:var(--brand-cloud); color:var(--brand-primary); padding:1px 6px; border-radius:8px; }
+.pd-root .sc-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; }
+.pd-root .sc-metric .sc-label { font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); }
+.pd-root .sc-metric .sc-val { font-size:16px; font-weight:700; font-family:var(--mono); }
+.pd-root .sc-metric .sc-delta { font-size:11px; font-family:var(--mono); }
+.pd-root .sc-metric .sc-delta.up { color:var(--success); }
+.pd-root .sc-metric .sc-delta.down { color:var(--danger); }
+
+/* ─── Charts ─────────────────────────────────────────────────── */
+.pd-root .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+.pd-root .chart-box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.pd-root .chart-box h3 { font-size:13px; font-weight:600; margin:0 0 12px; }
+.pd-root .chart-box canvas { width:100%!important; max-height:260px; }
+
+/* ─── Export Button ───────────────────────────────────────────── */
+.pd-root .btn-export { display:inline-flex; align-items:center; padding:6px 14px; background:var(--brand-primary); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
+.pd-root .btn-export:hover { background:var(--brand-navy); }
+.pd-root .btn-export:disabled { background:var(--muted); cursor:wait; }
+
+@media (max-width:900px) {
+  .pd-root .chart-row { grid-template-columns:1fr; }
+  .pd-root .partner-row { grid-template-columns:1fr; }
+  .pd-root .stats-grid { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+
+<div class="pd-root">
+  <div class="xref-bar" id="xrefBar"></div>
+  <!-- Header -->
+  <div class="page-hdr">
+    <div>
+      <h1>Partnership Dashboard</h1>
+      <span class="entity" id="entityName">Chamberlain Apartments LLC</span>
+    </div>
+    <div class="scenario-pick" style="display:flex;align-items:center;gap:12px;">
+      <label style="font-size:12px;color:var(--muted);">TIF Scenario:</label>
+      <select id="scenarioSelect" onchange="switchScenario(this.value)">
+        <option value="__all__">All Scenarios</option>
+      </select>
+      <button onclick="exportReport()" id="exportBtn" class="btn-export" title="Download investor report (.docx)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:4px;"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Export Report
+      </button>
+    </div>
+  </div>
+
+  <div id="loadingMsg" class="loading-msg">Loading partnership data&hellip;</div>
+  <div id="dashContent" style="display:none;">
+
+    <!-- Key Metrics Strip -->
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <!-- Partner Cards -->
+    <div class="partner-row" id="partnerRow"></div>
+
+    <!-- Charts -->
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Annual Distributions by Partner</h3>
+        <canvas id="distChart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>NOI vs Debt Service & DSCR</h3>
+        <canvas id="noiChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Annual Summary Table -->
+    <div class="section-panel">
+      <h2>Annual Summary <span class="badge" id="yearsBadge">10 years</span></h2>
+      <div class="table-scroll">
+        <table id="annualTable">
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th class="right">NOI</th>
+              <th class="right">Debt Svc</th>
+              <th class="right">DSCR</th>
+              <th class="right">Levered CF</th>
+              <th class="right">KA Dist</th>
+              <th class="right">IDP Dist</th>
+              <th class="right">Note Pmt</th>
+              <th class="right">KA CoC</th>
+              <th class="right">IDP CoC</th>
+            </tr>
+          </thead>
+          <tbody id="annualBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Scenario Comparison -->
+    <div class="section-panel" id="comparisonSection">
+      <h2>TIF Scenario Comparison</h2>
+      <div id="comparisonGrid" class="comparison-grid"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   PARTNERSHIP DASHBOARD — Client Logic
+   ═══════════════════════════════════════════════════════════════ */
+
+let _dashboard = null;   // full DashboardResult
+let _activeScenario = null; // current ScenarioResult being displayed
+let distChart = null, noiChart = null;
+
+// ─── Init ────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  capactive.renderModuleLinks('xrefBar', [
+    {label:'Distribution & Surplus Cash', url:'/distribution/'},
+    {label:'Debt & Loan Analysis', url:'/debt/'},
+    {label:'TIF / Tax Analysis', url:'/tif-analysis/'},
+    {label:'Proforma', url:'/proforma/'},
+  ]);
+  loadDashboard();
+});
+
+async function loadDashboard() {
+  try {
+    const r = await fetch('/partnership/api/dashboard');
+    _dashboard = await r.json();
+    populateScenarioSelect();
+    // Use TIF from URL param or default to first scenario
+    const urlTif = capactive.getTif();
+    const matchName = _dashboard.scenario_names.find(n =>
+      (_dashboard.scenarios[n] || {}).tif_scenario === urlTif
+    ) || _dashboard.scenario_names[0];
+    document.getElementById('scenarioSelect').value = matchName;
+    showScenario(matchName);
+    renderComparison();
+    document.getElementById('entityName').textContent = _dashboard.entity_name || '';
+    document.getElementById('loadingMsg').style.display = 'none';
+    document.getElementById('dashContent').style.display = 'block';
+  } catch (e) {
+    document.getElementById('loadingMsg').textContent = 'Failed to load dashboard: ' + e.message;
+  }
+}
+
+function populateScenarioSelect() {
+  const sel = document.getElementById('scenarioSelect');
+  for (const name of _dashboard.scenario_names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+}
+
+function switchScenario(val) {
+  if (val === '__all__') {
+    showScenario(_dashboard.scenario_names[0]);
+    document.getElementById('comparisonSection').style.display = '';
+    capactive.setTif('baseline');
+  } else {
+    showScenario(val);
+    document.getElementById('comparisonSection').style.display = 'none';
+    const sc = _dashboard.scenarios[val];
+    if (sc) capactive.setTif(sc.tif_scenario);
+  }
+}
+
+// ─── Render Scenario ─────────────────────────────────────────────
+
+function showScenario(name) {
+  const sc = _dashboard.scenarios[name];
+  if (!sc) return;
+  _activeScenario = sc;
+  renderStats(sc);
+  renderPartners(sc);
+  renderAnnualTable(sc);
+  renderCharts(sc);
+}
+
+// ─── Stats Grid ──────────────────────────────────────────────────
+
+function renderStats(sc) {
+  const dm = sc.decision_metrics;
+  const grid = document.getElementById('statsGrid');
+  const cards = [
+    { label:'Deal IRR', value:fmtPct(dm.deal_irr), cls:'highlight', link:capactive.moduleLink('/distribution/') },
+    { label:'Deal EM', value:fmtX(dm.deal_em), cls:'highlight', link:capactive.moduleLink('/distribution/') },
+    { label:'KA Equity Multiple', value:fmtX(dm.ka_em), sub:`IRR ${fmtPct(dm.ka_irr)}`, link:capactive.moduleLink('/distribution/') },
+    { label:'IDP Equity Multiple', value:fmtX(dm.idp_em), sub:`IRR ${fmtPct(dm.idp_irr)}`, link:capactive.moduleLink('/distribution/') },
+    { label:'Min DSCR', value:dm.min_dscr.toFixed(2)+'x', cls: dm.min_dscr < 1.15 ? 'caution-card' : '', link:capactive.moduleLink('/debt/') },
+    { label:'Avg DSCR', value:dm.avg_dscr.toFixed(2)+'x', link:capactive.moduleLink('/debt/') },
+    { label:'Total Distributions', value:fmtUSD(dm.total_distributions), link:capactive.moduleLink('/distribution/') },
+    { label:'Net Sale Proceeds', value:fmtUSD(dm.net_sale_proceeds) },
+  ];
+  grid.innerHTML = cards.map(c => `
+    <div class="stat-card ${c.cls||''}" ${c.link ? `onclick="location.href='${c.link}'" style="cursor:pointer"` : ''}>
+      <div class="stat-label">${c.label} ${c.link ? '<span style="float:right;font-size:9px;opacity:.5;">&#8594;</span>' : ''}</div>
+      <div class="stat-value">${c.value}</div>
+      ${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ─── Partner Cards ───────────────────────────────────────────────
+
+function renderPartners(sc) {
+  const row = document.getElementById('partnerRow');
+  row.innerHTML = sc.partners.map(p => `
+    <div class="partner-card">
+      <h3>${esc(p.name)}</h3>
+      <div class="partner-role">${esc(p.role)} &mdash; ${(p.ownership_pct*100).toFixed(0)}% ownership</div>
+      <div class="partner-metrics">
+        <div class="pm">
+          <div class="pm-label">Equity Multiple</div>
+          <div class="pm-value">${fmtX(p.equity_multiple)}</div>
+        </div>
+        <div class="pm">
+          <div class="pm-label">IRR</div>
+          <div class="pm-value">${fmtPct(p.irr)}</div>
+        </div>
+        <div class="pm">
+          <div class="pm-label">Avg CoC</div>
+          <div class="pm-value">${fmtPct(p.avg_cash_on_cash)}</div>
+        </div>
+      </div>
+      <div class="partner-metrics" style="margin-top:10px;">
+        <div class="pm">
+          <div class="pm-label">Initial Equity</div>
+          <div class="pm-value" style="font-size:14px;">${fmtUSD(p.initial_equity)}</div>
+        </div>
+        <div class="pm">
+          <div class="pm-label">Total Dist</div>
+          <div class="pm-value" style="font-size:14px;">${fmtUSD(p.total_distributions)}</div>
+        </div>
+        <div class="pm">
+          <div class="pm-label">Pref Rate</div>
+          <div class="pm-value" style="font-size:14px;">6.50%</div>
+        </div>
+      </div>
+      <div class="pref-status">
+        <span>Accrued: ${fmtUSD(p.accrued_pref)}</span>
+        <span>Paid: ${fmtUSD(p.paid_pref)}</span>
+        <span style="color:${p.unpaid_pref > 0 ? 'var(--warning)' : 'var(--success)'}">
+          Unpaid: ${fmtUSD(p.unpaid_pref)}
+        </span>
+        <a href="${capactive.moduleLink('/distribution/')}" style="margin-left:auto;font-size:11px;color:var(--brand-primary);text-decoration:none;">View Waterfall &rarr;</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Annual Table ────────────────────────────────────────────────
+
+function renderAnnualTable(sc) {
+  const body = document.getElementById('annualBody');
+  const rows = sc.annual_summary;
+  document.getElementById('yearsBadge').textContent = rows.length + ' years';
+
+  let html = '';
+  let totNoi=0, totDs=0, totCf=0, totKa=0, totIdp=0, totNote=0;
+
+  for (const r of rows) {
+    totNoi += r.noi; totDs += r.debt_service; totCf += r.levered_cf;
+    totKa += r.distributions_ka; totIdp += r.distributions_idp;
+    totNote += r.surplus_note_payment;
+
+    const dscrCls = r.dscr < 1.15 ? ' style="color:var(--danger)"' : (r.dscr < 1.25 ? ' style="color:var(--warning)"' : '');
+    html += `<tr>
+      <td>${r.calendar_year}</td>
+      <td class="right">${fmtK(r.noi)}</td>
+      <td class="right">${fmtK(r.debt_service)}</td>
+      <td class="right"${dscrCls}><a href="${capactive.moduleLink('/debt/')}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--muted)">${r.dscr.toFixed(2)}x</a></td>
+      <td class="right">${fmtK(r.levered_cf)}</td>
+      <td class="right">${fmtK(r.distributions_ka)}</td>
+      <td class="right">${fmtK(r.distributions_idp)}</td>
+      <td class="right">${fmtK(r.surplus_note_payment)}</td>
+      <td class="right">${fmtPct(r.coc_ka)}</td>
+      <td class="right">${fmtPct(r.coc_idp)}</td>
+    </tr>`;
+  }
+
+  // Totals row
+  html += `<tr style="font-weight:700;border-top:2px solid var(--border);">
+    <td>Total</td>
+    <td class="right">${fmtK(totNoi)}</td>
+    <td class="right">${fmtK(totDs)}</td>
+    <td class="right">&mdash;</td>
+    <td class="right">${fmtK(totCf)}</td>
+    <td class="right">${fmtK(totKa)}</td>
+    <td class="right">${fmtK(totIdp)}</td>
+    <td class="right">${fmtK(totNote)}</td>
+    <td class="right">&mdash;</td>
+    <td class="right">&mdash;</td>
+  </tr>`;
+
+  body.innerHTML = html;
+}
+
+// ─── Charts ──────────────────────────────────────────────────────
+
+function renderCharts(sc) {
+  const years = sc.annual_summary.map(r => r.calendar_year);
+
+  // Distribution chart
+  if (distChart) distChart.destroy();
+  distChart = new Chart(document.getElementById('distChart'), {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: [
+        { label: 'KA', data: sc.annual_summary.map(r => r.distributions_ka), backgroundColor: '#185FA5', stack: 'dist' },
+        { label: 'IDP', data: sc.annual_summary.map(r => r.distributions_idp), backgroundColor: '#85B7EB', stack: 'dist' },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position:'top', labels:{font:{size:11}} } },
+      scales: {
+        x: { grid:{display:false} },
+        y: { ticks:{ callback: v => '$'+Math.round(v/1000)+'K' }, grid:{color:'#f0f0f0'} },
+      }
+    }
+  });
+
+  // NOI / DS / DSCR chart
+  if (noiChart) noiChart.destroy();
+  noiChart = new Chart(document.getElementById('noiChart'), {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: [
+        { label: 'NOI', data: sc.annual_summary.map(r => r.noi), backgroundColor: '#10B981', order:2 },
+        { label: 'Debt Service', data: sc.annual_summary.map(r => r.debt_service), backgroundColor: '#dc2626', order:2 },
+        { label: 'DSCR', data: sc.annual_summary.map(r => r.dscr), type:'line', borderColor:'#d97706', backgroundColor:'transparent', borderWidth:2, pointRadius:3, yAxisID:'y2', order:1 },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position:'top', labels:{font:{size:11}} } },
+      scales: {
+        x: { grid:{display:false} },
+        y: { ticks:{ callback: v => '$'+Math.round(v/1000)+'K' }, grid:{color:'#f0f0f0'} },
+        y2: { position:'right', min:0, max:3, ticks:{ callback: v => v.toFixed(1)+'x' }, grid:{display:false} },
+      }
+    }
+  });
+}
+
+// ─── Scenario Comparison ─────────────────────────────────────────
+
+function renderComparison() {
+  const comp = _dashboard.comparison;
+  if (!comp || !comp.rows || comp.rows.length < 2) {
+    document.getElementById('comparisonSection').style.display = 'none';
+    return;
+  }
+
+  const grid = document.getElementById('comparisonGrid');
+  grid.innerHTML = comp.rows.map((row, i) => {
+    const isBase = row.scenario === comp.baseline;
+    const d = row.delta || {};
+    return `
+      <div class="scenario-col ${isBase ? 'is-baseline' : ''}">
+        <h3><a href="${capactive.moduleLink('/tif-analysis/')}" style="color:inherit;text-decoration:none;">${esc(row.scenario)}</a> ${isBase ? '<span class="base-tag">BASELINE</span>' : ''}</h3>
+        <div class="sc-metrics">
+          ${scMetric('Deal IRR', fmtPct(row.deal_irr), d.deal_irr)}
+          ${scMetric('Deal EM', fmtX(row.deal_em), d.deal_em)}
+          ${scMetric('KA EM', fmtX(row.ka_em), d.ka_em)}
+          ${scMetric('IDP EM', fmtX(row.idp_em), d.idp_em)}
+          ${scMetric('Min DSCR', row.min_dscr.toFixed(2)+'x', d.min_dscr)}
+          ${scMetric('Total Dist', fmtUSD(row.total_distributions), d.total_distributions, true)}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function scMetric(label, value, delta, isDollar) {
+  let deltaHtml = '';
+  if (delta !== undefined && delta !== null) {
+    const sign = delta > 0 ? '+' : '';
+    const cls = delta > 0 ? 'up' : (delta < 0 ? 'down' : '');
+    const val = isDollar ? fmtUSD(delta) : (typeof delta === 'number' ? sign+delta.toFixed(4) : '');
+    if (delta > 0 && isDollar) deltaHtml = `<div class="sc-delta up">+${val}</div>`;
+    else if (delta !== 0) deltaHtml = `<div class="sc-delta ${cls}">${isDollar ? val : sign+delta.toFixed(4)}</div>`;
+  }
+  return `<div class="sc-metric">
+    <div class="sc-label">${label}</div>
+    <div class="sc-val">${value}</div>
+    ${deltaHtml}
+  </div>`;
+}
+
+// ─── Formatters ──────────────────────────────────────────────────
+
+function fmtUSD(v) {
+  if (v == null) return '—';
+  if (Math.abs(v) >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+  if (Math.abs(v) >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K';
+  return '$' + v.toFixed(0);
+}
+
+function fmtK(v) {
+  if (v == null) return '—';
+  return '$' + Math.round(v/1000).toLocaleString() + 'K';
+}
+
+function fmtPct(v) {
+  if (v == null) return '—';
+  return (v * 100).toFixed(2) + '%';
+}
+
+function fmtX(v) {
+  if (v == null) return '—';
+  return v.toFixed(2) + 'x';
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ─── Export ──────────────────────────────────────────────────────
+
+async function exportReport() {
+  const btn = document.getElementById('exportBtn');
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:4px;animation:spin 1s linear infinite;"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="28" stroke-dashoffset="8"/></svg> Generating...';
+
+  try {
+    const tif = _activeScenario ? _activeScenario.tif_scenario : 'baseline';
+    const r = await fetch(`/partnership/api/export/docx?scenario=${tif}`);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'Export failed');
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const disp = r.headers.get('content-disposition') || '';
+    const match = disp.match(/filename="?([^"]+)"?/);
+    a.download = match ? match[1] : 'Chamberlain_Investor_Report.docx';
+    a.href = url;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Report generation failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+  }
+}
+</script>
+
+<style>
+@keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+</style>
+{% endblock %}

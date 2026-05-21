@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+
+{% block title %}Debt & Loan Analysis — capactive{% endblock %}
+
+{% block content %}
+<script>document.querySelector('.main').classList.add('main-wide');</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   DEBT & LOAN ANALYSIS MODULE — Scoped Styles
+   ═══════════════════════════════════════════════════════════════ */
+.debt-root {
+  --brand-ink: #1A1A2E;
+  --brand-navy: #0B3D6B;
+  --brand-primary: #185FA5;
+  --brand-active: #3A8FD4;
+  --brand-light: #85B7EB;
+  --brand-cloud: #E6F1FB;
+  --brand-signal: #10B981;
+  --text: var(--brand-ink);
+  --muted: #8E8E9A;
+  --bg: #F7F8FA;
+  --panel: #ffffff;
+  --border: #E2E4E8;
+  --success: #10B981;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --mono: 'SF Mono', Consolas, monospace;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.debt-root .page-header { margin-bottom: 20px; }
+.debt-root .page-header h2 { margin: 0 0 4px 0; font-size: 22px; font-weight: 700; }
+.debt-root .page-header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+.debt-root .controls-row {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+.debt-root .controls-row select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; background: var(--panel);
+}
+.debt-root .badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+}
+.debt-root .badge-live { background: #dcfce7; color: #166534; }
+.debt-root .badge-default { background: #fef3c7; color: #92400e; }
+
+/* Stat cards */
+.debt-root .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px; margin-bottom: 24px;
+}
+.debt-root .stat-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; text-align: center;
+}
+.debt-root .stat-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); margin-bottom: 4px;
+}
+.debt-root .stat-value {
+  font-size: 20px; font-weight: 700; font-family: var(--mono);
+  color: var(--brand-navy);
+}
+.debt-root .stat-sub {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
+
+/* Panels */
+.debt-root .panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px; margin-bottom: 20px;
+}
+.debt-root .panel-title {
+  font-size: 15px; font-weight: 700; margin: 0 0 14px 0;
+  display: flex; align-items: center; gap: 8px;
+}
+.debt-root .panel-title .icon { font-size: 16px; }
+
+/* Tables */
+.debt-root table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.debt-root th {
+  text-align: left; padding: 8px 10px; font-weight: 600;
+  border-bottom: 2px solid var(--border); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+}
+.debt-root td {
+  padding: 7px 10px; border-bottom: 1px solid #f0f0f0;
+  font-family: var(--mono); font-size: 12px;
+}
+.debt-root tr:hover td { background: #f8f9fb; }
+.debt-root .text-right { text-align: right; }
+.debt-root .text-center { text-align: center; }
+
+/* DSCR status colors */
+.debt-root .dscr-pass { color: var(--success); font-weight: 600; }
+.debt-root .dscr-warning { color: var(--warning); font-weight: 600; }
+.debt-root .dscr-breach { color: var(--danger); font-weight: 600; }
+
+/* Chart container */
+.debt-root .chart-container {
+  position: relative; height: 300px; margin-top: 10px;
+}
+
+/* Loan structure diagram */
+.debt-root .structure-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px; margin-bottom: 10px;
+}
+.debt-root .structure-item {
+  background: var(--bg); border-radius: 8px; padding: 14px 16px;
+  border-left: 4px solid var(--brand-primary);
+}
+.debt-root .structure-item.secondary { border-left-color: var(--warning); }
+.debt-root .structure-item.subordinate { border-left-color: var(--muted); }
+.debt-root .structure-item h4 {
+  font-size: 13px; font-weight: 700; margin: 0 0 8px 0; color: var(--brand-navy);
+}
+.debt-root .structure-item .detail {
+  font-size: 12px; color: var(--text); line-height: 1.6;
+}
+.debt-root .structure-item .detail span {
+  font-family: var(--mono); font-weight: 600;
+}
+
+/* Tabs */
+.debt-root .tab-row {
+  display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 16px;
+}
+.debt-root .tab-btn {
+  padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; color: var(--muted); transition: all 0.15s;
+}
+.debt-root .tab-btn.active {
+  color: var(--brand-primary); border-bottom-color: var(--brand-primary);
+}
+.debt-root .tab-btn:hover { color: var(--brand-active); }
+.debt-root .tab-content { display: none; }
+.debt-root .tab-content.active { display: block; }
+
+/* Loading */
+.debt-root .loading {
+  text-align: center; padding: 40px; color: var(--muted); font-size: 14px;
+}
+</style>
+
+<div class="debt-root" id="debt-root">
+  <div class="xref-bar" id="xrefBar"></div>
+  <div class="page-header">
+    <h2>Debt & Loan Analysis</h2>
+    <p>Amortization, DSCR tracking, MIP schedule, and refinance scenarios — Chamberlain Apartments HUD 223(f)</p>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-row">
+    <label style="font-weight:600; font-size:12px;">TIF Scenario:</label>
+    <select id="tif-select" onchange="loadAll()">
+      <option value="baseline">Baseline</option>
+    </select>
+    <span id="source-badge" class="badge badge-default">Loading…</span>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-label">Current Balance</div><div class="stat-value" id="s-balance">—</div><div class="stat-sub" id="s-balance-sub"></div></div>
+    <div class="stat-card"><div class="stat-label">Annual Debt Service</div><div class="stat-value" id="s-ds">—</div><div class="stat-sub" id="s-ds-sub"></div></div>
+    <div class="stat-card"><div class="stat-label">Interest Rate</div><div class="stat-value" id="s-rate">—</div><div class="stat-sub">Fixed</div></div>
+    <div class="stat-card"><div class="stat-label">Avg DSCR</div><div class="stat-value" id="s-dscr">—</div><div class="stat-sub" id="s-dscr-sub"></div></div>
+    <div class="stat-card"><div class="stat-label">Year-1 MIP</div><div class="stat-value" id="s-mip">—</div><div class="stat-sub" id="s-mip-sub"></div></div>
+    <div class="stat-card"><div class="stat-label">Initial LTV</div><div class="stat-value" id="s-ltv">—</div><div class="stat-sub" id="s-ltv-sub"></div></div>
+  </div>
+
+  <!-- Loan Structure -->
+  <div class="panel">
+    <div class="panel-title"><span class="icon">🏛</span> Debt Structure</div>
+    <div class="structure-grid" id="structure-grid">
+      <div class="structure-item">
+        <h4>HUD 223(f) Acquisition Loan</h4>
+        <div class="detail" id="struct-acq">Loading…</div>
+      </div>
+      <div class="structure-item secondary">
+        <h4>Capital Funding Loan</h4>
+        <div class="detail" id="struct-capex">Loading…</div>
+      </div>
+      <div class="structure-item subordinate">
+        <h4>HRA Surplus Cash Note</h4>
+        <div class="detail" id="struct-surplus">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabbed Sections -->
+  <div class="panel">
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="switchTab(this,'tab-amort')">Amortization</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-dscr')">DSCR Analysis</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-mip')">MIP Schedule</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-ltv')">LTV Tracking</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-payoff')">Payoff Analysis</button>
+    </div>
+
+    <!-- Amortization Tab -->
+    <div class="tab-content active" id="tab-amort">
+      <div class="chart-container"><canvas id="amort-chart"></canvas></div>
+      <table id="amort-table">
+        <thead>
+          <tr>
+            <th>Year</th><th>Calendar</th>
+            <th class="text-right">Begin Balance</th>
+            <th class="text-right">Payment</th>
+            <th class="text-right">Principal</th>
+            <th class="text-right">Interest</th>
+            <th class="text-right">End Balance</th>
+            <th class="text-right">Princ %</th>
+          </tr>
+        </thead>
+        <tbody id="amort-body"></tbody>
+      </table>
+    </div>
+
+    <!-- DSCR Tab -->
+    <div class="tab-content" id="tab-dscr">
+      <div class="chart-container"><canvas id="dscr-chart"></canvas></div>
+      <table id="dscr-table">
+        <thead>
+          <tr>
+            <th>Year</th><th>Calendar</th>
+            <th class="text-right">NOI</th>
+            <th class="text-right">Debt Service</th>
+            <th class="text-right">DSCR</th>
+            <th class="text-right">DSCR (w/ MIP)</th>
+            <th class="text-center">Status</th>
+          </tr>
+        </thead>
+        <tbody id="dscr-body"></tbody>
+      </table>
+    </div>
+
+    <!-- MIP Tab -->
+    <div class="tab-content" id="tab-mip">
+      <table id="mip-table">
+        <thead>
+          <tr>
+            <th>Year</th><th>Calendar</th>
+            <th class="text-right">Avg UPB</th>
+            <th class="text-right">MIP Amount</th>
+            <th class="text-right">Monthly MIP</th>
+            <th class="text-right">Cumulative</th>
+          </tr>
+        </thead>
+        <tbody id="mip-body"></tbody>
+      </table>
+    </div>
+
+    <!-- LTV Tab -->
+    <div class="tab-content" id="tab-ltv">
+      <div class="chart-container"><canvas id="ltv-chart"></canvas></div>
+      <table id="ltv-table">
+        <thead>
+          <tr>
+            <th>Year</th><th>Calendar</th>
+            <th class="text-right">Loan Balance</th>
+            <th class="text-right">Est. Value</th>
+            <th class="text-right">LTV</th>
+            <th class="text-right">Equity Value</th>
+          </tr>
+        </thead>
+        <tbody id="ltv-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Payoff Tab -->
+    <div class="tab-content" id="tab-payoff">
+      <table id="payoff-table">
+        <thead>
+          <tr>
+            <th>Year</th><th>Calendar</th>
+            <th class="text-right">Payoff Balance</th>
+            <th class="text-right">Total Paid</th>
+            <th class="text-right">Interest Paid</th>
+            <th class="text-right">Principal Paid</th>
+            <th class="text-right">Remaining Interest</th>
+          </tr>
+        </thead>
+        <tbody id="payoff-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TIF Scenario Comparison -->
+  <div class="panel">
+    <div class="panel-title"><span class="icon">📊</span> DSCR by TIF Scenario</div>
+    <div id="scenario-loading" class="loading">Loading scenario comparison…</div>
+    <table id="scenario-table" style="display:none;">
+      <thead id="scenario-head"></thead>
+      <tbody id="scenario-body"></tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v, d=0) => v == null ? '—' : '$' + v.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+const fmtM = v => v == null ? '—' : '$' + (Math.abs(v) >= 1e6 ? (v/1e6).toFixed(2)+'M' : v.toLocaleString('en-US', {maximumFractionDigits: 0}));
+const fmtPct = (v, d=1) => v == null ? '—' : (v * 100).toFixed(d) + '%';
+const fmtX = (v, d=2) => v == null ? '—' : v.toFixed(d) + 'x';
+
+let amortChart, dscrChart, ltvChart;
+
+// Tab switching
+function switchTab(btn, tabId) {
+  btn.closest('.panel').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  btn.closest('.panel').querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  $(tabId).classList.add('active');
+}
+
+// Load TIF scenario options
+function loadTifOptions() {
+  fetch('/distribution/api/assumptions')
+    .then(r => r.json())
+    .then(data => {
+      if (data.tif_scenarios && data.tif_scenarios.length) {
+        const sel = $('tif-select');
+        sel.innerHTML = data.tif_scenarios.map(s =>
+          '<option value="' + s.id + '">' + s.label + '</option>'
+        ).join('');
+        // Restore TIF from URL param
+        const urlTif = capactive.getTif();
+        if (urlTif !== 'baseline') sel.value = urlTif;
+      }
+    }).catch(() => {});
+}
+
+function loadAll() {
+  const tif = $('tif-select').value;
+  capactive.setTif(tif);
+  fetch('/debt/api/full?tif_scenario=' + tif)
+    .then(r => r.json())
+    .then(data => {
+      renderSummary(data);
+      renderStructure(data.summary);
+      renderAmortization(data.amortization_annual);
+      renderDSCR(data.dscr_by_year);
+      renderMIP(data.mip_by_year);
+      renderLTV(data.ltv_by_year);
+      renderPayoff(data.payoff_scenarios);
+
+      const badge = $('source-badge');
+      if (data.proforma_source === 'live') {
+        badge.className = 'badge badge-live';
+        badge.textContent = '● Live Proforma';
+      } else {
+        badge.className = 'badge badge-default';
+        badge.textContent = '○ Default Estimates';
+      }
+    }).catch(e => console.error('Load error:', e));
+
+  loadScenarios();
+}
+
+function renderSummary(data) {
+  const s = data.summary;
+  if (!s) return;
+  $('s-balance').textContent = fmtM(s.current_balance);
+  $('s-balance-sub').textContent = 'of ' + fmtM(s.original_principal) + ' original';
+  $('s-ds').textContent = fmtM(s.annual_debt_service);
+  $('s-ds-sub').textContent = fmt(s.monthly_payment, 0) + '/mo';
+  $('s-rate').textContent = s.rate_pct;
+  $('s-mip').textContent = fmtM(s.year1_mip);
+  $('s-mip-sub').textContent = s.mip_rate_pct + ' of UPB';
+  $('s-ltv').textContent = fmtPct(s.initial_ltv);
+  $('s-ltv-sub').textContent = 'at acquisition';
+
+  const dscrs = data.dscr_by_year || [];
+  if (dscrs.length) {
+    const avg = dscrs.reduce((a, d) => a + d.dscr, 0) / dscrs.length;
+    const min = Math.min(...dscrs.map(d => d.dscr));
+    $('s-dscr').textContent = fmtX(avg, 2);
+    $('s-dscr-sub').textContent = 'Min: ' + fmtX(min, 2);
+  }
+}
+
+function renderStructure(s) {
+  if (!s) return;
+  $('struct-acq').innerHTML =
+    'Lender: <span>' + s.lender + '</span><br>' +
+    'Original: <span>' + fmtM(s.original_principal) + '</span> · Current: <span>' + fmtM(s.current_balance) + '</span><br>' +
+    'Rate: <span>' + s.rate_pct + '</span> fixed · Term: <span>' + s.term_months + ' mo</span><br>' +
+    'Monthly P&I: <span>' + fmt(s.monthly_payment, 0) + '</span><br>' +
+    'Maturity: <span>' + s.maturity_date + '</span> · Remaining: <span>' + s.remaining_term_months + ' mo</span>';
+
+  $('struct-capex').innerHTML =
+    'Max Principal: <span>' + fmtM(s.capex_loan_max) + '</span><br>' +
+    'Rate: <span>' + (s.capex_loan_rate * 100).toFixed(1) + '%</span><br>' +
+    'Equity-first funding priority<br>' +
+    'No scheduled amortization';
+
+  $('struct-surplus').innerHTML =
+    'Principal: <span>' + fmtM(s.surplus_note_principal) + '</span><br>' +
+    'Rate: <span>' + (s.surplus_note_rate * 100).toFixed(1) + '%</span><br>' +
+    'Annual Payment: <span>' + fmt(s.surplus_note_annual_payment, 0) + '</span><br>' +
+    'Semi-annual (Feb 1 & Aug 1)';
+}
+
+function renderAmortization(rows) {
+  const body = $('amort-body');
+  body.innerHTML = rows.map(r =>
+    '<tr>' +
+    '<td>' + r.year + '</td><td>' + r.calendar_year + '</td>' +
+    '<td class="text-right">' + fmtM(r.beginning_balance) + '</td>' +
+    '<td class="text-right">' + fmtM(r.total_payment) + '</td>' +
+    '<td class="text-right">' + fmtM(r.total_principal) + '</td>' +
+    '<td class="text-right">' + fmtM(r.total_interest) + '</td>' +
+    '<td class="text-right">' + fmtM(r.ending_balance) + '</td>' +
+    '<td class="text-right">' + fmtPct(r.principal_pct) + '</td>' +
+    '</tr>'
+  ).join('');
+
+  // Chart
+  if (amortChart) amortChart.destroy();
+  const ctx = $('amort-chart').getContext('2d');
+  amortChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.calendar_year),
+      datasets: [
+        { label: 'Principal', data: rows.map(r => r.total_principal), backgroundColor: '#185FA5', stack: 'ds' },
+        { label: 'Interest', data: rows.map(r => r.total_interest), backgroundColor: '#85B7EB', stack: 'ds' },
+        { label: 'Balance', data: rows.map(r => r.ending_balance), type: 'line', borderColor: '#0B3D6B', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, yAxisID: 'y1' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1e6).toFixed(1) + 'M', font: { size: 10 } }, title: { display: true, text: 'Annual Payment' } },
+        y1: { position: 'right', beginAtZero: false, grid: { drawOnChartArea: false }, ticks: { callback: v => '$' + (v/1e6).toFixed(1) + 'M', font: { size: 10 } }, title: { display: true, text: 'Loan Balance' } },
+        x: { ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+function renderDSCR(rows) {
+  const body = $('dscr-body');
+  body.innerHTML = rows.map(r => {
+    const cls = 'dscr-' + r.covenant_status;
+    return '<tr>' +
+    '<td>' + r.year + '</td><td>' + r.calendar_year + '</td>' +
+    '<td class="text-right">' + fmtM(r.noi) + '</td>' +
+    '<td class="text-right">' + fmtM(r.debt_service) + '</td>' +
+    '<td class="text-right ' + cls + '">' + fmtX(r.dscr) + '</td>' +
+    '<td class="text-right">' + fmtX(r.dscr_with_mip) + '</td>' +
+    '<td class="text-center"><span class="' + cls + '">' + r.covenant_status.toUpperCase() + '</span></td>' +
+    '</tr>';
+  }).join('');
+
+  // Chart
+  if (dscrChart) dscrChart.destroy();
+  const ctx = $('dscr-chart').getContext('2d');
+  dscrChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.calendar_year),
+      datasets: [
+        { label: 'DSCR', data: rows.map(r => r.dscr), backgroundColor: rows.map(r => r.covenant_status === 'pass' ? '#10B981' : r.covenant_status === 'warning' ? '#d97706' : '#dc2626'), borderRadius: 4 },
+        { label: 'DSCR w/ MIP', data: rows.map(r => r.dscr_with_mip), type: 'line', borderColor: '#185FA5', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, borderDash: [5,3] },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 } } },
+        annotation: {},
+      },
+      scales: {
+        y: { beginAtZero: false, min: 0, ticks: { callback: v => v.toFixed(1) + 'x', font: { size: 10 } } },
+        x: { ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+  // Add covenant line manually via plugin
+}
+
+function renderMIP(rows) {
+  const body = $('mip-body');
+  body.innerHTML = rows.map(r =>
+    '<tr>' +
+    '<td>' + r.year + '</td><td>' + r.calendar_year + '</td>' +
+    '<td class="text-right">' + fmtM(r.avg_upb) + '</td>' +
+    '<td class="text-right">' + fmtM(r.mip_amount) + '</td>' +
+    '<td class="text-right">' + fmt(r.mip_amount / 12, 0) + '</td>' +
+    '<td class="text-right">' + fmtM(r.cumulative_mip) + '</td>' +
+    '</tr>'
+  ).join('');
+}
+
+function renderLTV(rows) {
+  const body = $('ltv-body');
+  body.innerHTML = rows.map(r =>
+    '<tr>' +
+    '<td>' + r.year + '</td><td>' + r.calendar_year + '</td>' +
+    '<td class="text-right">' + fmtM(r.loan_balance) + '</td>' +
+    '<td class="text-right">' + fmtM(r.estimated_value) + '</td>' +
+    '<td class="text-right">' + fmtPct(r.ltv) + '</td>' +
+    '<td class="text-right">' + fmtM(r.equity_value) + '</td>' +
+    '</tr>'
+  ).join('');
+
+  // Chart
+  if (ltvChart) ltvChart.destroy();
+  const ctx = $('ltv-chart').getContext('2d');
+  ltvChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.calendar_year),
+      datasets: [
+        { label: 'LTV %', data: rows.map(r => r.ltv * 100), borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.08)', fill: true, borderWidth: 2, pointRadius: 4, yAxisID: 'y' },
+        { label: 'Equity Value', data: rows.map(r => r.equity_value), borderColor: '#10B981', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, yAxisID: 'y1' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } }, title: { display: true, text: 'LTV %' } },
+        y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => '$' + (v/1e6).toFixed(0) + 'M', font: { size: 10 } }, title: { display: true, text: 'Equity Value' } },
+        x: { ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+function renderPayoff(rows) {
+  const body = $('payoff-body');
+  body.innerHTML = rows.map(r =>
+    '<tr>' +
+    '<td>' + r.year + '</td><td>' + r.calendar_year + '</td>' +
+    '<td class="text-right">' + fmtM(r.outstanding_balance) + '</td>' +
+    '<td class="text-right">' + fmtM(r.total_paid_to_date) + '</td>' +
+    '<td class="text-right">' + fmtM(r.total_interest_to_date) + '</td>' +
+    '<td class="text-right">' + fmtM(r.total_principal_to_date) + '</td>' +
+    '<td class="text-right">' + fmtM(r.remaining_interest) + '</td>' +
+    '</tr>'
+  ).join('');
+}
+
+function loadScenarios() {
+  $('scenario-loading').style.display = 'block';
+  $('scenario-table').style.display = 'none';
+
+  fetch('/debt/api/scenarios')
+    .then(r => r.json())
+    .then(data => {
+      $('scenario-loading').style.display = 'none';
+      $('scenario-table').style.display = 'table';
+      const names = data.scenario_names || [];
+      const scenarios = data.scenarios || {};
+
+      // Header
+      $('scenario-head').innerHTML = '<tr><th>Year</th>' +
+        names.map(n => '<th class="text-center" colspan="2">' + n + '</th>').join('') + '</tr>' +
+        '<tr><th></th>' + names.map(() => '<th class="text-right">DSCR</th><th class="text-right">LTV</th>').join('') + '</tr>';
+
+      // Find max years
+      const maxYears = Math.max(...Object.values(scenarios).map(s => (s.dscr_by_year || []).length));
+      let html = '';
+      for (let y = 0; y < maxYears; y++) {
+        html += '<tr>';
+        const firstScenario = scenarios[names[0]];
+        const calYear = firstScenario && firstScenario.dscr_by_year[y] ? firstScenario.dscr_by_year[y].calendar_year : '';
+        html += '<td>' + calYear + '</td>';
+        for (const n of names) {
+          const sc = scenarios[n];
+          const dscr = sc && sc.dscr_by_year[y] ? sc.dscr_by_year[y].dscr : null;
+          const ltv = sc && sc.ltv_by_year[y] ? sc.ltv_by_year[y].ltv : null;
+          const cls = dscr ? (dscr < 1.15 ? 'dscr-breach' : dscr < 1.25 ? 'dscr-warning' : 'dscr-pass') : '';
+          html += '<td class="text-right ' + cls + '">' + (dscr ? fmtX(dscr) : '—') + '</td>';
+          html += '<td class="text-right">' + (ltv ? fmtPct(ltv) : '—') + '</td>';
+        }
+        html += '</tr>';
+      }
+      $('scenario-body').innerHTML = html;
+    })
+    .catch(e => {
+      $('scenario-loading').textContent = 'Failed to load scenarios';
+      console.error(e);
+    });
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', function() {
+  capactive.renderModuleLinks('xrefBar', [
+    {label:'Partnership Dashboard', url:'/partnership/'},
+    {label:'Distribution & Surplus Cash', url:'/distribution/'},
+    {label:'TIF / Tax Analysis', url:'/tif-analysis/'},
+    {label:'Proforma', url:'/proforma/'},
+  ]);
+  loadTifOptions();
+  loadAll();
+});
+</script>
+{% endblock %}
