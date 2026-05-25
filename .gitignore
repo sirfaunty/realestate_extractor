@@ -28,12 +28,17 @@ env/
 
 # Data directories (user uploads, processed files)
 data/
+!data/mpls_*.json
 uploads/
 output/
 outputs/
 
 # Partner data (large parquets, CSVs)
 *.parquet
+
+# Large binary files (keep local, don't push)
+*.msg
+Ownership Deliverables/*.pdf
 
 # IDE
 .vscode/
@@ -45,6 +50,7 @@ outputs/
 # OS
 .DS_Store
 Thumbs.db
+__MACOSX/
 
 # Environment / secrets
 .env
