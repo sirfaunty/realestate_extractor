@@ -628,14 +628,454 @@ class WarehouseEngine:
             return result[0]
         return None
 
+    # ─── Deal Analytics: Write Methods ────────────────────────────────
+
+    def store_deal_summary(self, deal_id: str, tif_scenario: str,
+                           summary: Dict[str, Any],
+                           knowledge_date: str = None) -> int:
+        """Store a deal-level summary row (one per deal × TIF scenario).
+
+        Args:
+            deal_id: Deal identifier (e.g. 'chamberlain')
+            tif_scenario: TIF scenario id
+            summary: Dict with keys matching fact_deal_summary columns
+            knowledge_date: Defaults to today
+        """
+        kd = knowledge_date or date.today().isoformat()
+        ingestion_id = self.register_ingestion(
+            source='deal_summary',
+            knowledge_date=kd,
+            notes=f'{deal_id}/{tif_scenario}',
+        )
+
+        # Delete previous entry for this deal+scenario+date (idempotent)
+        self.conn.execute("""
+            DELETE FROM fact_deal_summary
+            WHERE deal_id = ? AND tif_scenario = ? AND knowledge_date = ?
+        """, [deal_id, tif_scenario, kd])
+
+        self.conn.execute("""
+            INSERT INTO fact_deal_summary
+                (deal_id, tif_scenario, hold_years, initial_equity,
+                 acquisition_cost_basis, levered_irr, equity_multiple,
+                 avg_dscr, exit_cap_rate, gross_sale_price,
+                 net_sale_proceeds, loan_repayment_at_sale,
+                 total_distributed, deal_irr, deal_em,
+                 knowledge_date, ingestion_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            deal_id, tif_scenario,
+            summary.get('hold_years'),
+            summary.get('initial_equity'),
+            summary.get('acquisition_cost_basis'),
+            summary.get('levered_irr'),
+            summary.get('equity_multiple'),
+            summary.get('avg_dscr'),
+            summary.get('exit_cap_rate'),
+            summary.get('gross_sale_price'),
+            summary.get('net_sale_proceeds'),
+            summary.get('loan_repayment_at_sale'),
+            summary.get('total_distributed'),
+            summary.get('deal_irr'),
+            summary.get('deal_em'),
+            kd, ingestion_id,
+        ])
+
+        logger.info(f"Stored deal summary: {deal_id}/{tif_scenario}")
+        return ingestion_id
+
+    def store_proforma_annual(self, deal_id: str, tif_scenario: str,
+                               years: List[Dict[str, Any]],
+                               knowledge_date: str = None) -> int:
+        """Store annual proforma projections.
+
+        Args:
+            deal_id: Deal identifier
+            tif_scenario: TIF scenario id
+            years: List of dicts with year, calendar_year, noi, debt_service,
+                   capex, non_operating, levered_cf, dscr
+        """
+        kd = knowledge_date or date.today().isoformat()
+        ingestion_id = self.register_ingestion(
+            source='proforma_engine',
+            knowledge_date=kd,
+            notes=f'{deal_id}/{tif_scenario}',
+            record_count=len(years),
+        )
+
+        # Clear previous for idempotency
+        self.conn.execute("""
+            DELETE FROM fact_proforma_annual
+            WHERE deal_id = ? AND tif_scenario = ? AND knowledge_date = ?
+        """, [deal_id, tif_scenario, kd])
+
+        rows = []
+        for y in years:
+            rows.append([
+                deal_id, tif_scenario,
+                y.get('year'), y.get('calendar_year'),
+                y.get('noi'), y.get('debt_service'),
+                y.get('capex'), y.get('non_operating'),
+                y.get('levered_cf'), y.get('dscr'),
+                kd, ingestion_id,
+            ])
+
+        self.conn.executemany("""
+            INSERT INTO fact_proforma_annual
+                (deal_id, tif_scenario, year, calendar_year,
+                 noi, debt_service, capex, non_operating,
+                 levered_cf, dscr, knowledge_date, ingestion_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+
+        logger.info(f"Stored {len(rows)} proforma annual rows: {deal_id}/{tif_scenario}")
+        return ingestion_id
+
+    def store_distribution_annual(self, deal_id: str, tif_scenario: str,
+                                   partner_years: List[Dict[str, Any]],
+                                   knowledge_date: str = None) -> int:
+        """Store annual distribution allocations per partner.
+
+        Args:
+            deal_id: Deal identifier
+            tif_scenario: TIF scenario id
+            partner_years: List of dicts with year, calendar_year, partner_id,
+                          distribution, pref_accrued, pref_paid, cash_on_cash
+        """
+        kd = knowledge_date or date.today().isoformat()
+        ingestion_id = self.register_ingestion(
+            source='distribution_engine',
+            knowledge_date=kd,
+            notes=f'{deal_id}/{tif_scenario}',
+            record_count=len(partner_years),
+        )
+
+        self.conn.execute("""
+            DELETE FROM fact_distribution_annual
+            WHERE deal_id = ? AND tif_scenario = ? AND knowledge_date = ?
+        """, [deal_id, tif_scenario, kd])
+
+        rows = []
+        for py in partner_years:
+            rows.append([
+                deal_id, tif_scenario,
+                py.get('year'), py.get('calendar_year'),
+                py.get('partner_id'),
+                py.get('distribution'), py.get('pref_accrued'),
+                py.get('pref_paid'), py.get('cash_on_cash'),
+                kd, ingestion_id,
+            ])
+
+        self.conn.executemany("""
+            INSERT INTO fact_distribution_annual
+                (deal_id, tif_scenario, year, calendar_year, partner_id,
+                 distribution, pref_accrued, pref_paid, cash_on_cash,
+                 knowledge_date, ingestion_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+
+        logger.info(f"Stored {len(rows)} distribution annual rows: {deal_id}/{tif_scenario}")
+        return ingestion_id
+
+    def store_debt_annual(self, deal_id: str, tif_scenario: str,
+                           years: List[Dict[str, Any]],
+                           knowledge_date: str = None) -> int:
+        """Store annual debt metrics (amortization, DSCR, LTV, MIP).
+
+        Args:
+            deal_id: Deal identifier
+            tif_scenario: TIF scenario id
+            years: List of dicts with year, calendar_year, beginning_balance,
+                   ending_balance, total_payment, total_principal, total_interest,
+                   noi, debt_service, dscr, dscr_with_mip, mip_amount, ltv,
+                   estimated_value
+        """
+        kd = knowledge_date or date.today().isoformat()
+        ingestion_id = self.register_ingestion(
+            source='debt_engine',
+            knowledge_date=kd,
+            notes=f'{deal_id}/{tif_scenario}',
+            record_count=len(years),
+        )
+
+        self.conn.execute("""
+            DELETE FROM fact_debt_annual
+            WHERE deal_id = ? AND tif_scenario = ? AND knowledge_date = ?
+        """, [deal_id, tif_scenario, kd])
+
+        rows = []
+        for y in years:
+            rows.append([
+                deal_id, tif_scenario,
+                y.get('year'), y.get('calendar_year'),
+                y.get('beginning_balance'), y.get('ending_balance'),
+                y.get('total_payment'), y.get('total_principal'),
+                y.get('total_interest'),
+                y.get('noi'), y.get('debt_service'),
+                y.get('dscr'), y.get('dscr_with_mip'),
+                y.get('mip_amount'), y.get('ltv'),
+                y.get('estimated_value'),
+                kd, ingestion_id,
+            ])
+
+        self.conn.executemany("""
+            INSERT INTO fact_debt_annual
+                (deal_id, tif_scenario, year, calendar_year,
+                 beginning_balance, ending_balance, total_payment,
+                 total_principal, total_interest,
+                 noi, debt_service, dscr, dscr_with_mip,
+                 mip_amount, ltv, estimated_value,
+                 knowledge_date, ingestion_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+
+        logger.info(f"Stored {len(rows)} debt annual rows: {deal_id}/{tif_scenario}")
+        return ingestion_id
+
+    def store_tif_annual(self, deal_id: str, tif_scenario: str,
+                          years: List[Dict[str, Any]],
+                          knowledge_date: str = None) -> int:
+        """Store annual TIF projections.
+
+        Args:
+            deal_id: Deal identifier
+            tif_scenario: TIF scenario id
+            years: List of dicts with year, tmv, ntc, captured_ntc,
+                   tax_increment, osa, admin, net_tif, note_beg_bal,
+                   note_interest, note_principal, note_end_bal, property_tax
+        """
+        kd = knowledge_date or date.today().isoformat()
+        ingestion_id = self.register_ingestion(
+            source='tif_engine',
+            knowledge_date=kd,
+            notes=f'{deal_id}/{tif_scenario}',
+            record_count=len(years),
+        )
+
+        self.conn.execute("""
+            DELETE FROM fact_tif_annual
+            WHERE deal_id = ? AND tif_scenario = ? AND knowledge_date = ?
+        """, [deal_id, tif_scenario, kd])
+
+        rows = []
+        for y in years:
+            rows.append([
+                deal_id, tif_scenario, y.get('year'),
+                y.get('tmv'), y.get('ntc'), y.get('captured_ntc'),
+                y.get('tax_increment'), y.get('osa'), y.get('admin'),
+                y.get('net_tif'),
+                y.get('note_beg_bal'), y.get('note_interest'),
+                y.get('note_principal'), y.get('note_end_bal'),
+                y.get('property_tax'),
+                kd, ingestion_id,
+            ])
+
+        self.conn.executemany("""
+            INSERT INTO fact_tif_annual
+                (deal_id, tif_scenario, year,
+                 tmv, ntc, captured_ntc, tax_increment, osa, admin, net_tif,
+                 note_beg_bal, note_interest, note_principal, note_end_bal,
+                 property_tax, knowledge_date, ingestion_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+
+        logger.info(f"Stored {len(rows)} TIF annual rows: {deal_id}/{tif_scenario}")
+        return ingestion_id
+
+    def store_tif_comparison(self, deal_id: str,
+                              comparisons: List[Dict[str, Any]],
+                              knowledge_date: str = None) -> int:
+        """Store TIF scenario comparison results."""
+        kd = knowledge_date or date.today().isoformat()
+        ingestion_id = self.register_ingestion(
+            source='tif_comparison',
+            knowledge_date=kd,
+            notes=deal_id,
+            record_count=len(comparisons),
+        )
+
+        self.conn.execute("""
+            DELETE FROM fact_tif_comparison
+            WHERE deal_id = ? AND knowledge_date = ?
+        """, [deal_id, kd])
+
+        rows = []
+        for c in comparisons:
+            rows.append([
+                deal_id, c.get('name'),
+                c.get('payoff_year'), c.get('total_net_tif'),
+                c.get('npv_net_tif'), c.get('npv_property_tax'),
+                c.get('nominal_tax_savings'), c.get('nominal_tif_reduction'),
+                c.get('nominal_net_benefit'),
+                c.get('npv_tax_savings'), c.get('npv_tif_reduction'),
+                c.get('npv_net_benefit'), c.get('attorney_fees'),
+                kd, ingestion_id,
+            ])
+
+        self.conn.executemany("""
+            INSERT INTO fact_tif_comparison
+                (deal_id, tif_scenario, payoff_year, total_net_tif,
+                 npv_net_tif, npv_property_tax,
+                 nominal_tax_savings, nominal_tif_reduction, nominal_net_benefit,
+                 npv_tax_savings, npv_tif_reduction, npv_net_benefit,
+                 attorney_fees, knowledge_date, ingestion_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+
+        logger.info(f"Stored {len(rows)} TIF comparison rows: {deal_id}")
+        return ingestion_id
+
+    def store_partners(self, deal_id: str,
+                        partners: List[Dict[str, Any]]) -> None:
+        """Store or update partner dimension entries."""
+        for p in partners:
+            pid = p.get('id') or p.get('partner_id')
+            existing = self.conn.execute("""
+                SELECT partner_key FROM dim_partner
+                WHERE deal_id = ? AND partner_id = ? AND valid_to = '9999-12-31'
+            """, [deal_id, pid]).fetchone()
+
+            if not existing:
+                self.conn.execute("""
+                    INSERT INTO dim_partner
+                        (partner_key, deal_id, partner_id, partner_name,
+                         role, ownership_pct, distribution_pct, pref_rate,
+                         initial_equity)
+                    VALUES (nextval('seq_partner_key'), ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    deal_id, pid,
+                    p.get('name'), p.get('role'),
+                    p.get('ownership_pct'), p.get('distribution_pct'),
+                    p.get('pref_rate'), p.get('initial_equity'),
+                ])
+
+        logger.info(f"Stored {len(partners)} partners for deal {deal_id}")
+
+    # ─── Deal Analytics: Read Methods ──────────────────────────────────
+
+    def get_deal_summary(self, deal_id: str,
+                          tif_scenario: str = None) -> List[Dict]:
+        """Get deal summaries, optionally filtered by TIF scenario."""
+        where = ["deal_id = ?"]
+        params = [deal_id]
+        if tif_scenario:
+            where.append("tif_scenario = ?")
+            params.append(tif_scenario)
+
+        # Latest knowledge_date only
+        where.append("""knowledge_date = (
+            SELECT MAX(knowledge_date) FROM fact_deal_summary
+            WHERE deal_id = ?)""")
+        params.append(deal_id)
+
+        sql = f"""
+            SELECT * FROM fact_deal_summary
+            WHERE {' AND '.join(where)}
+            ORDER BY tif_scenario
+        """
+        rows = self.conn.execute(sql, params).fetchall()
+        cols = [d[0] for d in self.conn.description]
+        return [dict(zip(cols, row)) for row in rows]
+
+    def get_deal_annual(self, deal_id: str, tif_scenario: str) -> List[Dict]:
+        """Get the joined annual view for a deal × scenario."""
+        try:
+            rows = self.conn.execute("""
+                SELECT * FROM v_deal_annual_summary
+                WHERE deal_id = ? AND tif_scenario = ?
+                ORDER BY year
+            """, [deal_id, tif_scenario]).fetchall()
+            cols = [d[0] for d in self.conn.description]
+            return [dict(zip(cols, row)) for row in rows]
+        except Exception:
+            return []
+
+    def get_market_cap_rates_for_exit(self, market: str,
+                                       building_class: str = None) -> Dict[str, Any]:
+        """Get current market cap rate data for exit cap validation.
+
+        Returns a dict with median, mean, p25, p75 cap rates for the market,
+        useful for benchmarking a deal's assumed exit cap rate.
+        """
+        where = ["is_clean = true", "period_type = 'year'", "market = ?"]
+        params = [market]
+
+        if building_class:
+            where.append("building_class = ?")
+            params.append(building_class)
+        else:
+            where.append("building_class IS NULL")
+
+        # Get latest year's data
+        sql = f"""
+            SELECT period, cap_rate_median, cap_rate_mean,
+                   cap_rate_p25, cap_rate_p75, n_deals
+            FROM fact_cap_rate_aggregate
+            WHERE {' AND '.join(where)}
+            ORDER BY period DESC
+            LIMIT 5
+        """
+        rows = self.conn.execute(sql, params).fetchall()
+        if not rows:
+            return {}
+
+        cols = [d[0] for d in self.conn.description]
+        history = [dict(zip(cols, row)) for row in rows]
+
+        latest = history[0]
+        return {
+            'market': market,
+            'latest_period': latest['period'],
+            'cap_rate_median': latest['cap_rate_median'],
+            'cap_rate_mean': latest['cap_rate_mean'],
+            'cap_rate_p25': latest['cap_rate_p25'],
+            'cap_rate_p75': latest['cap_rate_p75'],
+            'n_deals': latest['n_deals'],
+            'history': history,
+        }
+
+    def get_market_rent_benchmarks(self, market: str,
+                                     peer_cut: str = 'Market x Size x Quality',
+                                     metrics: List[str] = None) -> List[Dict]:
+        """Get market-level rent and occupancy benchmarks from z-score stats.
+
+        Useful for lease analysis benchmarking against market averages.
+        """
+        target_metrics = metrics or [
+            'Asking Rent Per Unit', 'Asking Rent Per SF',
+            'Effective Rent Per Unit', 'Effective Rent Per SF',
+            'Vacancy Rate', 'Occupancy Rate',
+        ]
+
+        placeholders = ','.join(['?' for _ in target_metrics])
+        sql = f"""
+            SELECT peer_group_key, metric, peer_n, peer_mean, peer_std
+            FROM fact_peer_group_stats
+            WHERE peer_cut = ?
+              AND peer_group_key LIKE ?
+              AND metric IN ({placeholders})
+              AND knowledge_date = (
+                  SELECT MAX(knowledge_date) FROM fact_peer_group_stats
+              )
+            ORDER BY metric
+        """
+        params = [peer_cut, f'{market}%'] + target_metrics
+        rows = self.conn.execute(sql, params).fetchall()
+        cols = [d[0] for d in self.conn.description]
+        return [dict(zip(cols, row)) for row in rows]
+
     # ─── Summary / Stats ────────────────────────────────────────────
 
     def summary(self) -> Dict[str, Any]:
         """Return warehouse summary statistics."""
         stats = {}
-        for table in ['dim_property', 'fact_property_zscore', 'fact_peer_group_stats',
+        for table in ['dim_property', 'dim_partner',
+                       'fact_property_zscore', 'fact_peer_group_stats',
                        'fact_sales_transaction', 'fact_cap_rate_aggregate',
-                       'fact_pricing_aggregate', 'fact_ownership']:
+                       'fact_pricing_aggregate', 'fact_ownership',
+                       'fact_deal_summary', 'fact_proforma_annual',
+                       'fact_distribution_annual', 'fact_debt_annual',
+                       'fact_tif_annual', 'fact_tif_comparison']:
             try:
                 count = self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
                 stats[table] = count

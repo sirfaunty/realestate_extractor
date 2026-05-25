@@ -142,6 +142,60 @@ def api_peer_cuts():
     return jsonify({'peer_cuts': [{'name': r[0], 'count': r[1]} for r in rows]})
 
 
+@warehouse_bp.route('/api/deal/summary')
+def api_deal_summary():
+    """Get deal-level summary across TIF scenarios."""
+    wh = _get_wh()
+    deal_id = request.args.get('deal_id', 'chamberlain')
+    tif_scenario = request.args.get('tif_scenario')
+    results = wh.get_deal_summary(deal_id, tif_scenario)
+    return jsonify({'deal_id': deal_id, 'scenarios': results, 'count': len(results)})
+
+
+@warehouse_bp.route('/api/deal/annual')
+def api_deal_annual():
+    """Get joined annual view for a deal × scenario."""
+    wh = _get_wh()
+    deal_id = request.args.get('deal_id', 'chamberlain')
+    tif_scenario = request.args.get('tif_scenario', 'baseline')
+    rows = wh.get_deal_annual(deal_id, tif_scenario)
+    return jsonify({'deal_id': deal_id, 'tif_scenario': tif_scenario,
+                    'years': rows, 'count': len(rows)})
+
+
+@warehouse_bp.route('/api/deal/market-context')
+def api_deal_market_context():
+    """Get market cap rates and rent benchmarks for deal validation."""
+    wh = _get_wh()
+    market = request.args.get('market', 'Minneapolis')
+    cap_rates = wh.get_market_cap_rates_for_exit(market)
+    rent_benchmarks = wh.get_market_rent_benchmarks(market)
+    return jsonify({
+        'market': market,
+        'cap_rates': cap_rates,
+        'rent_benchmarks': rent_benchmarks,
+    })
+
+
+@warehouse_bp.route('/api/deal/populate', methods=['POST'])
+def api_deal_populate():
+    """Trigger full deal persist for all TIF scenarios."""
+    from .deal_analytics import persist_full_deal
+
+    deal_id = request.json.get('deal_id', 'chamberlain') if request.json else 'chamberlain'
+    tif_scenarios = request.json.get('tif_scenarios', ['baseline']) if request.json else ['baseline']
+
+    results = {}
+    for tif in tif_scenarios:
+        try:
+            persist_full_deal(deal_id, tif)
+            results[tif] = 'ok'
+        except Exception as e:
+            results[tif] = f'error: {e}'
+
+    return jsonify({'deal_id': deal_id, 'results': results})
+
+
 @warehouse_bp.route('/api/identity-bridge', methods=['POST'])
 def api_identity_bridge():
     """Find CoStar PropertyID for a Capactive property."""
@@ -287,6 +341,36 @@ a:hover { text-decoration: underline; }
         </div>
     </div>
 
+    {% if summary.fact_deal_summary > 0 or summary.fact_proforma_annual > 0 %}
+    <h2>Deal Analytics</h2>
+    <div class="grid">
+        <div class="card">
+            <div class="label">Deal Summaries</div>
+            <div class="value green">{{ summary.get('fact_deal_summary', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Proforma Annual</div>
+            <div class="value">{{ summary.get('fact_proforma_annual', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Distribution Annual</div>
+            <div class="value">{{ summary.get('fact_distribution_annual', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Debt Annual</div>
+            <div class="value">{{ summary.get('fact_debt_annual', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">TIF Annual</div>
+            <div class="value">{{ summary.get('fact_tif_annual', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Partners</div>
+            <div class="value">{{ summary.get('dim_partner', 0) }}</div>
+        </div>
+    </div>
+    {% endif %}
+
     <h2>Z-Score Coverage by Market</h2>
     <table>
         <tr><th>Market</th><th class="right">Scored Properties</th><th class="right">Total Properties</th><th class="right">Coverage</th></tr>
@@ -341,6 +425,10 @@ a:hover { text-decoration: underline; }
         <tr><td class="mono">/warehouse/api/peer-cuts</td><td>Available peer cuts</td><td>—</td></tr>
         <tr><td class="mono">/warehouse/api/ingestions</td><td>Ingestion log</td><td>—</td></tr>
         <tr><td class="mono">/warehouse/api/identity-bridge</td><td>SQLite↔CoStar bridge</td><td>POST: capactive_id, address, city, state</td></tr>
+        <tr><td class="mono">/warehouse/api/deal/summary</td><td>Deal summaries by TIF scenario</td><td>deal_id, tif_scenario</td></tr>
+        <tr><td class="mono">/warehouse/api/deal/annual</td><td>Joined annual deal view</td><td>deal_id, tif_scenario</td></tr>
+        <tr><td class="mono">/warehouse/api/deal/market-context</td><td>Market cap rates + rent benchmarks</td><td>market</td></tr>
+        <tr><td class="mono">/warehouse/api/deal/populate</td><td>Trigger full deal persist</td><td>POST: deal_id, tif_scenarios</td></tr>
     </table>
 </div>
 </body>

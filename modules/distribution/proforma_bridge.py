@@ -157,6 +157,14 @@ def get_proforma_snapshot(
         snap.avg_dscr = result.returns.avg_dscr
 
     _snapshot_cache[tif_scenario] = snap
+
+    # Persist to analytical warehouse (fire-and-forget)
+    try:
+        from warehouse.deal_analytics import persist_proforma
+        persist_proforma('chamberlain', snap)
+    except Exception:
+        pass  # warehouse is optional
+
     return snap
 
 

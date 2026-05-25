@@ -86,6 +86,14 @@ def api_scenarios():
         scenarios[key] = eng._make_flat_schedule(tmv)
 
     result = eng.compare_scenarios(scenarios)
+
+    # Persist TIF comparison to analytical warehouse (fire-and-forget)
+    try:
+        from warehouse.deal_analytics import persist_tif_comparison
+        persist_tif_comparison('chamberlain', result.get('scenarios', []))
+    except Exception:
+        pass
+
     return jsonify(result)
 
 
@@ -134,5 +142,12 @@ def api_scenario_detail(name):
         result = eng.run_with_growth(name, tmv_val, float(growth))
     else:
         result = eng.run_scenario(name, eng._make_flat_schedule(tmv_val))
+
+    # Persist TIF annual to analytical warehouse (fire-and-forget)
+    try:
+        from warehouse.deal_analytics import persist_tif
+        persist_tif('chamberlain', result.to_dict(), name)
+    except Exception:
+        pass
 
     return jsonify(result.to_dict())

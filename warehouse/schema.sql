@@ -177,6 +177,143 @@ CREATE TABLE IF NOT EXISTS fact_ownership (
     ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id)
 );
 
+-- ─── ZONE B: Deal Analytics Fact Tables ────────────────────────────
+-- Deal-level projections from proforma, distribution, debt, and TIF engines.
+-- All keyed by (deal_id, tif_scenario) with annual grain where applicable.
+
+-- Partner dimension (investor/operator entities)
+CREATE TABLE IF NOT EXISTS dim_partner (
+    partner_key     INTEGER PRIMARY KEY,
+    deal_id         VARCHAR NOT NULL,          -- e.g. 'chamberlain'
+    partner_id      VARCHAR NOT NULL,          -- e.g. 'KA', 'IDP'
+    partner_name    VARCHAR,
+    role            VARCHAR,                   -- 'GP', 'LP', 'Operator'
+    ownership_pct   DOUBLE,
+    distribution_pct DOUBLE,
+    pref_rate       DOUBLE,
+    initial_equity  DOUBLE,
+    valid_from      DATE DEFAULT '1900-01-01',
+    valid_to        DATE DEFAULT '9999-12-31'
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_partner_key START 1;
+
+-- Deal-level summary (one row per deal × tif_scenario)
+CREATE TABLE IF NOT EXISTS fact_deal_summary (
+    deal_id         VARCHAR NOT NULL,
+    tif_scenario    VARCHAR NOT NULL,
+    hold_years      INTEGER,
+    initial_equity  DOUBLE,
+    acquisition_cost_basis DOUBLE,
+    levered_irr     DOUBLE,
+    equity_multiple DOUBLE,
+    avg_dscr        DOUBLE,
+    exit_cap_rate   DOUBLE,
+    gross_sale_price DOUBLE,
+    net_sale_proceeds DOUBLE,
+    loan_repayment_at_sale DOUBLE,
+    total_distributed DOUBLE,
+    deal_irr        DOUBLE,
+    deal_em         DOUBLE,
+    knowledge_date  DATE NOT NULL,
+    ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id),
+    PRIMARY KEY (deal_id, tif_scenario, knowledge_date)
+);
+
+-- Annual proforma projections per TIF scenario
+CREATE TABLE IF NOT EXISTS fact_proforma_annual (
+    deal_id         VARCHAR NOT NULL,
+    tif_scenario    VARCHAR NOT NULL,
+    year            INTEGER NOT NULL,          -- hold year (1-based)
+    calendar_year   INTEGER,
+    noi             DOUBLE,
+    debt_service    DOUBLE,
+    capex           DOUBLE,
+    non_operating   DOUBLE,
+    levered_cf      DOUBLE,
+    dscr            DOUBLE,
+    knowledge_date  DATE NOT NULL,
+    ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id)
+);
+
+-- Annual distribution allocations per partner per TIF scenario
+CREATE TABLE IF NOT EXISTS fact_distribution_annual (
+    deal_id         VARCHAR NOT NULL,
+    tif_scenario    VARCHAR NOT NULL,
+    year            INTEGER NOT NULL,
+    calendar_year   INTEGER,
+    partner_id      VARCHAR NOT NULL,
+    distribution    DOUBLE,
+    pref_accrued    DOUBLE,
+    pref_paid       DOUBLE,
+    cash_on_cash    DOUBLE,
+    knowledge_date  DATE NOT NULL,
+    ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id)
+);
+
+-- Annual debt metrics (amortization, DSCR, LTV, MIP)
+CREATE TABLE IF NOT EXISTS fact_debt_annual (
+    deal_id         VARCHAR NOT NULL,
+    tif_scenario    VARCHAR NOT NULL,
+    year            INTEGER NOT NULL,
+    calendar_year   INTEGER,
+    beginning_balance DOUBLE,
+    ending_balance  DOUBLE,
+    total_payment   DOUBLE,
+    total_principal DOUBLE,
+    total_interest  DOUBLE,
+    noi             DOUBLE,
+    debt_service    DOUBLE,
+    dscr            DOUBLE,
+    dscr_with_mip   DOUBLE,
+    mip_amount      DOUBLE,
+    ltv             DOUBLE,
+    estimated_value DOUBLE,
+    knowledge_date  DATE NOT NULL,
+    ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id)
+);
+
+-- Annual TIF projections per scenario
+CREATE TABLE IF NOT EXISTS fact_tif_annual (
+    deal_id         VARCHAR NOT NULL,
+    tif_scenario    VARCHAR NOT NULL,
+    year            INTEGER NOT NULL,
+    tmv             DOUBLE,
+    ntc             DOUBLE,
+    captured_ntc    DOUBLE,
+    tax_increment   DOUBLE,
+    osa             DOUBLE,
+    admin           DOUBLE,
+    net_tif         DOUBLE,
+    note_beg_bal    DOUBLE,
+    note_interest   DOUBLE,
+    note_principal  DOUBLE,
+    note_end_bal    DOUBLE,
+    property_tax    DOUBLE,
+    knowledge_date  DATE NOT NULL,
+    ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id)
+);
+
+-- TIF scenario comparison (one row per scenario vs baseline)
+CREATE TABLE IF NOT EXISTS fact_tif_comparison (
+    deal_id         VARCHAR NOT NULL,
+    tif_scenario    VARCHAR NOT NULL,
+    payoff_year     INTEGER,
+    total_net_tif   DOUBLE,
+    npv_net_tif     DOUBLE,
+    npv_property_tax DOUBLE,
+    nominal_tax_savings DOUBLE,
+    nominal_tif_reduction DOUBLE,
+    nominal_net_benefit DOUBLE,
+    npv_tax_savings DOUBLE,
+    npv_tif_reduction DOUBLE,
+    npv_net_benefit DOUBLE,
+    attorney_fees   DOUBLE,
+    knowledge_date  DATE NOT NULL,
+    ingestion_id    INTEGER REFERENCES raw_ingestion_log(ingestion_id)
+);
+
+
 -- ─── ZONE C: Convenience Views ─────────────────────────────────────
 -- These provide backward-compatible read surfaces.
 
@@ -197,3 +334,36 @@ SELECT * FROM fact_cap_rate_aggregate
 WHERE is_clean = true
   AND period_type = 'year'
   AND knowledge_date = (SELECT MAX(knowledge_date) FROM fact_cap_rate_aggregate);
+
+-- Deal analytics: latest proforma + debt + distribution joined by year
+CREATE OR REPLACE VIEW v_deal_annual_summary AS
+SELECT
+    p.deal_id,
+    p.tif_scenario,
+    p.year,
+    p.calendar_year,
+    p.noi,
+    p.debt_service,
+    p.capex,
+    p.levered_cf,
+    p.dscr AS proforma_dscr,
+    d.beginning_balance AS loan_balance,
+    d.dscr AS debt_dscr,
+    d.ltv,
+    d.mip_amount,
+    t.net_tif,
+    t.property_tax,
+    t.note_end_bal AS tif_note_balance
+FROM fact_proforma_annual p
+LEFT JOIN fact_debt_annual d
+    ON p.deal_id = d.deal_id AND p.tif_scenario = d.tif_scenario AND p.year = d.year
+    AND d.knowledge_date = (SELECT MAX(knowledge_date) FROM fact_debt_annual)
+LEFT JOIN fact_tif_annual t
+    ON p.deal_id = t.deal_id AND p.tif_scenario = t.tif_scenario AND p.year = t.year
+    AND t.knowledge_date = (SELECT MAX(knowledge_date) FROM fact_tif_annual)
+WHERE p.knowledge_date = (SELECT MAX(knowledge_date) FROM fact_proforma_annual);
+
+-- Deal summary: latest snapshot per deal × scenario
+CREATE OR REPLACE VIEW v_deal_summary_latest AS
+SELECT * FROM fact_deal_summary
+WHERE knowledge_date = (SELECT MAX(knowledge_date) FROM fact_deal_summary);

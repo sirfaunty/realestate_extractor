@@ -66,6 +66,13 @@ def _run_full_analysis(tif_scenario='baseline'):
         )
         result.proforma_source = 'live'
         result.tif_scenario = tif_scenario
+
+        # Persist to analytical warehouse (fire-and-forget)
+        try:
+            from warehouse.deal_analytics import persist_debt
+            persist_debt('chamberlain', result, tif_scenario)
+        except Exception:
+            pass
     else:
         result = eng.run_analysis()
         result.proforma_source = 'defaults'

@@ -586,6 +586,30 @@ class PartnershipDashboardEngine:
         }
 
 
+    def get_market_context(self, market: str = 'Minneapolis') -> dict:
+        """Get market cap rates and rent benchmarks from the warehouse.
+
+        Provides market context for validating deal assumptions (exit cap
+        rate, rent growth, etc.). Returns empty dict if warehouse is
+        unavailable.
+        """
+        try:
+            from warehouse.engine import WarehouseEngine
+            wh = WarehouseEngine()
+            wh.connect()
+            cap_rates = wh.get_market_cap_rates_for_exit(market)
+            rent_benchmarks = wh.get_market_rent_benchmarks(market)
+            wh.close()
+            return {
+                'market': market,
+                'cap_rates': cap_rates,
+                'rent_benchmarks': rent_benchmarks,
+            }
+        except Exception as e:
+            logger.warning(f'Warehouse market context unavailable: {e}')
+            return {}
+
+
 def _delta(a: Optional[float], b: Optional[float]) -> Optional[float]:
     """Compute delta, handling None values."""
     if a is None or b is None:

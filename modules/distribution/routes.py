@@ -78,6 +78,13 @@ def _run_with_proforma(tif_scenario='baseline', include_sale=True):
             'proforma_irr': round(snap.levered_irr, 4) if snap.levered_irr else None,
             'proforma_em': round(snap.equity_multiple, 4),
         }
+
+        # Persist distribution to analytical warehouse (fire-and-forget)
+        try:
+            from warehouse.deal_analytics import persist_distribution
+            persist_distribution('chamberlain', result, tif_scenario)
+        except Exception:
+            pass
         return result
     else:
         # Fallback to hardcoded defaults
