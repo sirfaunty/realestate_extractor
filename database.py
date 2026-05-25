@@ -102,6 +102,9 @@ CREATE TABLE IF NOT EXISTS documents (
     processed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     file_hash       TEXT,                   -- SHA-256 to detect duplicates
     review_status   TEXT DEFAULT 'pending_review',  -- pending_review, approved, skipped
+    original_type   TEXT,                   -- classifier's first assignment (before corrections)
+    corrected_type  TEXT,                   -- human-corrected type (NULL if never corrected)
+    corrected_at    TIMESTAMP,              -- when the correction was made
     metadata        TEXT                    -- JSON blob for extra fields
 );
 
@@ -502,6 +505,18 @@ class Database:
             )
             self.conn.execute(
                 "ALTER TABLE documents ADD COLUMN reviewed_at TIMESTAMP"
+            )
+
+        # Add classifier correction tracking columns
+        if 'original_type' not in doc_cols:
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN original_type TEXT"
+            )
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN corrected_type TEXT"
+            )
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN corrected_at TIMESTAMP"
             )
 
     def close(self):
@@ -1763,12 +1778,12 @@ class Database:
             INSERT INTO documents (filename, filepath, document_type, property_name,
                                    property_address, page_count, is_scanned,
                                    ocr_confidence, file_hash, metadata,
-                                   property_id, portfolio_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   property_id, portfolio_id, original_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (filename, filepath, document_type, property_name, property_address,
               page_count, is_scanned, ocr_confidence, file_hash,
               json.dumps(metadata) if metadata else None,
-              property_id, portfolio_id))
+              property_id, portfolio_id, document_type))
         self.conn.commit()
         return cur.lastrowid
 

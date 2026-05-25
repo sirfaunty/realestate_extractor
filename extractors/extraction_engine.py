@@ -2104,6 +2104,7 @@ class DocumentClassifier:
         (r'certification.?re.?litigation', 'hud_form', 0.88),
         (r'special.?conditions.?from.?firm', 'hud_form', 0.88),
         (r'davis.?bacon|labor.?standards.?clearance', 'hud_form', 0.86),
+        (r'hud.?rider|restrictive.?covenant', 'hud_form', 0.88),
         # Due diligence / environmental / appraisal
         (r'diagnostic.?memo|due.?diligence|forensic.?review', 'due_diligence', 0.90),
         (r'phase.?[i1].?(?:esa|environmental)|environmental.?(?:site|report)', 'due_diligence', 0.90),
@@ -2138,7 +2139,7 @@ class DocumentClassifier:
         (r'subordination.?(?:agreement|nondisturbance)|snda', 'closing', 0.88),
         (r'estoppel.?(?:certificate|letter)', 'closing', 0.88),
         (r'assignment.?(?:of\s*)?(?:lease|rent|collateral)', 'closing', 0.88),
-        (r'ucc.?[1-3]|uniform.?commercial', 'closing', 0.86),
+        (r'ucc.?(?:[1-3]|financing|fixture|continuation)|uniform.?commercial', 'closing', 0.86),
         (r'attorney.?opinion|(?:legal|enforceability).?opinion', 'closing', 0.86),
         (r'alta.?closing.?protection', 'closing', 0.86),
         (r'certificate.?of.?(?:substantial.?)?completion', 'closing', 0.86),
@@ -2195,6 +2196,7 @@ class DocumentClassifier:
         (r'security.?deposit.?(?:ledger|report|schedule|register|list)', 'security_deposit', 0.92),
         (r'deposit.?(?:ledger|register|accounting)', 'security_deposit', 0.88),
         (r'tenant.?deposit', 'security_deposit', 0.86),
+        (r'certificate.{0,20}(?:tenant|security).{0,5}deposit', 'security_deposit', 0.88),
         # Outstanding payables (AP aging)
         (r'(?:accounts?\s*)?payable.?(?:aging|report|detail|register)', 'payables', 0.92),
         (r'a/?p.?aging', 'payables', 0.90),
