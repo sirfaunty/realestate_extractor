@@ -93,6 +93,15 @@ def api_comparison():
     })
 
 
+@partnership_bp.route('/api/market-context')
+def api_market_context():
+    """Return market cap rates and rent benchmarks for deal validation."""
+    eng = _get_engine()
+    market = request.args.get('market', 'Minneapolis')
+    context = eng.get_market_context(market)
+    return jsonify(context)
+
+
 @partnership_bp.route('/api/export/docx')
 def api_export_docx():
     """Generate and download an investor report as .docx.
