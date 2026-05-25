@@ -85,35 +85,10 @@
 
         <div class="sidebar-section-label">Market Analytics</div>
         <ul class="sidebar-nav" style="padding-top: 0;">
-            <li><a href="{{ url_for('scorecard.scorecard_index') }}" class="{% if request.endpoint and request.endpoint.startswith('scorecard.') %}active{% endif %}">
+            <li><a href="{{ url_for('market_analytics') }}" class="{% if request.endpoint == 'market_analytics' or (request.endpoint and (request.endpoint.startswith('scorecard.') or request.endpoint.startswith('inventory.') or request.endpoint.startswith('sales_comps.') or request.endpoint.startswith('lease_analysis.') or request.endpoint.startswith('market_intel.') or request.endpoint.startswith('office.'))) %}active{% endif %}">
                 <span class="icon">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14V8l3-2 3 2 3-4 3 2v8H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="5" cy="6" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="11" cy="4" r="1" fill="currentColor"/></svg>
-                </span> Market Scorecard
-            </a></li>
-            <li><a href="{{ url_for('inventory.index') }}" class="{% if request.endpoint and request.endpoint.startswith('inventory.') %}active{% endif %}">
-                <span class="icon">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3h12v3H2V3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 6v7h10V6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 9h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </span> Inventory
-            </a></li>
-            <li><a href="{{ url_for('sales_comps.index') }}" class="{% if request.endpoint and request.endpoint.startswith('sales_comps.') %}active{% endif %}">
-                <span class="icon">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l4-5 3 3 5-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="4" r="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
-                </span> Sales Comps
-            </a></li>
-            <li><a href="{{ url_for('lease_analysis.index') }}" class="{% if request.endpoint and request.endpoint.startswith('lease_analysis.') %}active{% endif %}">
-                <span class="icon">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12M6 6v8" stroke="currentColor" stroke-width="1.5"/></svg>
-                </span> Lease Analysis
-            </a></li>
-            <li><a href="{{ url_for('market_intel.index') }}" class="{% if request.endpoint and request.endpoint.startswith('market_intel.') %}active{% endif %}">
-                <span class="icon">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </span> Market Intel
-            </a></li>
-            <li><a href="{{ url_for('office.office_index') }}" class="{% if request.endpoint and request.endpoint.startswith('office.') %}active{% endif %}">
-                <span class="icon">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 14V3a1 1 0 011-1h8a1 1 0 011 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M1 14h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </span> Office Inventory
+                </span> Market Analytics
             </a></li>
         </ul>
 

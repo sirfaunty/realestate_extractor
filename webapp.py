@@ -3105,6 +3105,15 @@ def _result_to_dict(result: ProcessingResult) -> dict:
     }
 
 
+# ─── Market Analytics Landing Page ──────────────────────────────────
+
+@app.route('/market-analytics')
+@login_required
+def market_analytics():
+    """Landing page for all market analytics modules."""
+    return render_template('market_analytics.html')
+
+
 # ─── Module Registration ────────────────────────────────────────────
 # Discover and register all platform modules (proforma, etc.)
 

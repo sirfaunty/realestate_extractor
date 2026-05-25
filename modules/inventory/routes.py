@@ -34,11 +34,29 @@ def register_inventory_routes(app):
 
 @inventory_bp.route('/')
 def index():
-    """Inventory dashboard — scored markets overview."""
+    """Inventory dashboard — scored markets overview.
+    Renders the page shell immediately with a loading skeleton,
+    then fetches data via /api/index-data to populate the table.
+    """
+    return render_template_string(INDEX_HTML)
+
+
+@inventory_bp.route('/api/index-data')
+def api_index_data():
+    """JSON endpoint that returns markets + summary for the dashboard."""
     eng = _get_engine()
     markets = eng.get_scored_markets()
     summary = eng.wh.summary()
-    return render_template_string(INDEX_HTML, markets=markets, summary=summary)
+    # summary may be a dict or an object with attributes
+    if isinstance(summary, dict):
+        s = summary
+    else:
+        s = {
+            'dim_property': getattr(summary, 'dim_property', 0),
+            'fact_property_zscore': getattr(summary, 'fact_property_zscore', 0),
+            'fact_peer_group_stats': getattr(summary, 'fact_peer_group_stats', 0),
+        }
+    return jsonify({'markets': markets, 'summary': s})
 
 
 @inventory_bp.route('/market/<market_name>')
@@ -213,7 +231,27 @@ input[type="text"]:focus, select:focus { outline: none; border-color: var(--acce
 """
 
 INDEX_HTML = """
-<!DOCTYPE html><html><head><title>Inventory — Capactive</title>""" + _STYLE + """</head><body>
+<!DOCTYPE html><html><head><title>Inventory — Capactive</title>""" + _STYLE + """
+<style>
+@keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+.skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, #1c2129 50%, var(--surface) 75%);
+    background-size: 800px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
+}
+.skeleton-text { height: 14px; margin: 4px 0; }
+.skeleton-value { height: 28px; width: 60px; }
+.skeleton-row td { padding: 12px; }
+.loading-msg { text-align: center; color: var(--text2); padding: 48px 0; }
+.loading-msg .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head><body>
 <div class="container">
     <div class="nav">
         <a href="/">← Platform</a>
@@ -222,28 +260,63 @@ INDEX_HTML = """
         <a href="/inventory/search">Search</a>
     </div>
     <h1>National Inventory</h1>
-    <p class="subtitle">Property z-score benchmarking across {{ "{:,}".format(summary.dim_property) }} properties</p>
-    <div class="grid">
-        <div class="card"><div class="label">Properties</div><div class="value green">{{ "{:,}".format(summary.dim_property) }}</div></div>
-        <div class="card"><div class="label">Z-Score Rows</div><div class="value">{{ "{:,}".format(summary.fact_property_zscore) }}</div></div>
-        <div class="card"><div class="label">Scored Markets</div><div class="value">{{ markets|length }}</div></div>
-        <div class="card"><div class="label">Peer Stats</div><div class="value">{{ "{:,}".format(summary.fact_peer_group_stats) }}</div></div>
+    <p class="subtitle" id="subtitle">Loading inventory data...</p>
+    <div class="grid" id="summary-cards">
+        <div class="card"><div class="label">Properties</div><div class="value"><div class="skeleton skeleton-value"></div></div></div>
+        <div class="card"><div class="label">Z-Score Rows</div><div class="value"><div class="skeleton skeleton-value"></div></div></div>
+        <div class="card"><div class="label">Scored Markets</div><div class="value"><div class="skeleton skeleton-value"></div></div></div>
+        <div class="card"><div class="label">Peer Stats</div><div class="value"><div class="skeleton skeleton-value"></div></div></div>
     </div>
     <h2>Scored Markets</h2>
-    <table>
-        <tr><th>Market</th><th class="right">Scored</th><th class="right">Total</th><th class="right">Coverage</th><th class="right">Peer Cuts</th><th class="right">Metrics</th></tr>
-        {% for m in markets %}
-        <tr>
-            <td><a href="/inventory/market/{{ m.market }}">{{ m.market }}</a></td>
-            <td class="right mono">{{ "{:,}".format(m.scored_properties) }}</td>
-            <td class="right mono">{{ "{:,}".format(m.total_properties) }}</td>
-            <td class="right"><span class="badge {{ 'green' if m.scored_properties/m.total_properties > 0.5 else 'orange' }}">{{ "%.0f"|format(m.scored_properties/m.total_properties*100) }}%</span></td>
-            <td class="right mono">{{ m.peer_cuts }}</td>
-            <td class="right mono">{{ m.metrics }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div id="markets-table">
+        <div class="loading-msg"><span class="spinner"></span>Loading market data&hellip;</div>
+    </div>
 </div>
+<script>
+(function() {
+    function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
+
+    fetch('/inventory/api/index-data')
+        .then(r => r.json())
+        .then(data => {
+            const s = data.summary;
+            const markets = data.markets;
+
+            // Update subtitle
+            document.getElementById('subtitle').textContent =
+                'Property z-score benchmarking across ' + fmt(s.dim_property) + ' properties';
+
+            // Update summary cards
+            document.getElementById('summary-cards').innerHTML =
+                '<div class="card"><div class="label">Properties</div><div class="value green">' + fmt(s.dim_property) + '</div></div>' +
+                '<div class="card"><div class="label">Z-Score Rows</div><div class="value">' + fmt(s.fact_property_zscore) + '</div></div>' +
+                '<div class="card"><div class="label">Scored Markets</div><div class="value">' + markets.length + '</div></div>' +
+                '<div class="card"><div class="label">Peer Stats</div><div class="value">' + fmt(s.fact_peer_group_stats) + '</div></div>';
+
+            // Build table
+            var html = '<table><tr><th>Market</th><th class="right">Scored</th><th class="right">Total</th>' +
+                '<th class="right">Coverage</th><th class="right">Peer Cuts</th><th class="right">Metrics</th></tr>';
+            markets.forEach(function(m) {
+                var pct = m.total_properties > 0 ? Math.round(m.scored_properties / m.total_properties * 100) : 0;
+                var cls = pct > 50 ? 'green' : 'orange';
+                html += '<tr>' +
+                    '<td><a href="/inventory/market/' + encodeURIComponent(m.market) + '">' + m.market + '</a></td>' +
+                    '<td class="right mono">' + fmt(m.scored_properties) + '</td>' +
+                    '<td class="right mono">' + fmt(m.total_properties) + '</td>' +
+                    '<td class="right"><span class="badge ' + cls + '">' + pct + '%</span></td>' +
+                    '<td class="right mono">' + (m.peer_cuts || '—') + '</td>' +
+                    '<td class="right mono">' + (m.metrics || '—') + '</td>' +
+                    '</tr>';
+            });
+            html += '</table>';
+            document.getElementById('markets-table').innerHTML = html;
+        })
+        .catch(function(err) {
+            document.getElementById('markets-table').innerHTML =
+                '<p style="color:var(--red);padding:24px;">Failed to load data: ' + err.message + '</p>';
+        });
+})();
+</script>
 </body></html>
 """
 
