@@ -513,6 +513,9 @@ class MarketIntelEngine:
             else:
                 m["score"] = None
                 m["rank"] = None
+                m["ds_score"] = None
+                m["occ_score"] = None
+                m["rent_score"] = None
 
         return markets
 

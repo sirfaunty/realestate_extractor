@@ -330,9 +330,9 @@ function filterTable() {
         <td>{{ m.submarkets }}</td>
         <td>{% if m.score is not none %}{{ "%.2f"|format(m.score) }}{% else %}-{% endif %}</td>
         <td>{% if m.rank is not none %}#{{ m.rank }}{% else %}-{% endif %}</td>
-        <td>{% if m.ds_score is not none %}{{ "%.2f"|format(m.ds_score) }}{% else %}-{% endif %}</td>
-        <td>{% if m.occ_score is not none %}{{ "%.2f"|format(m.occ_score) }}{% else %}-{% endif %}</td>
-        <td>{% if m.rent_score is not none %}{{ "%.2f"|format(m.rent_score) }}{% else %}-{% endif %}</td>
+        <td>{% if m.get('ds_score') is not none %}{{ "%.2f"|format(m.get('ds_score')) }}{% else %}-{% endif %}</td>
+        <td>{% if m.get('occ_score') is not none %}{{ "%.2f"|format(m.get('occ_score')) }}{% else %}-{% endif %}</td>
+        <td>{% if m.get('rent_score') is not none %}{{ "%.2f"|format(m.get('rent_score')) }}{% else %}-{% endif %}</td>
         <td><a href="/market-intel/market/{{ m.market }}">View &rarr;</a></td>
     </tr>
     {% endfor %}
@@ -610,23 +610,23 @@ _MARKET_DETAIL_HTML = """
 <div class="grid">
     <div class="card">
         <div class="label">Final Score</div>
-        <div class="value">{{ "%.2f"|format(brief.scorecard.final_score) if brief.scorecard.final_score is not none else '-' }}</div>
+        <div class="value">{{ "%.2f"|format(brief.scorecard.get('final_score', 0)) if brief.scorecard.get('final_score') is not none else '-' }}</div>
     </div>
     <div class="card">
         <div class="label">Rank</div>
-        <div class="value">#{{ brief.scorecard.rank if brief.scorecard.rank is not none else '-' }}</div>
+        <div class="value">#{{ brief.scorecard.get('rank', '-') if brief.scorecard.get('rank') is not none else '-' }}</div>
     </div>
     <div class="card">
         <div class="label">D&amp;S</div>
-        <div class="value">{{ "%.2f"|format(brief.scorecard.ds_score) if brief.scorecard.get('ds_score') is not none else '-' }}</div>
+        <div class="value">{{ "%.2f"|format(brief.scorecard.get('ds_score', 0)) if brief.scorecard.get('ds_score') is not none else '-' }}</div>
     </div>
     <div class="card">
         <div class="label">Occupancy</div>
-        <div class="value">{{ "%.2f"|format(brief.scorecard.occ_score) if brief.scorecard.get('occ_score') is not none else '-' }}</div>
+        <div class="value">{{ "%.2f"|format(brief.scorecard.get('occ_score', 0)) if brief.scorecard.get('occ_score') is not none else '-' }}</div>
     </div>
     <div class="card">
         <div class="label">Rent Growth</div>
-        <div class="value">{{ "%.2f"|format(brief.scorecard.rent_score) if brief.scorecard.get('rent_score') is not none else '-' }}</div>
+        <div class="value">{{ "%.2f"|format(brief.scorecard.get('rent_score', 0)) if brief.scorecard.get('rent_score') is not none else '-' }}</div>
     </div>
 </div>
 <p style="color:var(--muted);font-size:13px">
