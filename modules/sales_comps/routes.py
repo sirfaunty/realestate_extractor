@@ -32,12 +32,18 @@ def register_sales_comps_routes(app):
 
 @comps_bp.route('/')
 def index():
+    """Sales comps dashboard — renders shell immediately, data loads async."""
+    return render_template_string(INDEX_HTML)
+
+
+@comps_bp.route('/api/index-data')
+def api_index_data():
+    """JSON endpoint for dashboard data."""
     eng = _get_engine()
     markets = eng.list_markets()
     total_deals = sum(m['deals'] for m in markets)
-    total_markets = len(markets)
-    return render_template_string(INDEX_HTML, markets=markets,
-                                  total_deals=total_deals, total_markets=total_markets)
+    return jsonify({'markets': markets[:30], 'total_deals': total_deals,
+                    'total_markets': len(markets)})
 
 
 @comps_bp.route('/search')
@@ -253,7 +259,16 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 """
 
 INDEX_HTML = """
-<!DOCTYPE html><html><head><title>Sales Comps — Capactive</title>""" + _STYLE + """</head><body>
+<!DOCTYPE html><html><head><title>Sales Comps — Capactive</title>""" + _STYLE + """
+<style>
+@keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,#1c2129 50%,var(--surface) 75%);background-size:800px 100%;animation:shimmer 1.5s ease-in-out infinite;border-radius:4px}
+.skeleton-value{height:28px;width:60px}
+.loading-msg{text-align:center;color:var(--text2);padding:48px 0}
+.loading-msg .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head><body>
 <div class="container">
     <div class="nav">
         <a href="/">← Platform</a>
@@ -264,24 +279,43 @@ INDEX_HTML = """
         <a href="/comps/cap-rates">Cap Rates</a>
     </div>
     <h1>Sales Comps</h1>
-    <p class="subtitle">{{ "{:,}".format(total_deals) }} transactions across {{ total_markets }} markets</p>
-    <div class="grid">
-        <div class="card"><div class="label">Total Deals</div><div class="value green">{{ "{:,}".format(total_deals) }}</div></div>
-        <div class="card"><div class="label">Markets</div><div class="value">{{ total_markets }}</div></div>
+    <p class="subtitle" id="subtitle">Loading transaction data...</p>
+    <div class="grid" id="summary-cards">
+        <div class="card"><div class="label">Total Deals</div><div class="value"><div class="skeleton skeleton-value"></div></div></div>
+        <div class="card"><div class="label">Markets</div><div class="value"><div class="skeleton skeleton-value"></div></div></div>
     </div>
     <h2>Markets by Deal Volume</h2>
-    <table>
-        <tr><th>Market</th><th class="right">Deals</th><th class="right">Median Price</th><th class="right">Years</th></tr>
-        {% for m in markets[:30] %}
-        <tr>
-            <td><a href="/comps/market/{{ m.market }}">{{ m.market }}</a></td>
-            <td class="right mono">{{ "{:,}".format(m.deals) }}</td>
-            <td class="right mono">${{ "{:,}".format(m.median_price) }}</td>
-            <td class="right mono">{{ m.min_year }}–{{ m.max_year }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div id="markets-table">
+        <div class="loading-msg"><span class="spinner"></span>Loading market data&hellip;</div>
+    </div>
 </div>
+<script>
+(function(){
+    function fmt(n){return n!=null?n.toLocaleString():'—'}
+    fetch('/comps/api/index-data')
+        .then(function(r){return r.json()})
+        .then(function(d){
+            document.getElementById('subtitle').textContent=
+                fmt(d.total_deals)+' transactions across '+d.total_markets+' markets';
+            document.getElementById('summary-cards').innerHTML=
+                '<div class="card"><div class="label">Total Deals</div><div class="value green">'+fmt(d.total_deals)+'</div></div>'+
+                '<div class="card"><div class="label">Markets</div><div class="value">'+d.total_markets+'</div></div>';
+            var h='<table><tr><th>Market</th><th class="right">Deals</th><th class="right">Median Price</th><th class="right">Years</th></tr>';
+            d.markets.forEach(function(m){
+                h+='<tr><td><a href="/comps/market/'+encodeURIComponent(m.market)+'">'+m.market+'</a></td>'+
+                   '<td class="right mono">'+fmt(m.deals)+'</td>'+
+                   '<td class="right mono">$'+fmt(m.median_price)+'</td>'+
+                   '<td class="right mono">'+m.min_year+'–'+m.max_year+'</td></tr>';
+            });
+            h+='</table>';
+            document.getElementById('markets-table').innerHTML=h;
+        })
+        .catch(function(e){
+            document.getElementById('markets-table').innerHTML=
+                '<p style="color:var(--red);padding:24px">Failed to load data: '+e.message+'</p>';
+        });
+})();
+</script>
 </body></html>
 """
 
