@@ -42,33 +42,39 @@ def register_lease_analysis_routes(app):
 
 @leases_bp.route('/')
 def index():
-    """Dashboard — all properties with lease data."""
+    """Dashboard — renders shell immediately, data loads async."""
+    return render_template_string(_DASHBOARD_HTML)
+
+
+@leases_bp.route('/api/index-data')
+def api_index_data():
+    """JSON endpoint for dashboard data."""
     try:
         eng = _get_engine()
         properties = eng.get_properties_with_lease_data()
-        summaries = []
+        results = []
         for p in properties:
             try:
                 s = eng.get_analysis_summary(p['id'])
-                summaries.append(s)
-            except Exception as e:
-                logger.warning(f"Summary failed for property {p['id']}: {e}")
-                summaries.append({
-                    'property_id': p['id'],
-                    'property_name': p.get('name', ''),
+                results.append({
+                    'id': p['id'], 'name': p.get('name', ''),
+                    'city': p.get('city', ''), 'state': p.get('state', ''),
+                    'has_data': s.get('has_data', False),
+                    'total_units': s.get('total_units'),
+                    'occupancy_pct': s.get('occupancy_pct'),
+                    'unit_type_count': s.get('unit_type_count'),
+                    'avg_rent': s.get('avg_rent'),
+                    'vacant_units': s.get('vacant_units'),
+                })
+            except Exception:
+                results.append({
+                    'id': p['id'], 'name': p.get('name', ''),
+                    'city': p.get('city', ''), 'state': p.get('state', ''),
                     'has_data': False,
                 })
+        return jsonify({'properties': results})
     except Exception as e:
-        logger.error(f"Lease analysis index error: {e}")
-        properties = []
-        summaries = []
-
-    return render_template_string(
-        _DASHBOARD_HTML,
-        properties=properties,
-        summaries=summaries,
-        zip=zip,
-    )
+        return jsonify({'properties': [], 'error': str(e)})
 
 
 @leases_bp.route('/property/<int:property_id>')
@@ -300,44 +306,62 @@ _NAV = """
 </div>
 """
 
-_DASHBOARD_HTML = _STYLE + _NAV.replace('{extra}', '').replace('{title}', 'Lease Analysis') + """
+_DASHBOARD_HTML = _STYLE + """
+<style>
+.loading-msg{text-align:center;color:var(--muted);padding:48px 0}
+.loading-msg .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+""" + _NAV.replace('{extra}', '').replace('{title}', 'Lease Analysis') + """
 <div class="container">
   <p class="subtitle">Properties with extracted rent-roll or lease documents</p>
-
-  {% if not summaries %}
-    <div class="card">
-      <p class="empty">No properties with lease data found. Upload rent-roll documents to get started.</p>
-    </div>
-  {% else %}
-    {% for prop, s in zip(properties, summaries) %}
-    <div class="prop-card">
-      <div class="prop-card-left">
-        <h3>{{ prop.name }}</h3>
-        <div class="meta">
-          {{ prop.city }}, {{ prop.state }}
-          {% if s.has_data %}
-           &nbsp;·&nbsp; {{ s.total_units }} units
-           &nbsp;·&nbsp; {{ s.occupancy_pct }}% occupied
-           &nbsp;·&nbsp; {{ s.unit_type_count }} unit types
-           &nbsp;·&nbsp; avg rent ${{ "{:,.0f}".format(s.avg_rent) }}
-          {% else %}
-           &nbsp;·&nbsp; <span class="muted">no rent-roll data</span>
-          {% endif %}
-        </div>
-      </div>
-      <div class="prop-card-right">
-        {% if s.has_data %}
-          <span class="badge badge-green">{{ s.vacant_units }} vacant</span>
-          <a href="/leases/property/{{ prop.id }}" class="btn">Overview</a>
-          <a href="/leases/property/{{ prop.id }}/analysis" class="btn btn-primary">Run Analysis</a>
-        {% else %}
-          <span class="badge badge-gray">No data</span>
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  {% endif %}
+  <div id="properties-list">
+    <div class="loading-msg"><span class="spinner"></span>Loading lease data&hellip;</div>
+  </div>
 </div>
+<script>
+(function(){
+    function fmt(n){return n!=null?Number(n).toLocaleString():'0'}
+    function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+    fetch('/leases/api/index-data')
+        .then(function(r){return r.json()})
+        .then(function(d){
+            var el=document.getElementById('properties-list');
+            if(!d.properties||d.properties.length===0){
+                el.innerHTML='<div class="card"><p class="empty">No properties with lease data found. Upload rent-roll documents to get started.</p></div>';
+                return;
+            }
+            var h='';
+            d.properties.forEach(function(p){
+                h+='<div class="prop-card"><div class="prop-card-left"><h3>'+esc(p.name)+'</h3><div class="meta">'+
+                    esc(p.city)+', '+esc(p.state);
+                if(p.has_data){
+                    h+=' &nbsp;·&nbsp; '+p.total_units+' units'+
+                       ' &nbsp;·&nbsp; '+p.occupancy_pct+'% occupied'+
+                       ' &nbsp;·&nbsp; '+p.unit_type_count+' unit types'+
+                       ' &nbsp;·&nbsp; avg rent $'+fmt(p.avg_rent);
+                }else{
+                    h+=' &nbsp;·&nbsp; <span class="muted">no rent-roll data</span>';
+                }
+                h+='</div></div><div class="prop-card-right">';
+                if(p.has_data){
+                    h+='<span class="badge badge-green">'+p.vacant_units+' vacant</span>'+
+                       '<a href="/leases/property/'+p.id+'" class="btn">Overview</a>'+
+                       '<a href="/leases/property/'+p.id+'/analysis" class="btn btn-primary">Run Analysis</a>';
+                }else{
+                    h+='<span class="badge badge-gray">No data</span>';
+                }
+                h+='</div></div>';
+            });
+            el.innerHTML=h;
+        })
+        .catch(function(e){
+            document.getElementById('properties-list').innerHTML=
+                '<p style="color:var(--red);padding:24px">Failed to load data: '+e.message+'</p>';
+        });
+})();
+</script>
 """
 
 _PROPERTY_HTML = _STYLE + _NAV.replace(
