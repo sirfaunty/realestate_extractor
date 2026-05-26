@@ -2105,6 +2105,14 @@ class DocumentClassifier:
         (r'special.?conditions.?from.?firm', 'hud_form', 0.88),
         (r'davis.?bacon|labor.?standards.?clearance', 'hud_form', 0.86),
         (r'hud.?rider|restrictive.?covenant', 'hud_form', 0.88),
+        # Weekly / periodic property reports (must precede due_diligence)
+        (r'weekly.?report', 'weekly_report', 0.92),
+        (r'weekly.?residential', 'weekly_report', 0.90),
+        (r'weekly.?(?:sr|senior).?housing', 'weekly_report', 0.90),
+        (r'leasing.?report', 'weekly_report', 0.90),
+        (r'standard.?marketing.?report', 'weekly_report', 0.88),
+        (r'in.?place.?rents.?by.?unit', 'weekly_report', 0.90),
+        (r'marketing.?report', 'weekly_report', 0.85),
         # Due diligence / environmental / appraisal
         (r'diagnostic.?memo|due.?diligence|forensic.?review', 'due_diligence', 0.90),
         (r'phase.?[i1].?(?:esa|environmental)|environmental.?(?:site|report)', 'due_diligence', 0.90),
@@ -2607,6 +2615,25 @@ class DocumentClassifier:
                 "rent roll", "operating statement", "lease agreement",
             ],
         },
+        "weekly_report": {
+            "positive": [
+                "weekly report", "leasing report", "marketing report",
+                "leasing activity", "traffic report", "guest card",
+                "new lease", "renewal", "move-in", "move-out",
+                "notice to vacate", "available units", "occupied",
+                "vacancy", "occupancy", "leased %", "pre-leased",
+                "in place rents", "unit type", "market rent",
+                "weekly residential", "senior housing",
+                "portfolio weekly", "property performance",
+                "chamberlain", "net effective", "asking rent",
+                "exposure", "application", "approved", "denied",
+            ],
+            "negative": [
+                "promissory note", "loan agreement", "hud",
+                "llc agreement", "limited liability",
+                "closing book", "title commitment",
+            ],
+        },
     }
 
     # Document types that have extraction templates (Phase 2 analysis)
@@ -2667,7 +2694,9 @@ class DocumentClassifier:
                 _rest = filename_lower[_email_prefix_match.end():]
                 _strong_financial = re.search(
                     r'monthly.?report|rent.?roll|operating.?statement|12.?month|'
-                    r'variance.?report|executive.?summary|unit.?mix|budget.?comparison',
+                    r'variance.?report|executive.?summary|unit.?mix|budget.?comparison|'
+                    r'weekly.?report|weekly.?residential|weekly.?(?:sr|senior).?housing|'
+                    r'leasing.?report',
                     _rest
                 )
                 if not _strong_financial:
