@@ -1558,6 +1558,21 @@ def review_queue():
                            portfolios=portfolio_list)
 
 
+@app.route('/review/bulk-approve', methods=['POST'])
+@login_required
+@permission_required('extraction.review', 'edit')
+def review_bulk_approve():
+    """Approve all high-confidence property matches at once."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        count = db.bulk_approve_matches(min_score=0.7)
+        flash(f'{count} document{"s" if count != 1 else ""} approved with high-confidence matches.', 'success')
+    finally:
+        db.close()
+    return redirect(url_for('review_queue'))
+
+
 @app.route('/review/<int:doc_id>/approve', methods=['POST'])
 @login_required
 @permission_required('extraction.review', 'edit')

@@ -2,9 +2,18 @@
 {% block title %}Review Queue — capactive{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Review Queue</h2>
-    <p>Match processed documents to properties — {{ review_count }} pending</p>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: start;">
+    <div>
+        <h2>Review Queue</h2>
+        <p>Match processed documents to properties — {{ review_count }} pending</p>
+    </div>
+    {% if review_count > 0 %}
+    <form method="POST" action="{{ url_for('review_bulk_approve') }}" onsubmit="return confirm('Approve all documents with high-confidence property matches (≥70%)?');">
+        <button type="submit" class="btn btn-signal" style="white-space: nowrap;">
+            ✓ Approve All High-Confidence
+        </button>
+    </form>
+    {% endif %}
 </div>
 
 {% if not queue %}

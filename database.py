@@ -1012,6 +1012,19 @@ class Database:
             (doc_id,))
         self.conn.commit()
 
+    def bulk_approve_matches(self, min_score: float = 0.7) -> int:
+        """Approve all pending documents with a high-confidence property match.
+
+        Returns the number of documents approved.
+        """
+        docs = self.get_review_queue(limit=9999)
+        approved = 0
+        for doc in docs:
+            if doc['best_match'] and doc['best_score'] >= min_score:
+                self.approve_document_match(doc['id'], doc['best_match']['id'])
+                approved += 1
+        return approved
+
     def skip_document_review(self, doc_id: int):
         """Skip review for a document (can revisit later)."""
         self.conn.execute(
