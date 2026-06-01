@@ -314,6 +314,11 @@ _DASHBOARD_HTML = _STYLE + """
 </style>
 """ + _NAV.replace('{extra}', '').replace('{title}', 'Lease Analysis') + """
 <div class="container">
+  <div style="font-size: 13px; margin-bottom: 16px;">
+      <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+      <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+      <span style="color: var(--text-secondary, #5A5A6E);">Lease Analysis</span>
+  </div>
   <p class="subtitle">Properties with extracted rent-roll or lease documents</p>
   <div id="properties-list">
     <div class="loading-msg"><span class="spinner"></span>Loading lease data&hellip;</div>

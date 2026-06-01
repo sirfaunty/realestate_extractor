@@ -259,6 +259,11 @@ INDEX_HTML = """
         <a href="/inventory">Inventory</a>
         <a href="/inventory/search">Search</a>
     </div>
+    <div style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Inventory</span>
+    </div>
     <h1>National Inventory</h1>
     <p class="subtitle" id="subtitle">Loading inventory data...</p>
     <div class="grid" id="summary-cards">

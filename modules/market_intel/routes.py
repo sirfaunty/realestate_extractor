@@ -307,6 +307,11 @@ function filterTable() {
     <span class="breadcrumb">{{ markets|length }} markets</span>
 </div>
 <div class="container">
+    <div style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Market Intelligence</span>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <h2 style="margin:0">Markets</h2>
         <div style="display:flex;gap:12px;align-items:center">
