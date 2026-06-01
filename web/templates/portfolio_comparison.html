@@ -39,8 +39,8 @@
 <!-- Summary Cards -->
 <div class="card-grid" style="margin-bottom: 20px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
     {% set ns = namespace(total_noi=0, total_income=0, total_expenses=0, latest_period='') %}
-    {% if periods %}
-        {% set ns.latest_period = periods[-1] %}
+    {% if display_periods %}
+        {% set ns.latest_period = display_periods[0] %}
         {% for c in comparisons %}
             {% set ps = c.synthesis.period_summaries.get(ns.latest_period, {}) %}
             {% set ns.total_income = ns.total_income + ps.get('total_income', 0) %}
@@ -84,6 +84,13 @@
             style="padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;">
         Data Sources
     </button>
+    {% if extra_periods %}
+    <div style="margin-left: auto; display: flex; align-items: center;">
+        <button id="period-toggle-btn" onclick="toggleAllPeriods()" style="font-size: 12px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: white; cursor: pointer; color: var(--text-secondary); white-space: nowrap;">
+            Show all {{ display_periods|length + extra_periods|length }} periods
+        </button>
+    </div>
+    {% endif %}
 </div>
 
 <!-- NOI Timeline Comparison -->
@@ -98,8 +105,14 @@
                 <thead>
                     <tr>
                         <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                        {% if display_periods|length >= 2 %}
+                        <th style="text-align: right; white-space: nowrap;">&Delta; YoY</th>
+                        {% endif %}
+                        {% for p in extra_periods %}
+                        <th class="extra-period-col" style="text-align: right; display: none;">{{ p }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -111,7 +124,7 @@
                                 {{ c.property.name }}
                             </a>
                         </td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         {% set ps = c.synthesis.period_summaries.get(p, {}) %}
                         {% if ps %}
                         <td style="text-align: right; font-variant-numeric: tabular-nums;">
@@ -124,13 +137,42 @@
                         <td style="text-align: right; color: var(--text-muted);">—</td>
                         {% endif %}
                         {% endfor %}
+                        {% if display_periods|length >= 2 %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;">
+                            {% set ps_curr = c.synthesis.period_summaries.get(display_periods[0], {}) %}
+                            {% set ps_prev = c.synthesis.period_summaries.get(display_periods[1], {}) %}
+                            {% set noi_curr = ps_curr.get('calculated_noi', 0) if ps_curr else 0 %}
+                            {% set noi_prev = ps_prev.get('calculated_noi', 0) if ps_prev else 0 %}
+                            {% if noi_prev and noi_prev != 0 %}
+                                {% set yoy_pct = ((noi_curr - noi_prev) / noi_prev * 100) %}
+                                <span style="color: {% if yoy_pct > 0 %}var(--cap-signal){% elif yoy_pct < 0 %}var(--danger){% else %}var(--text-muted){% endif %}; font-weight: 500;">
+                                    {% if yoy_pct > 0 %}+{% endif %}{{ '{:.1f}'.format(yoy_pct) }}%
+                                </span>
+                            {% else %}
+                                <span style="color: var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        {% for p in extra_periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps %}
+                        <td class="extra-period-col" style="text-align: right; font-variant-numeric: tabular-nums; display: none;">
+                            {% set noi = ps.get('calculated_noi', 0) %}
+                            <span style="color: {% if noi > 0 %}var(--cap-signal){% elif noi < 0 %}var(--danger){% else %}var(--text-muted){% endif %};">
+                                ${{ '{:,.0f}'.format(noi) }}
+                            </span>
+                        </td>
+                        {% else %}
+                        <td class="extra-period-col" style="text-align: right; color: var(--text-muted); display: none;">—</td>
+                        {% endif %}
+                        {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr style="font-weight: 600; border-top: 2px solid var(--border);">
                         <td style="position: sticky; left: 0; background: white; z-index: 1;">Portfolio Total</td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <td style="text-align: right; font-variant-numeric: tabular-nums;">
                             {% set ns2 = namespace(total=0, has_data=false) %}
                             {% for c in comparisons %}
@@ -147,6 +189,40 @@
                             {% else %}—{% endif %}
                         </td>
                         {% endfor %}
+                        {% if display_periods|length >= 2 %}
+                        <td style="text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;">
+                            {% set ns2y = namespace(curr=0, prev=0, has=false) %}
+                            {% for c in comparisons %}
+                                {% set ps_c = c.synthesis.period_summaries.get(display_periods[0], {}) %}
+                                {% set ps_p = c.synthesis.period_summaries.get(display_periods[1], {}) %}
+                                {% if ps_c %}{% set ns2y.curr = ns2y.curr + ps_c.get('calculated_noi', 0) %}{% set ns2y.has = true %}{% endif %}
+                                {% if ps_p %}{% set ns2y.prev = ns2y.prev + ps_p.get('calculated_noi', 0) %}{% endif %}
+                            {% endfor %}
+                            {% if ns2y.has and ns2y.prev != 0 %}
+                                {% set yoy_total = ((ns2y.curr - ns2y.prev) / ns2y.prev * 100) %}
+                                <span style="color: {% if yoy_total > 0 %}var(--cap-signal){% elif yoy_total < 0 %}var(--danger){% else %}var(--text-muted){% endif %}; font-weight: 600;">
+                                    {% if yoy_total > 0 %}+{% endif %}{{ '{:.1f}'.format(yoy_total) }}%
+                                </span>
+                            {% else %}—{% endif %}
+                        </td>
+                        {% endif %}
+                        {% for p in extra_periods %}
+                        <td class="extra-period-col" style="text-align: right; font-variant-numeric: tabular-nums; display: none;">
+                            {% set ns2x = namespace(total=0, has_data=false) %}
+                            {% for c in comparisons %}
+                                {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                                {% if ps %}
+                                    {% set ns2x.total = ns2x.total + ps.get('calculated_noi', 0) %}
+                                    {% set ns2x.has_data = true %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if ns2x.has_data %}
+                            <span style="color: {% if ns2x.total > 0 %}var(--cap-navy){% else %}var(--danger){% endif %};">
+                                ${{ '{:,.0f}'.format(ns2x.total) }}
+                            </span>
+                            {% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
                     </tr>
                 </tfoot>
             </table>
@@ -154,19 +230,19 @@
     </div>
 
     <!-- NOI Bar Chart (CSS-only) -->
-    {% if periods|length > 0 %}
+    {% if display_periods|length > 0 %}
     <div class="card">
-        <div class="card-header">NOI Comparison — {{ periods[-1] }}</div>
+        <div class="card-header">NOI Comparison — {{ display_periods[0] }}</div>
         <div style="padding: 8px 0;">
             {% set ns3 = namespace(max_noi=1) %}
             {% for c in comparisons %}
-                {% set ps = c.synthesis.period_summaries.get(periods[-1], {}) %}
+                {% set ps = c.synthesis.period_summaries.get(display_periods[0], {}) %}
                 {% if ps and ps.get('calculated_noi', 0) > ns3.max_noi %}
                     {% set ns3.max_noi = ps.get('calculated_noi', 0) %}
                 {% endif %}
             {% endfor %}
             {% for c in comparisons %}
-                {% set ps = c.synthesis.period_summaries.get(periods[-1], {}) %}
+                {% set ps = c.synthesis.period_summaries.get(display_periods[0], {}) %}
                 {% set noi = ps.get('calculated_noi', 0) if ps else 0 %}
                 {% set pct = (noi / ns3.max_noi * 100) if ns3.max_noi > 0 else 0 %}
                 <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
@@ -197,8 +273,11 @@
                 <thead>
                     <tr>
                         <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                        {% for p in extra_periods %}
+                        <th class="extra-period-col" style="text-align: right; display: none;">{{ p }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -210,7 +289,7 @@
                                 {{ c.property.name }}
                             </a>
                         </td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         {% set ps = c.synthesis.period_summaries.get(p, {}) %}
                         {% if ps %}
                         <td style="text-align: right; color: var(--cap-signal); font-variant-numeric: tabular-nums;">
@@ -220,13 +299,23 @@
                         <td style="text-align: right; color: var(--text-muted);">—</td>
                         {% endif %}
                         {% endfor %}
+                        {% for p in extra_periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps %}
+                        <td class="extra-period-col" style="text-align: right; color: var(--cap-signal); font-variant-numeric: tabular-nums; display: none;">
+                            ${{ '{:,.0f}'.format(ps.get('total_income', 0)) }}
+                        </td>
+                        {% else %}
+                        <td class="extra-period-col" style="text-align: right; color: var(--text-muted); display: none;">—</td>
+                        {% endif %}
+                        {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr style="font-weight: 600; border-top: 2px solid var(--border);">
                         <td style="position: sticky; left: 0; background: white; z-index: 1;">Portfolio Total</td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <td style="text-align: right; font-variant-numeric: tabular-nums; color: var(--cap-signal);">
                             {% set ns4 = namespace(total=0, has=false) %}
                             {% for c in comparisons %}
@@ -234,6 +323,16 @@
                                 {% if ps %}{% set ns4.total = ns4.total + ps.get('total_income', 0) %}{% set ns4.has = true %}{% endif %}
                             {% endfor %}
                             {% if ns4.has %}${{ '{:,.0f}'.format(ns4.total) }}{% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                        {% for p in extra_periods %}
+                        <td class="extra-period-col" style="text-align: right; font-variant-numeric: tabular-nums; color: var(--cap-signal); display: none;">
+                            {% set ns4x = namespace(total=0, has=false) %}
+                            {% for c in comparisons %}
+                                {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                                {% if ps %}{% set ns4x.total = ns4x.total + ps.get('total_income', 0) %}{% set ns4x.has = true %}{% endif %}
+                            {% endfor %}
+                            {% if ns4x.has %}${{ '{:,.0f}'.format(ns4x.total) }}{% else %}—{% endif %}
                         </td>
                         {% endfor %}
                     </tr>
@@ -252,8 +351,11 @@
                 <thead>
                     <tr>
                         <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                        {% for p in extra_periods %}
+                        <th class="extra-period-col" style="text-align: right; display: none;">{{ p }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -265,7 +367,7 @@
                                 {{ c.property.name }}
                             </a>
                         </td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         {% set ps = c.synthesis.period_summaries.get(p, {}) %}
                         {% if ps %}
                         <td style="text-align: right; color: var(--danger); font-variant-numeric: tabular-nums;">
@@ -275,13 +377,23 @@
                         <td style="text-align: right; color: var(--text-muted);">—</td>
                         {% endif %}
                         {% endfor %}
+                        {% for p in extra_periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps %}
+                        <td class="extra-period-col" style="text-align: right; color: var(--danger); font-variant-numeric: tabular-nums; display: none;">
+                            ${{ '{:,.0f}'.format(ps.get('total_expenses', 0)) }}
+                        </td>
+                        {% else %}
+                        <td class="extra-period-col" style="text-align: right; color: var(--text-muted); display: none;">—</td>
+                        {% endif %}
+                        {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr style="font-weight: 600; border-top: 2px solid var(--border);">
                         <td style="position: sticky; left: 0; background: white; z-index: 1;">Portfolio Total</td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <td style="text-align: right; font-variant-numeric: tabular-nums; color: var(--danger);">
                             {% set ns5 = namespace(total=0, has=false) %}
                             {% for c in comparisons %}
@@ -289,6 +401,16 @@
                                 {% if ps %}{% set ns5.total = ns5.total + ps.get('total_expenses', 0) %}{% set ns5.has = true %}{% endif %}
                             {% endfor %}
                             {% if ns5.has %}${{ '{:,.0f}'.format(ns5.total) }}{% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                        {% for p in extra_periods %}
+                        <td class="extra-period-col" style="text-align: right; font-variant-numeric: tabular-nums; color: var(--danger); display: none;">
+                            {% set ns5x = namespace(total=0, has=false) %}
+                            {% for c in comparisons %}
+                                {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                                {% if ps %}{% set ns5x.total = ns5x.total + ps.get('total_expenses', 0) %}{% set ns5x.has = true %}{% endif %}
+                            {% endfor %}
+                            {% if ns5x.has %}${{ '{:,.0f}'.format(ns5x.total) }}{% else %}—{% endif %}
                         </td>
                         {% endfor %}
                     </tr>
@@ -305,8 +427,11 @@
                 <thead>
                     <tr>
                         <th style="position: sticky; left: 0; background: white; z-index: 1;">Property</th>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         <th style="text-align: right;">{{ p }}</th>
+                        {% endfor %}
+                        {% for p in extra_periods %}
+                        <th class="extra-period-col" style="text-align: right; display: none;">{{ p }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -314,7 +439,7 @@
                     {% for c in comparisons %}
                     <tr>
                         <td style="position: sticky; left: 0; background: white; z-index: 1; font-weight: 500;">{{ c.property.name }}</td>
-                        {% for p in periods %}
+                        {% for p in display_periods %}
                         {% set ps = c.synthesis.period_summaries.get(p, {}) %}
                         {% if ps and ps.get('total_income', 0) > 0 %}
                         {% set ratio = ps.get('total_expenses', 0) / ps.get('total_income', 1) * 100 %}
@@ -323,6 +448,17 @@
                         </td>
                         {% else %}
                         <td style="text-align: right; color: var(--text-muted);">—</td>
+                        {% endif %}
+                        {% endfor %}
+                        {% for p in extra_periods %}
+                        {% set ps = c.synthesis.period_summaries.get(p, {}) %}
+                        {% if ps and ps.get('total_income', 0) > 0 %}
+                        {% set ratio = ps.get('total_expenses', 0) / ps.get('total_income', 1) * 100 %}
+                        <td class="extra-period-col" style="text-align: right; font-variant-numeric: tabular-nums; display: none; color: {% if ratio > 70 %}var(--danger){% elif ratio > 50 %}var(--warning){% else %}var(--cap-signal){% endif %};">
+                            {{ '{:.1f}'.format(ratio) }}%
+                        </td>
+                        {% else %}
+                        <td class="extra-period-col" style="text-align: right; color: var(--text-muted); display: none;">—</td>
                         {% endif %}
                         {% endfor %}
                     </tr>
@@ -414,6 +550,14 @@ function filterPortfolio(val) {
     } else {
         window.location.href = '/portfolio/comparison';
     }
+}
+
+function toggleAllPeriods() {
+    var cols = document.querySelectorAll('.extra-period-col');
+    var btn = document.getElementById('period-toggle-btn');
+    var showing = cols[0] && cols[0].style.display !== 'none';
+    cols.forEach(function(c) { c.style.display = showing ? 'none' : 'table-cell'; });
+    btn.textContent = showing ? 'Show all periods' : 'Show recent only';
 }
 </script>
 {% endblock %}
