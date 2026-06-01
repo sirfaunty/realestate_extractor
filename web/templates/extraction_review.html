@@ -17,6 +17,12 @@
             <option value="{{ p.id }}" {% if property_id == p.id %}selected{% endif %}>{{ p.name }}</option>
             {% endfor %}
         </select>
+        <select id="type-filter" onchange="applyFilters()" style="font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: white;">
+            <option value="" {% if not type_filter %}selected{% endif %}>All Types</option>
+            {% for t in doc_types %}
+            <option value="{{ t }}" {% if type_filter == t %}selected{% endif %}>{{ t | replace('_', ' ') | title }}</option>
+            {% endfor %}
+        </select>
     </div>
 </div>
 
@@ -44,11 +50,22 @@
     </a>
 </div>
 
-<!-- Bulk Actions -->
+<!-- Quick Bulk Actions (no checkbox needed) -->
+{% if stats.pending > 0 %}
+<div style="padding: 10px 16px; background: linear-gradient(135deg, #f0f7ff, #e8f4f0); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+    <span style="font-size: 13px; color: var(--text-secondary);">{{ stats.pending }} pending document{{ 's' if stats.pending != 1 else '' }}</span>
+    <button onclick="bulkApproveByFilter()" style="background: var(--cap-signal); color: white; border: none; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;">
+        ✓ Approve All Pending{% if property_id %} ({{ current_property.name if current_property else 'filtered' }}){% endif %}{% if type_filter %} · {{ type_filter | replace('_', ' ') | title }}{% endif %}
+    </button>
+    <span style="font-size: 12px; color: var(--text-muted);">or select individual docs below</span>
+</div>
+{% endif %}
+
+<!-- Checkbox Bulk Actions -->
 <div id="bulk-bar" style="display: none; padding: 10px 16px; background: var(--cap-cloud); border-radius: 8px; margin-bottom: 12px; align-items: center; gap: 12px;">
     <span style="font-size: 13px; font-weight: 500;"><span id="selected-count">0</span> selected</span>
-    <button onclick="bulkAction('approved')" class="btn btn-sm" style="background: var(--cap-signal); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Approve All</button>
-    <button onclick="bulkAction('flagged')" class="btn btn-sm" style="background: var(--danger); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Flag All</button>
+    <button onclick="bulkAction('approved')" class="btn btn-sm" style="background: var(--cap-signal); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Approve Selected</button>
+    <button onclick="bulkAction('flagged')" class="btn btn-sm" style="background: var(--danger); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Flag Selected</button>
     <button onclick="bulkAction('pending')" class="btn btn-sm" style="background: var(--text-muted); color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">Reset</button>
     <a href="#" onclick="toggleSelectAll(); return false;" style="font-size: 12px; margin-left: auto; color: var(--cap-primary);" id="select-all-link">Select all</a>
 </div>
@@ -208,7 +225,14 @@
 <script>
 function applyFilters() {
     const propId = document.getElementById('property-filter').value;
-    const url = propId ? '/extraction-review/' + propId : '/extraction-review';
+    const docType = document.getElementById('type-filter').value;
+    const statusParam = new URLSearchParams(window.location.search).get('status');
+    let url = propId ? '/extraction-review/' + propId : '/extraction-review';
+    const params = new URLSearchParams();
+    if (statusParam) params.set('status', statusParam);
+    if (docType) params.set('type', docType);
+    const qs = params.toString();
+    if (qs) url += '?' + qs;
     window.location.href = url;
 }
 
@@ -278,6 +302,38 @@ function toggleSelectAll(checked) {
     }
     document.querySelectorAll('.doc-cb').forEach(cb => cb.checked = checked);
     updateBulkBar();
+}
+
+function bulkApproveByFilter() {
+    const propertyId = document.getElementById('property-filter').value;
+    const docType = document.getElementById('type-filter').value;
+    const desc = [];
+    if (propertyId) {
+        const sel = document.getElementById('property-filter');
+        desc.push(sel.options[sel.selectedIndex].text);
+    }
+    if (docType) desc.push(docType.replace(/_/g, ' '));
+
+    const label = desc.length ? ` (${desc.join(' · ')})` : '';
+    if (!confirm(`Approve all pending documents${label}? This cannot be undone.`)) return;
+
+    fetch('/api/extraction-review/bulk-by-filter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            status: 'approved',
+            from_status: 'pending',
+            property_id: propertyId || null,
+            doc_type: docType || null,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert(`${data.count} document${data.count !== 1 ? 's' : ''} approved.`);
+            location.reload();
+        }
+    });
 }
 
 function bulkAction(status) {

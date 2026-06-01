@@ -2015,6 +2015,7 @@ def extraction_review(property_id=None):
     try:
         # Get filter params
         status_filter = request.args.get('status')  # pending, approved, flagged
+        type_filter = request.args.get('type')       # document type filter
 
         # Get review queue
         docs = db.get_extraction_review_queue(
@@ -2022,11 +2023,28 @@ def extraction_review(property_id=None):
             status=status_filter
         )
 
+        # Apply doc type filter client-side (queue method doesn't support it)
+        if type_filter:
+            docs = [d for d in docs if d.get('document_type') == type_filter]
+
         # Get review stats
         stats = db.get_extraction_review_stats(property_id=property_id)
 
         # Get property list for filter dropdown
         all_props = db.list_properties()
+
+        # Get distinct doc types for filter
+        doc_types = sorted(set(
+            d.get('document_type', 'unknown') for d in docs
+        )) if not type_filter else []
+        # If filtering, get all types from unfiltered set
+        if type_filter:
+            all_docs = db.get_extraction_review_queue(
+                property_id=property_id, status=status_filter
+            )
+            doc_types = sorted(set(
+                d.get('document_type', 'unknown') for d in all_docs
+            ))
 
         # Current property info
         prop = db.get_property(property_id) if property_id else None
@@ -2039,7 +2057,9 @@ def extraction_review(property_id=None):
                            properties=all_props,
                            current_property=prop,
                            property_id=property_id,
-                           status_filter=status_filter)
+                           status_filter=status_filter,
+                           type_filter=type_filter,
+                           doc_types=doc_types)
 
 
 @app.route('/api/extraction-review/<int:doc_id>', methods=['POST'])
@@ -2082,6 +2102,43 @@ def api_bulk_extraction_review():
             db.set_extraction_review(int(doc_id), status, notes or None)
 
         return jsonify({'ok': True, 'count': len(doc_ids)})
+    finally:
+        db.close()
+
+
+@app.route('/api/extraction-review/bulk-by-filter', methods=['POST'])
+@login_required
+def api_bulk_extraction_review_by_filter():
+    """Bulk-update extraction review status using filters.
+
+    Body JSON:
+      status       — target status (approved, flagged, pending)
+      from_status  — only update docs currently in this status (optional)
+      property_id  — restrict to this property (optional)
+      doc_type     — restrict to this document type (optional)
+      notes        — review notes (optional)
+    """
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        data = request.get_json()
+        status = data.get('status')
+        from_status = data.get('from_status')
+        property_id = data.get('property_id')
+        doc_type = data.get('doc_type')
+        notes = data.get('notes', '')
+
+        if status not in ('approved', 'flagged', 'pending'):
+            return jsonify({'error': 'Invalid status'}), 400
+
+        count = db.bulk_set_extraction_review(
+            new_status=status,
+            notes=notes or None,
+            current_status=from_status,
+            property_id=int(property_id) if property_id else None,
+            document_type=doc_type,
+        )
+        return jsonify({'ok': True, 'count': count})
     finally:
         db.close()
 

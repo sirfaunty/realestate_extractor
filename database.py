@@ -1039,6 +1039,41 @@ class Database:
         """, (status, notes, doc_id))
         self.conn.commit()
 
+    def bulk_set_extraction_review(self, new_status: str, notes: str = None,
+                                    current_status: str = None,
+                                    property_id: int = None,
+                                    document_type: str = None) -> int:
+        """Bulk-update extraction review status by filter.
+
+        Returns the number of documents updated.
+        """
+        where_clauses = ["1=1"]
+        params = []
+
+        if current_status:
+            where_clauses.append(
+                "COALESCE(extraction_review, 'pending') = ?"
+            )
+            params.append(current_status)
+        if property_id:
+            where_clauses.append("property_id = ?")
+            params.append(property_id)
+        if document_type:
+            where_clauses.append("document_type = ?")
+            params.append(document_type)
+
+        where = " AND ".join(where_clauses)
+        params = [new_status, notes] + params
+
+        cur = self.conn.execute(f"""
+            UPDATE documents
+            SET extraction_review = ?, review_notes = ?,
+                reviewed_at = CURRENT_TIMESTAMP
+            WHERE {where}
+        """, params)
+        self.conn.commit()
+        return cur.rowcount
+
     def get_extraction_review_queue(self, property_id: int = None,
                                      status: str = None) -> list:
         """Get documents with extraction stats for review.
