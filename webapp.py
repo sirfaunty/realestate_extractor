@@ -1717,6 +1717,16 @@ def portfolio_comparison(portfolio_id=None):
             return (year, suffix_order.get(suffix, 9))
 
         sorted_periods = sorted(all_periods, key=period_sort_key)
+
+        # Build display periods: newest first, split actuals vs budgets
+        reversed_periods = list(reversed(sorted_periods))
+        actuals = [p for p in reversed_periods if p.endswith('A')]
+        budgets = [p for p in reversed_periods if p.endswith('B')]
+        # Default view: most recent budget + last 3 actuals
+        display_periods = budgets[:1] + actuals[:3]
+        # Remaining older periods available via toggle
+        extra_periods = [p for p in reversed_periods if p not in display_periods]
+
         portfolio_list = db.list_portfolios()
     finally:
         db.close()
@@ -1726,6 +1736,8 @@ def portfolio_comparison(portfolio_id=None):
                            view_title=view_title,
                            comparisons=comparisons,
                            periods=sorted_periods,
+                           display_periods=display_periods,
+                           extra_periods=extra_periods,
                            portfolios=portfolio_list)
 
 
