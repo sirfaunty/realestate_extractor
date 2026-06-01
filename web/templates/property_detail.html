@@ -583,65 +583,227 @@
 <!-- ═══ BUCKET 3: VALUATION / NOI ═══ -->
 <div id="bucket-valuation" class="tab-content">
 
-    <!-- ── Financial Synthesis: NOI Timeline ── -->
+    <!-- ── Financial Synthesis: NOI Overview ── -->
     {% if synthesis and synthesis.noi_timeline %}
+
+    {# ── Compute display periods: most recent actuals + budget, newest first ── #}
+    {% set ns = namespace(actuals=[], budgets=[], latest_noi=0, prev_noi=0, budget_noi=0, latest_income=0, latest_expenses=0, latest_period='', prev_period='', budget_period='') %}
+    {% for p in synthesis.periods|reverse %}
+        {% if p.endswith('A') and ns.actuals|length < 4 %}
+            {% if ns.actuals.append(p) %}{% endif %}
+        {% elif p.endswith('B') and ns.budgets|length < 1 %}
+            {% if ns.budgets.append(p) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.actuals|length >= 1 %}
+        {% set ps = synthesis.period_summaries[ns.actuals[0]] %}
+        {% set ns.latest_noi = ps.calculated_noi %}
+        {% set ns.latest_income = ps.total_income %}
+        {% set ns.latest_expenses = ps.total_expenses %}
+        {% set ns.latest_period = ns.actuals[0] %}
+    {% endif %}
+    {% if ns.actuals|length >= 2 %}
+        {% set ps2 = synthesis.period_summaries[ns.actuals[1]] %}
+        {% set ns.prev_noi = ps2.calculated_noi %}
+        {% set ns.prev_period = ns.actuals[1] %}
+    {% endif %}
+    {% if ns.budgets|length >= 1 %}
+        {% set psb = synthesis.period_summaries[ns.budgets[0]] %}
+        {% set ns.budget_noi = psb.calculated_noi %}
+        {% set ns.budget_period = ns.budgets[0] %}
+    {% endif %}
+
+    {# ── Tier 1: KPI Cards ── #}
     <div class="card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <span>NOI Timeline — Reconciled</span>
+            <span>Financial Performance</span>
             <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">
-                {{ synthesis.document_sources|length }} source doc{{ 's' if synthesis.document_sources|length != 1 }} · {{ synthesis.periods|length }} period{{ 's' if synthesis.periods|length != 1 }}
-                {% if synthesis.secondary_periods %}
-                · <a href="#" onclick="document.querySelectorAll('.hidden-period').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none'); return false;" style="color: var(--cap-primary); cursor: pointer;">{{ synthesis.secondary_periods|length }} hidden</a>
-                {% endif %}
+                {{ synthesis.document_sources|length }} source doc{{ 's' if synthesis.document_sources|length != 1 else '' }} · {{ synthesis.periods|length }} period{{ 's' if synthesis.periods|length != 1 else '' }}
             </span>
         </div>
-        <div style="overflow-x: auto;">
-            <table class="data-table" style="min-width: 600px;">
-                <thead>
-                    <tr>
-                        <th>Period</th>
-                        <th style="text-align: right;">Income</th>
-                        <th style="text-align: right;">Expenses</th>
-                        <th style="text-align: right; font-weight: 700;">Calculated NOI</th>
-                        <th style="text-align: right;">Reported NOI</th>
-                        <th>Primary Source</th>
-                        <th style="text-align: center;">Sources</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in synthesis.noi_timeline %}
-                    {% set ps = synthesis.period_summaries[t.period] %}
-                    <tr style="{% if t.has_discrepancies %}background: rgba(255, 193, 7, 0.06);{% endif %}">
-                        <td style="font-weight: 500; white-space: nowrap;">
-                            {{ t.period }}
-                            {% if t.has_discrepancies %}
-                            <span title="Discrepancies detected — see details below" style="color: var(--warning); cursor: help;">&#9888;</span>
-                            {% endif %}
-                        </td>
-                        <td style="text-align: right; color: var(--cap-signal);">${{ '{:,.0f}'.format(ps.total_income) }}</td>
-                        <td style="text-align: right; color: var(--danger);">${{ '{:,.0f}'.format(ps.total_expenses) }}</td>
-                        <td style="text-align: right; font-weight: 600;">${{ '{:,.0f}'.format(t.calculated_noi) }}</td>
-                        <td style="text-align: right; font-size: 12px;">
-                            {% if t.reported_noi %}
-                            ${{ '{:,.0f}'.format(t.reported_noi) }}
-                            {% else %}—{% endif %}
-                        </td>
-                        <td style="font-size: 12px;">
-                            {% if t.primary_source %}
-                            <a href="{{ url_for('document_detail', doc_id=t.primary_source.doc_id) }}" style="color: var(--cap-navy);" title="{{ t.primary_source.filename }}">
-                                {{ t.primary_source.filename[:30] }}{% if t.primary_source.filename|length > 30 %}...{% endif %}
-                            </a>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td style="text-align: center; font-size: 12px;">{{ t.source_count }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 4px;">
+            {# Latest NOI #}
+            <div style="background: var(--cap-navy); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">NOI · {{ ns.latest_period }}</div>
+                <div style="font-size: 22px; font-weight: 700; color: #fff; font-family: var(--font-mono, monospace);">${{ '{:,.0f}'.format(ns.latest_noi) }}</div>
+            </div>
+            {# YoY Change #}
+            {% if ns.prev_noi %}
+            {% set yoy_delta = ns.latest_noi - ns.prev_noi %}
+            {% set yoy_pct = ((yoy_delta / ns.prev_noi) * 100) if ns.prev_noi else 0 %}
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">YoY Change</div>
+                <div style="font-size: 22px; font-weight: 700; color: {% if yoy_delta >= 0 %}var(--cap-signal){% else %}var(--danger){% endif %}; font-family: var(--font-mono, monospace);">
+                    {% if yoy_delta >= 0 %}+{% endif %}{{ '{:.1f}'.format(yoy_pct) }}%
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">{% if yoy_delta >= 0 %}+{% endif %}${{ '{:,.0f}'.format(yoy_delta) }}</div>
+            </div>
+            {% endif %}
+            {# Budget Variance #}
+            {% if ns.budget_noi %}
+            {% set bud_delta = ns.latest_noi - ns.budget_noi %}
+            {% set bud_pct = ((bud_delta / ns.budget_noi) * 100) if ns.budget_noi else 0 %}
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">vs Budget · {{ ns.budget_period }}</div>
+                <div style="font-size: 22px; font-weight: 700; color: {% if bud_delta >= 0 %}var(--cap-signal){% else %}var(--danger){% endif %}; font-family: var(--font-mono, monospace);">
+                    {% if bud_delta >= 0 %}+{% endif %}{{ '{:.1f}'.format(bud_pct) }}%
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">{% if bud_delta >= 0 %}+{% endif %}${{ '{:,.0f}'.format(bud_delta) }}</div>
+            </div>
+            {% endif %}
+            {# Expense Ratio #}
+            {% if ns.latest_income %}
+            {% set exp_ratio = (ns.latest_expenses / ns.latest_income * 100) if ns.latest_income else 0 %}
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Expense Ratio</div>
+                <div style="font-size: 22px; font-weight: 700; color: var(--text); font-family: var(--font-mono, monospace);">{{ '{:.1f}'.format(exp_ratio) }}%</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">{{ ns.latest_period }}</div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Synthesis Notes / Discrepancies -->
+    {# ── Tier 2: Summary Comparison Table (newest first, max 4 periods) ── #}
+    {% set display_periods = ns.budgets + ns.actuals[:3] %}
+    <div class="card">
+        <div class="card-header">Year-over-Year Summary</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    {% for p in display_periods %}
+                    <th style="text-align: right; {% if p.endswith('B') %}font-style: italic; color: var(--text-muted);{% endif %}">{{ p }}</th>
+                    {% endfor %}
+                    {% if display_periods|length >= 2 %}
+                    <th style="text-align: right; font-size: 11px; color: var(--text-muted);">Δ YoY</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {# Income row #}
+                <tr>
+                    <td style="font-weight: 500;">Income</td>
+                    {% for p in display_periods %}
+                    {% set ps = synthesis.period_summaries[p] %}
+                    <td style="text-align: right; color: var(--cap-signal);">${{ '{:,.0f}'.format(ps.total_income) }}</td>
+                    {% endfor %}
+                    {% if display_periods|length >= 2 %}
+                    {% set cur_i = synthesis.period_summaries[display_periods[0]].total_income %}
+                    {% set prev_i = synthesis.period_summaries[display_periods[1]].total_income %}
+                    {% set d_i = cur_i - prev_i %}
+                    <td style="text-align: right; font-size: 12px; color: {% if d_i >= 0 %}var(--cap-signal){% else %}var(--danger){% endif %};">
+                        {% if d_i >= 0 %}+{% endif %}{{ '{:.1f}'.format((d_i / prev_i * 100) if prev_i else 0) }}%
+                    </td>
+                    {% endif %}
+                </tr>
+                {# Expenses row #}
+                <tr>
+                    <td style="font-weight: 500;">Expenses</td>
+                    {% for p in display_periods %}
+                    {% set ps = synthesis.period_summaries[p] %}
+                    <td style="text-align: right; color: var(--danger);">${{ '{:,.0f}'.format(ps.total_expenses) }}</td>
+                    {% endfor %}
+                    {% if display_periods|length >= 2 %}
+                    {% set cur_e = synthesis.period_summaries[display_periods[0]].total_expenses %}
+                    {% set prev_e = synthesis.period_summaries[display_periods[1]].total_expenses %}
+                    {% set d_e = cur_e - prev_e %}
+                    <td style="text-align: right; font-size: 12px; color: {% if d_e <= 0 %}var(--cap-signal){% else %}var(--danger){% endif %};">
+                        {% if d_e >= 0 %}+{% endif %}{{ '{:.1f}'.format((d_e / prev_e * 100) if prev_e else 0) }}%
+                    </td>
+                    {% endif %}
+                </tr>
+                {# NOI row #}
+                <tr style="font-weight: 600; border-top: 2px solid var(--border);">
+                    <td>NOI</td>
+                    {% for p in display_periods %}
+                    {% set ps = synthesis.period_summaries[p] %}
+                    <td style="text-align: right;">${{ '{:,.0f}'.format(ps.calculated_noi) }}</td>
+                    {% endfor %}
+                    {% if display_periods|length >= 2 %}
+                    {% set cur_n = synthesis.period_summaries[display_periods[0]].calculated_noi %}
+                    {% set prev_n = synthesis.period_summaries[display_periods[1]].calculated_noi %}
+                    {% set d_n = cur_n - prev_n %}
+                    <td style="text-align: right; font-size: 12px; color: {% if d_n >= 0 %}var(--cap-signal){% else %}var(--danger){% endif %};">
+                        {% if d_n >= 0 %}+{% endif %}{{ '{:.1f}'.format((d_n / prev_n * 100) if prev_n else 0) }}%
+                    </td>
+                    {% endif %}
+                </tr>
+                {# NOI Margin row #}
+                <tr style="font-size: 12px; color: var(--text-muted);">
+                    <td>NOI Margin</td>
+                    {% for p in display_periods %}
+                    {% set ps = synthesis.period_summaries[p] %}
+                    {% set margin = (ps.calculated_noi / ps.total_income * 100) if ps.total_income else 0 %}
+                    <td style="text-align: right;">{{ '{:.1f}'.format(margin) }}%</td>
+                    {% endfor %}
+                    {% if display_periods|length >= 2 %}
+                    <td></td>
+                    {% endif %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {# ── Tier 3: Full Detail (collapsed) ── #}
+    <div class="card">
+        <div class="card-header" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+             onclick="var body = document.getElementById('noi-full-detail'); body.style.display = body.style.display === 'none' ? 'block' : 'none'; this.querySelector('.chevron').textContent = body.style.display === 'none' ? '&#9654;' : '&#9660;';">
+            <span>
+                <span class="chevron" style="font-size: 10px; margin-right: 6px;">&#9654;</span>
+                All Periods · Full Detail
+            </span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">
+                {{ synthesis.periods|length }} period{{ 's' if synthesis.periods|length != 1 else '' }}
+                {% if synthesis.secondary_periods %} + {{ synthesis.secondary_periods|length }} low-quality{% endif %}
+            </span>
+        </div>
+        <div id="noi-full-detail" style="display: none;">
+            <div style="overflow-x: auto;">
+                <table class="data-table" style="min-width: 600px;">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th style="text-align: right;">Income</th>
+                            <th style="text-align: right;">Expenses</th>
+                            <th style="text-align: right; font-weight: 700;">NOI</th>
+                            <th style="text-align: right;">Reported NOI</th>
+                            <th>Primary Source</th>
+                            <th style="text-align: center;">Sources</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in synthesis.noi_timeline|reverse %}
+                        {% set ps = synthesis.period_summaries[t.period] %}
+                        <tr style="{% if t.has_discrepancies %}background: rgba(255, 193, 7, 0.06);{% endif %}">
+                            <td style="font-weight: 500; white-space: nowrap;">
+                                {{ t.period }}
+                                {% if t.has_discrepancies %}
+                                <span title="Discrepancies detected" style="color: var(--warning); cursor: help;">&#9888;</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: right; color: var(--cap-signal);">${{ '{:,.0f}'.format(ps.total_income) }}</td>
+                            <td style="text-align: right; color: var(--danger);">${{ '{:,.0f}'.format(ps.total_expenses) }}</td>
+                            <td style="text-align: right; font-weight: 600;">${{ '{:,.0f}'.format(t.calculated_noi) }}</td>
+                            <td style="text-align: right; font-size: 12px;">
+                                {% if t.reported_noi %}${{ '{:,.0f}'.format(t.reported_noi) }}{% else %}—{% endif %}
+                            </td>
+                            <td style="font-size: 12px;">
+                                {% if t.primary_source %}
+                                <a href="{{ url_for('document_detail', doc_id=t.primary_source.doc_id) }}" style="color: var(--cap-navy);" title="{{ t.primary_source.filename }}">
+                                    {{ t.primary_source.filename[:30] }}{% if t.primary_source.filename|length > 30 %}...{% endif %}
+                                </a>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td style="text-align: center; font-size: 12px;">{{ t.source_count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {# ── Synthesis Notes / Discrepancies ── #}
     {% set all_discrepancies = [] %}
     {% for period in synthesis.periods %}
         {% for d in synthesis.period_summaries[period].discrepancies %}
