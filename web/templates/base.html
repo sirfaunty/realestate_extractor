@@ -193,6 +193,39 @@
             </div>
         </div>
 
+        <!-- capactive global must be defined BEFORE content block so module JS can use it -->
+        <script>
+        window.capactive = window.capactive || {};
+        capactive.getTif = function() {
+          return new URLSearchParams(window.location.search).get('tif') || 'baseline';
+        };
+        capactive.setTif = function(scenario) {
+          const url = new URL(window.location);
+          if (scenario && scenario !== 'baseline') {
+            url.searchParams.set('tif', scenario);
+          } else {
+            url.searchParams.delete('tif');
+          }
+          window.history.replaceState({}, '', url);
+        };
+        capactive.renderModuleLinks = function(containerId, links) {
+          const el = document.getElementById(containerId);
+          if (!el) return;
+          el.innerHTML = '<span class="xref-label">Related:</span> ' + links.map(l =>
+            `<a href="${capactive.moduleLink(l.url)}" class="xref-link">${l.label}</a>`
+          ).join('');
+        };
+        capactive.moduleLink = function(path, extraParams) {
+          const tif = capactive.getTif();
+          const url = new URL(path, window.location.origin);
+          if (tif && tif !== 'baseline') url.searchParams.set('tif', tif);
+          if (extraParams) {
+            for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
+          }
+          return url.pathname + url.search;
+        };
+        </script>
+
         {% block content %}{% endblock %}
     </main>
 </div>
@@ -542,52 +575,7 @@ fetch('/api/status')
 })();
 </script>
 
-<!-- Shared cross-module utilities -->
-<script>
-window.capactive = window.capactive || {};
-
-/**
- * TIF scenario state — read/write via URL ?tif= parameter.
- * Modules call capactive.getTif() on load and capactive.setTif() on change.
- * capactive.moduleLink(path) builds a link preserving the current TIF param.
- */
-capactive.getTif = function() {
-  return new URLSearchParams(window.location.search).get('tif') || 'baseline';
-};
-
-capactive.setTif = function(scenario) {
-  const url = new URL(window.location);
-  if (scenario && scenario !== 'baseline') {
-    url.searchParams.set('tif', scenario);
-  } else {
-    url.searchParams.delete('tif');
-  }
-  window.history.replaceState({}, '', url);
-};
-
-/**
- * Render a cross-reference bar linking to related modules.
- * @param {string} containerId - DOM element ID to render into
- * @param {Array<{label,url,icon}>} links - related module links
- */
-capactive.renderModuleLinks = function(containerId, links) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = '<span class="xref-label">Related:</span> ' + links.map(l =>
-    `<a href="${capactive.moduleLink(l.url)}" class="xref-link">${l.label}</a>`
-  ).join('');
-};
-
-capactive.moduleLink = function(path, extraParams) {
-  const tif = capactive.getTif();
-  const url = new URL(path, window.location.origin);
-  if (tif && tif !== 'baseline') url.searchParams.set('tif', tif);
-  if (extraParams) {
-    for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
-  }
-  return url.pathname + url.search;
-};
-</script>
+<!-- capactive utilities now defined above {% block content %} to avoid script ordering issues -->
 
 {% block scripts %}{% endblock %}
 </body>
