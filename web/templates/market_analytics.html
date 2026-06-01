@@ -9,11 +9,11 @@
     .ma-header h1 {
         font-size: 24px;
         font-weight: 700;
-        color: var(--text-primary, #f0f0f0);
+        color: var(--cap-navy, #0B3D6B);
         margin: 0 0 8px 0;
     }
     .ma-header p {
-        color: var(--text-muted, #8b949e);
+        color: var(--text-secondary, #5A5A6E);
         font-size: 14px;
         margin: 0;
     }
@@ -23,38 +23,39 @@
         gap: 20px;
     }
     .ma-card {
-        background: var(--card-bg, #161b22);
-        border: 1px solid var(--border, #30363d);
+        background: white;
+        border: 1px solid var(--border, #e2e4e9);
         border-radius: 10px;
         padding: 24px;
-        transition: border-color 0.2s, transform 0.15s;
+        transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
         text-decoration: none;
         display: block;
     }
     .ma-card:hover {
-        border-color: var(--accent, #3A8FD4);
+        border-color: var(--cap-primary, #185FA5);
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     .ma-card-icon {
         width: 40px;
         height: 40px;
         border-radius: 8px;
-        background: var(--accent-dim, rgba(58, 143, 212, 0.12));
+        background: rgba(24, 95, 165, 0.08);
         display: flex;
         align-items: center;
         justify-content: center;
         margin-bottom: 16px;
-        color: var(--accent, #3A8FD4);
+        color: var(--cap-primary, #185FA5);
     }
     .ma-card-title {
         font-size: 16px;
         font-weight: 600;
-        color: var(--text-primary, #f0f0f0);
+        color: var(--cap-navy, #0B3D6B);
         margin: 0 0 8px 0;
     }
     .ma-card-desc {
         font-size: 13px;
-        color: var(--text-muted, #8b949e);
+        color: var(--text-secondary, #5A5A6E);
         line-height: 1.5;
         margin: 0;
     }
