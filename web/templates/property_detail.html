@@ -504,37 +504,86 @@
 <!-- ═══ BUCKET 2: DEBT ═══ -->
 <div id="bucket-debt" class="tab-content">
 
-    <!-- Loan Terms -->
+    {% if debt.loan_terms or debt.loan_clauses %}
+    {# ── Compute KPI values from loan terms ── #}
+    {% set dns = namespace(loan_amount='—', rate='—', maturity='—', term_count=0, clause_count=0) %}
+    {% if debt.loan_terms %}
+        {% set dns.term_count = debt.loan_terms|length %}
+        {% for lt in debt.loan_terms %}
+            {% if lt.term_type in ('loan_amount', 'original_principal', 'principal_amount', 'mortgage_amount') and lt.value_numeric %}
+                {% set dns.loan_amount = '${:,.0f}'.format(lt.value_numeric) %}
+            {% elif lt.term_type in ('interest_rate', 'rate') and lt.value_raw %}
+                {% set dns.rate = lt.value_raw %}
+            {% elif lt.term_type in ('maturity_date', 'maturity') and lt.value_raw %}
+                {% set dns.maturity = lt.value_raw %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    {% if debt.loan_clauses %}{% set dns.clause_count = debt.loan_clauses|length %}{% endif %}
+
+    {# ── KPI Cards ── #}
+    <div class="card">
+        <div class="card-header">Debt Summary</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 4px;">
+            <div style="background: var(--cap-navy); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">Loan Amount</div>
+                <div style="font-size: 20px; font-weight: 700; color: #fff;">{{ dns.loan_amount }}</div>
+            </div>
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Interest Rate</div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ dns.rate }}</div>
+            </div>
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Maturity</div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--text);">{{ dns.maturity }}</div>
+            </div>
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Key Clauses</div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--text);">{{ dns.clause_count }}</div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Loan Terms (collapsed by default if many) ── #}
     {% if debt.loan_terms %}
     <div class="card">
-        <div class="card-header">Loan Terms</div>
-        <table class="data-table">
-            <thead>
-                <tr><th>Term</th><th>Value</th><th>Unit</th><th>Effective</th><th>Expires</th><th>Source</th></tr>
-            </thead>
-            <tbody>
-                {% for lt in debt.loan_terms %}
-                <tr>
-                    <td style="font-weight: 500;">{{ lt.term_type.replace('_', ' ').title() }}</td>
-                    <td>{{ lt.value_raw or ('{:,.2f}'.format(lt.value_numeric) if lt.value_numeric else '—') }}</td>
-                    <td style="font-size: 12px; color: var(--text-muted);">{{ lt.value_unit or '' }}</td>
-                    <td style="font-size: 12px;">{{ lt.effective_date or '—' }}</td>
-                    <td style="font-size: 12px;">{{ lt.expiration_date or '—' }}</td>
-                    <td style="font-size: 12px; color: var(--text-muted);">{{ lt.filename }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="card-header" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+             onclick="var d = document.getElementById('debt-terms-detail'); d.style.display = d.style.display === 'none' ? 'block' : 'none'; this.querySelector('.chevron').textContent = d.style.display === 'none' ? '&#9654;' : '&#9660;';">
+            <span>
+                <span class="chevron" style="font-size: 10px; margin-right: 6px;">&#9660;</span>
+                All Loan Terms
+            </span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">{{ debt.loan_terms|length }} terms</span>
+        </div>
+        <div id="debt-terms-detail">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Term</th><th>Value</th><th>Unit</th><th>Effective</th><th>Expires</th><th>Source</th></tr>
+                </thead>
+                <tbody>
+                    {% for lt in debt.loan_terms %}
+                    <tr>
+                        <td style="font-weight: 500;">{{ lt.term_type.replace('_', ' ').title() }}</td>
+                        <td>{{ lt.value_raw or ('{:,.2f}'.format(lt.value_numeric) if lt.value_numeric else '—') }}</td>
+                        <td style="font-size: 12px; color: var(--text-muted);">{{ lt.value_unit or '' }}</td>
+                        <td style="font-size: 12px;">{{ lt.effective_date or '—' }}</td>
+                        <td style="font-size: 12px;">{{ lt.expiration_date or '—' }}</td>
+                        <td style="font-size: 12px; color: var(--text-muted);">{{ lt.filename }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
     {% endif %}
 
-    <!-- Loan Clauses -->
+    {# ── Key Clauses (show summaries, collapse full text) ── #}
     {% if debt.loan_clauses %}
     <div class="card">
         <div class="card-header">Covenants & Key Clauses</div>
         {% for c in debt.loan_clauses %}
         <div class="clause-card">
-            <div class="clause-header">
+            <div class="clause-header" style="cursor: pointer;" onclick="var t = this.parentElement.querySelector('.clause-full-text'); if(t){t.style.display = t.style.display === 'none' ? 'block' : 'none';}">
                 <span class="clause-type">{{ c.clause_type.replace('_', ' ').title() }}</span>
                 <span class="clause-ref">
                     {{ c.section_ref or '' }}
@@ -544,11 +593,12 @@
             {% if c.summary %}
             <div class="clause-summary">{{ c.summary }}</div>
             {% endif %}
-            <div class="clause-text">{{ c.full_text[:500] }}{% if c.full_text|length > 500 %}...{% endif %}</div>
+            <div class="clause-full-text clause-text" style="display: none;">{{ c.full_text }}</div>
         </div>
         {% endfor %}
     </div>
     {% endif %}
+    {% endif %}{# end if debt.loan_terms or debt.loan_clauses #}
 
     <!-- Guarantees -->
     {% if debt.guarantees %}
@@ -1036,78 +1086,68 @@
 <!-- ═══ BUILDINGS & UNITS ═══ -->
 <div id="bucket-assets" class="tab-content">
 
-    <!-- Add Building -->
-    {% if can_edit('property.units') %}
-    <div class="card">
-        <div class="card-header">Add Building</div>
-        <form method="POST" action="{{ url_for('create_building', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end;">
-            <div class="form-group" style="margin-bottom: 0; flex: 2;">
-                <label>Name</label>
-                <input type="text" name="name" placeholder="e.g. Building A" required>
-            </div>
-            <div class="form-group" style="margin-bottom: 0; flex: 1;">
-                <label>Floors</label>
-                <input type="text" name="floors" placeholder="3">
-            </div>
-            <div class="form-group" style="margin-bottom: 0; flex: 1;">
-                <label>Units</label>
-                <input type="text" name="total_units" placeholder="60">
-            </div>
-            <div class="form-group" style="margin-bottom: 0; flex: 1;">
-                <label>Total SF</label>
-                <input type="text" name="total_sqft">
-            </div>
-            <button type="submit" class="btn btn-primary">Add</button>
-        </form>
-    </div>
+    {# ── Compute KPIs from units ── #}
+    {% set uns = namespace(occupied=0, vacant=0, total_rent=0, total_market=0, rent_count=0, market_count=0, total_sf=0) %}
+    {% for u in units %}
+        {% if u.status == 'occupied' %}{% set uns.occupied = uns.occupied + 1 %}{% elif u.status == 'vacant' %}{% set uns.vacant = uns.vacant + 1 %}{% endif %}
+        {% if u.current_rent %}{% set uns.total_rent = uns.total_rent + u.current_rent %}{% set uns.rent_count = uns.rent_count + 1 %}{% endif %}
+        {% if u.market_rent %}{% set uns.total_market = uns.total_market + u.market_rent %}{% set uns.market_count = uns.market_count + 1 %}{% endif %}
+        {% if u.square_footage %}{% set uns.total_sf = uns.total_sf + u.square_footage %}{% endif %}
+    {% endfor %}
 
-    {% endif %}
-
-    {% if buildings and can_edit('property.units') %}
-    <!-- Add Unit (edit only) -->
+    {# ── KPI Cards ── #}
+    {% if units %}
     <div class="card">
-        <div class="card-header">Add Unit</div>
-        <form method="POST" action="{{ url_for('create_unit', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>Building</label>
-                <select name="building_id" required>
-                    {% for b in buildings %}
-                    <option value="{{ b.id }}">{{ b.name }}</option>
-                    {% endfor %}
-                </select>
+        <div class="card-header">Unit Summary</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 4px;">
+            <div style="background: var(--cap-navy); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">Total Units</div>
+                <div style="font-size: 22px; font-weight: 700; color: #fff;">{{ units|length }}</div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>Unit #</label>
-                <input type="text" name="unit_number" placeholder="101" required style="width: 80px;">
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Occupied</div>
+                <div style="font-size: 22px; font-weight: 700; color: var(--cap-signal);">{{ uns.occupied }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">{{ '{:.1f}'.format(uns.occupied / units|length * 100) if units|length else 0 }}%</div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>Type</label>
-                <input type="text" name="unit_type" placeholder="2BR" style="width: 80px;">
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Vacant</div>
+                <div style="font-size: 22px; font-weight: 700; color: {% if uns.vacant %}var(--danger){% else %}var(--cap-signal){% endif %};">{{ uns.vacant }}</div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>SF</label>
-                <input type="text" name="square_footage" placeholder="850" style="width: 80px;">
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Avg Rent</div>
+                <div style="font-size: 22px; font-weight: 700; color: var(--cap-navy);">${{ '{:,.0f}'.format(uns.total_rent / uns.rent_count) if uns.rent_count else '—' }}</div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>Bed</label>
-                <input type="text" name="bedrooms" placeholder="2" style="width: 60px;">
+            <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total GPR</div>
+                <div style="font-size: 22px; font-weight: 700; color: var(--cap-navy);">${{ '{:,.0f}'.format(uns.total_rent) }}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">/month</div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>Bath</label>
-                <input type="text" name="bathrooms" placeholder="1" style="width: 60px;">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>Market Rent</label>
-                <input type="text" name="market_rent" placeholder="1350" style="width: 100px;">
-            </div>
-            <button type="submit" class="btn btn-primary">Add</button>
-        </form>
+        </div>
     </div>
     {% endif %}
 
-    <!-- Units Table (read access) -->
+    {# ── Building Summary Cards ── #}
+    {% if buildings|length > 1 %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        {% for b in buildings %}
+        <div class="card" style="margin-bottom: 0;">
+            <div class="card-header" style="font-size: 14px;">{{ b.name }}</div>
+            <div style="font-size: 13px; color: var(--text-secondary); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px;">
+                <div>Units: <strong>{{ b.total_units or '—' }}</strong></div>
+                <div>Floors: <strong>{{ b.floors or '—' }}</strong></div>
+                {% if b.total_sqft %}<div>SF: <strong>{{ '{:,.0f}'.format(b.total_sqft) }}</strong></div>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Units Table (collapsed if many) ── #}
     <div class="card">
-        <div class="card-header">Units ({{ units|length }})</div>
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>All Units</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">{{ units|length }} unit{{ 's' if units|length != 1 else '' }}</span>
+        </div>
         {% if units %}
         <table class="data-table">
             <thead>
@@ -1126,7 +1166,7 @@
             </thead>
             <tbody>
                 {% for u in units %}
-                <tr>
+                <tr {% if loop.index > 20 and units|length > 25 %}class="unit-extra-row" style="display:none;"{% endif %}>
                     <td style="font-weight: 500;">{{ u.unit_number }}</td>
                     <td style="font-size: 12px;">{{ u.building_name }}</td>
                     <td style="font-size: 12px;">{{ u.unit_type or '—' }}</td>
@@ -1145,10 +1185,89 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if units|length > 25 %}
+        <div style="text-align: center; padding: 12px;">
+            <a href="#" onclick="document.querySelectorAll('.unit-extra-row').forEach(function(r){r.style.display = r.style.display === 'none' ? '' : 'none';}); this.textContent = this.textContent.includes('Show all') ? 'Show fewer' : 'Show all {{ units|length }} units'; return false;" style="color: var(--cap-primary); font-size: 13px;">Show all {{ units|length }} units</a>
+        </div>
+        {% endif %}
         {% else %}
         <div class="empty-state"><p>No units added yet.</p></div>
         {% endif %}
     </div>
+
+    {# ── Add Building/Unit Forms (collapsed) ── #}
+    {% if can_edit('property.units') %}
+    <div class="card">
+        <div class="card-header" style="cursor: pointer;" onclick="var d = document.getElementById('add-asset-forms'); d.style.display = d.style.display === 'none' ? 'block' : 'none'; this.querySelector('.chevron').textContent = d.style.display === 'none' ? '&#9654;' : '&#9660;';">
+            <span class="chevron" style="font-size: 10px; margin-right: 6px;">&#9654;</span>
+            Add Building or Unit
+        </div>
+        <div id="add-asset-forms" style="display: none;">
+            <div style="padding-top: 12px; margin-bottom: 16px;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Add Building</div>
+                <form method="POST" action="{{ url_for('create_building', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end;">
+                    <div class="form-group" style="margin-bottom: 0; flex: 2;">
+                        <label>Name</label>
+                        <input type="text" name="name" placeholder="e.g. Building A" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                        <label>Floors</label>
+                        <input type="text" name="floors" placeholder="3">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                        <label>Units</label>
+                        <input type="text" name="total_units" placeholder="60">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                        <label>Total SF</label>
+                        <input type="text" name="total_sqft">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </form>
+            </div>
+            {% if buildings %}
+            <div style="border-top: 1px solid var(--border); padding-top: 12px;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Add Unit</div>
+                <form method="POST" action="{{ url_for('create_unit', property_id=prop.id) }}" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Building</label>
+                        <select name="building_id" required>
+                            {% for b in buildings %}
+                            <option value="{{ b.id }}">{{ b.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Unit #</label>
+                        <input type="text" name="unit_number" placeholder="101" required style="width: 80px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Type</label>
+                        <input type="text" name="unit_type" placeholder="2BR" style="width: 80px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>SF</label>
+                        <input type="text" name="square_footage" placeholder="850" style="width: 80px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Bed</label>
+                        <input type="text" name="bedrooms" placeholder="2" style="width: 60px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Bath</label>
+                        <input type="text" name="bathrooms" placeholder="1" style="width: 60px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Market Rent</label>
+                        <input type="text" name="market_rent" placeholder="1350" style="width: 100px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- ═══ DOCUMENTS ═══ -->
