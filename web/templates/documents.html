@@ -53,6 +53,33 @@
     </div>
 </div>
 
+{% if documents %}
+{% set ns = namespace(types={}, latest='') %}
+{% for doc in documents %}
+  {% set dtype = doc.document_type|default('unknown') %}
+  {% if dtype in ns.types %}
+    {% set _ = ns.types.update({dtype: ns.types[dtype] + 1}) %}
+  {% else %}
+    {% set _ = ns.types.update({dtype: 1}) %}
+  {% endif %}
+  {% if doc.processed_at and doc.processed_at > ns.latest %}
+    {% set ns.latest = doc.processed_at %}
+  {% endif %}
+{% endfor %}
+{% set sorted_types = ns.types|dictsort(by='value', reverse=true) %}
+<div style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; font-size: 13px; color: var(--text-secondary);">
+  <span><strong>{{ documents|length }}</strong> documents</span>
+  <span style="display: flex; gap: 6px; flex-wrap: wrap;">
+    {% for dtype, count in sorted_types[:4] %}
+    <span class="badge badge-{{ dtype }}">{{ dtype.replace('_', ' ') }} ({{ count }})</span>
+    {% endfor %}
+  </span>
+  {% if ns.latest %}
+  <span style="margin-left: auto;">Last upload: {{ ns.latest[:16] }}</span>
+  {% endif %}
+</div>
+{% endif %}
+
 <!-- Filters -->
 <div class="card" style="padding: 14px 24px;">
     <form method="GET" style="display: flex; gap: 12px; align-items: center;">
