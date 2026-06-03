@@ -320,6 +320,9 @@ _DASHBOARD_HTML = _STYLE + """
       <span style="color: var(--text-secondary, #5A5A6E);">Lease Analysis</span>
   </div>
   <p class="subtitle">Properties with extracted rent-roll or lease documents</p>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;" id="kpi-cards">
+    <!-- JS will populate -->
+  </div>
   <div id="properties-list">
     <div class="loading-msg"><span class="spinner"></span>Loading lease data&hellip;</div>
   </div>
@@ -337,6 +340,24 @@ _DASHBOARD_HTML = _STYLE + """
                 el.innerHTML='<div class="card"><p class="empty">No properties with lease data found. Upload rent-roll documents to get started.</p></div>';
                 return;
             }
+            // KPI rollup
+            var totalUnits=0, totalVacant=0, weightedOcc=0, occWeight=0, rentSum=0, rentCount=0;
+            d.properties.forEach(function(p){
+                if(!p.has_data) return;
+                var u=p.total_units||0;
+                totalUnits+=u;
+                totalVacant+=(p.vacant_units||0);
+                if(p.occupancy_pct!=null){weightedOcc+=p.occupancy_pct*u;occWeight+=u;}
+                if(p.avg_rent!=null){rentSum+=p.avg_rent;rentCount++;}
+            });
+            var avgOcc=occWeight>0?(weightedOcc/occWeight).toFixed(1):'—';
+            var avgRent=rentCount>0?'$'+Math.round(rentSum/rentCount).toLocaleString():'—';
+            var kpiEl=document.getElementById('kpi-cards');
+            kpiEl.innerHTML=
+                '<div class="card"><div class="card-label">Total Units</div><div class="card-value">'+fmt(totalUnits)+'</div></div>'+
+                '<div class="card"><div class="card-label">Avg Occupancy</div><div class="card-value">'+(avgOcc!=='—'?avgOcc+'%':avgOcc)+'</div></div>'+
+                '<div class="card"><div class="card-label">Total Vacant</div><div class="card-value'+(totalVacant>0?' yellow':'')+'">'+ fmt(totalVacant)+'</div></div>'+
+                '<div class="card"><div class="card-label">Avg Rent</div><div class="card-value">'+avgRent+'</div></div>';
             var h='';
             d.properties.forEach(function(p){
                 h+='<div class="prop-card"><div class="prop-card-left"><h3>'+esc(p.name)+'</h3><div class="meta">'+
