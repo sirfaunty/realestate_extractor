@@ -52,6 +52,29 @@
 <!-- Financial Terms -->
 {% if terms %}
 <div class="tab-content active" id="tab-financial">
+    {# --- KPI computation --- #}
+    {% set ft_ns = namespace(conf_sum=0, conf_count=0, edited=0) %}
+    {% for t in terms %}
+        {% if t.confidence %}{% set ft_ns.conf_sum = ft_ns.conf_sum + t.confidence %}{% set ft_ns.conf_count = ft_ns.conf_count + 1 %}{% endif %}
+        {% if t.user_modified_at %}{% set ft_ns.edited = ft_ns.edited + 1 %}{% endif %}
+    {% endfor %}
+
+    {# --- KPI cards --- #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Terms Extracted</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ terms|length }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Avg Confidence</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{% if ft_ns.conf_count %}{{ ((ft_ns.conf_sum / ft_ns.conf_count) * 100)|round|int }}%{% else %}--{% endif %}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">User Edited</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-primary);">{{ ft_ns.edited }}</div>
+        </div>
+    </div>
+
     <div class="card">
         <table class="data-table">
             <thead>
@@ -66,7 +89,7 @@
             </thead>
             <tbody>
                 {% for t in terms %}
-                <tr data-term-id="{{ t.id }}">
+                <tr data-term-id="{{ t.id }}" {% if loop.index > 10 and terms|length > 15 %}class="ft-extra-row" style="display:none;"{% endif %}>
                     <td style="font-weight: 600;">{{ t.term_type.replace('_', ' ').title() }}</td>
                     <td class="editable-cell" data-field="value">
                         <span class="cell-display">
@@ -100,6 +123,13 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if terms|length > 15 %}
+        <div style="text-align: center; padding: 12px;">
+            <a href="#" onclick="document.querySelectorAll('.ft-extra-row').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none'); var t = this; t.textContent = t.textContent.includes('Show all') ? 'Show fewer' : 'Show all {{ terms|length }} terms'; return false;" style="color: var(--cap-primary); font-size: 13px;">
+                Show all {{ terms|length }} terms
+            </a>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
@@ -140,6 +170,40 @@
 <!-- Rent Roll -->
 {% if rent_roll %}
 <div class="tab-content {% if not terms and not clauses %}active{% endif %}" id="tab-rentroll">
+    {# --- KPI computation --- #}
+    {% set rr_ns = namespace(occupied=0, total_rent=0, rent_count=0) %}
+    {% for r in rent_roll %}
+        {% if r.tenant_name or (r.status and ('occupied' in r.status|lower or 'current' in r.status|lower)) %}{% set rr_ns.occupied = rr_ns.occupied + 1 %}{% endif %}
+        {% if r.monthly_rent %}
+            {% set rr_ns.total_rent = rr_ns.total_rent + r.monthly_rent %}
+            {% set rr_ns.rent_count = rr_ns.rent_count + 1 %}
+        {% endif %}
+    {% endfor %}
+
+    {# --- KPI cards --- #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Units</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ rent_roll|length }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Occupied</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-signal);">{{ rr_ns.occupied }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Occupancy Rate</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-signal);">{% if rent_roll|length %}{{ ((rr_ns.occupied / rent_roll|length) * 100)|round|int }}%{% else %}--{% endif %}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Avg Monthly Rent</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{% if rr_ns.rent_count %}${{ "{:,.0f}".format(rr_ns.total_rent / rr_ns.rent_count) }}{% else %}--{% endif %}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Monthly Rent</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{% if rr_ns.total_rent %}${{ "{:,.0f}".format(rr_ns.total_rent) }}{% else %}--{% endif %}</div>
+        </div>
+    </div>
+
     <div class="card">
         <table class="data-table">
             <thead>
@@ -158,7 +222,7 @@
             </thead>
             <tbody>
                 {% for r in rent_roll %}
-                <tr>
+                <tr {% if loop.index > 20 and rent_roll|length > 20 %}class="rr-extra-row" style="display:none;"{% endif %}>
                     <td>{{ r.unit_number or '—' }}</td>
                     <td style="font-weight: 500;">{{ r.tenant_name or '—' }}</td>
                     <td>{% if r.square_footage %}{{ "{:,.0f}".format(r.square_footage) }}{% else %}—{% endif %}</td>
@@ -175,6 +239,13 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if rent_roll|length > 20 %}
+        <div style="text-align: center; padding: 12px;">
+            <a href="#" onclick="document.querySelectorAll('.rr-extra-row').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none'); var t = this; t.textContent = t.textContent.includes('Show all') ? 'Show fewer' : 'Show all {{ rent_roll|length }} units'; return false;" style="color: var(--cap-primary); font-size: 13px;">
+                Show all {{ rent_roll|length }} units
+            </a>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
@@ -182,6 +253,42 @@
 <!-- Operating Statement -->
 {% if opstat %}
 <div class="tab-content" id="tab-opstat">
+    {# --- KPI computation --- #}
+    {% set os_ns = namespace(revenue=0, expenses=0, period='') %}
+    {% for o in opstat %}
+        {% if o.amount and not o.is_subtotal and not o.is_total %}
+            {% if o.category == 'revenue' %}{% set os_ns.revenue = os_ns.revenue + o.amount %}{% endif %}
+            {% if o.category == 'expense' %}{% set os_ns.expenses = os_ns.expenses + o.amount %}{% endif %}
+        {% endif %}
+        {% if not os_ns.period and o.period %}{% set os_ns.period = o.period %}{% endif %}
+    {% endfor %}
+
+    {# --- KPI cards --- #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Revenue</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-signal);">${{ "{:,.0f}".format(os_ns.revenue) }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Expenses</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--danger);">${{ "{:,.0f}".format(os_ns.expenses) }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">NOI</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">${{ "{:,.0f}".format(os_ns.revenue - os_ns.expenses) }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Line Items</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ opstat|length }}</div>
+        </div>
+        {% if os_ns.period %}
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Period</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ os_ns.period }}</div>
+        </div>
+        {% endif %}
+    </div>
+
     <div class="card">
         <table class="data-table">
             <thead>
@@ -196,7 +303,7 @@
             </thead>
             <tbody>
                 {% for o in opstat %}
-                <tr {% if o.is_total %}style="font-weight: 700; border-top: 2px solid var(--border);"{% elif o.is_subtotal %}style="font-weight: 600;"{% endif %}>
+                <tr {% if loop.index > 25 and opstat|length > 25 %}class="os-extra-row" {% endif %}{% if o.is_total %}style="font-weight: 700; border-top: 2px solid var(--border);{% if loop.index > 25 and opstat|length > 25 %} display:none;{% endif %}"{% elif o.is_subtotal %}style="font-weight: 600;{% if loop.index > 25 and opstat|length > 25 %} display:none;{% endif %}"{% elif loop.index > 25 and opstat|length > 25 %}style="display:none;"{% endif %}>
                     <td><span class="badge badge-{{ 'success' if o.category == 'revenue' else 'error' if o.category == 'expense' else 'processing' }}">{{ o.category }}</span></td>
                     <td>{{ o.line_item }}</td>
                     <td>{% if o.amount %}${{ "{:,.2f}".format(o.amount) }}{% else %}—{% endif %}</td>
@@ -209,6 +316,13 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if opstat|length > 25 %}
+        <div style="text-align: center; padding: 12px;">
+            <a href="#" onclick="document.querySelectorAll('.os-extra-row').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none'); var t = this; t.textContent = t.textContent.includes('Show all') ? 'Show fewer' : 'Show all {{ opstat|length }} line items'; return false;" style="color: var(--cap-primary); font-size: 13px;">
+                Show all {{ opstat|length }} line items
+            </a>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
@@ -216,6 +330,44 @@
 <!-- General Ledger -->
 {% if gl %}
 <div class="tab-content" id="tab-gl">
+    {# --- KPI computation --- #}
+    {% set gl_ns = namespace(total_debit=0, total_credit=0, first_date='', last_date='', accounts=[]) %}
+    {% for g in gl %}
+        {% if g.debit %}{% set gl_ns.total_debit = gl_ns.total_debit + g.debit %}{% endif %}
+        {% if g.credit %}{% set gl_ns.total_credit = gl_ns.total_credit + g.credit %}{% endif %}
+        {% if g.entry_date %}
+            {% if not gl_ns.first_date %}{% set gl_ns.first_date = g.entry_date %}{% endif %}
+            {% set gl_ns.last_date = g.entry_date %}
+        {% endif %}
+        {% if g.account_name and g.account_name not in gl_ns.accounts %}{% set gl_ns.accounts = gl_ns.accounts + [g.account_name] %}{% endif %}
+    {% endfor %}
+
+    {# --- KPI cards --- #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Entries</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ gl|length }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Debits</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">${{ "{:,.0f}".format(gl_ns.total_debit) }}</div>
+        </div>
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Total Credits</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">${{ "{:,.0f}".format(gl_ns.total_credit) }}</div>
+        </div>
+        {% if gl_ns.first_date %}
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Date Range</div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--cap-navy);">{{ gl_ns.first_date }}{% if gl_ns.first_date != gl_ns.last_date %} &ndash; {{ gl_ns.last_date }}{% endif %}</div>
+        </div>
+        {% endif %}
+        <div style="background: var(--bg, #f8f9fa); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;">Unique Accounts</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--cap-navy);">{{ gl_ns.accounts|length }}</div>
+        </div>
+    </div>
+
     <div class="card">
         <table class="data-table">
             <thead>
@@ -232,7 +384,7 @@
             </thead>
             <tbody>
                 {% for g in gl %}
-                <tr>
+                <tr {% if loop.index > 25 and gl|length > 25 %}class="gl-extra-row" style="display:none;"{% endif %}>
                     <td>{{ g.entry_date or '—' }}</td>
                     <td>{{ g.account_code or '' }} {{ g.account_name or '' }}</td>
                     <td>{{ g.description or '—' }}</td>
@@ -245,6 +397,13 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if gl|length > 25 %}
+        <div style="text-align: center; padding: 12px;">
+            <a href="#" onclick="document.querySelectorAll('.gl-extra-row').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none'); var t = this; t.textContent = t.textContent.includes('Show all') ? 'Show fewer' : 'Show all {{ gl|length }} entries'; return false;" style="color: var(--cap-primary); font-size: 13px;">
+                Show all {{ gl|length }} entries
+            </a>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
