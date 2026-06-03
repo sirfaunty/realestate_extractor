@@ -306,14 +306,21 @@ INDEX_HTML = """
                 '<div class="card"><div class="label">Total Deals</div><div class="value green">'+fmt(d.total_deals)+'</div></div>'+
                 '<div class="card"><div class="label">Markets</div><div class="value">'+d.total_markets+'</div></div>';
             var h='<table><tr><th>Market</th><th class="right">Deals</th><th class="right">Median Price</th><th class="right">Years</th></tr>';
-            d.markets.forEach(function(m){
-                h+='<tr><td><a href="/comps/market/'+encodeURIComponent(m.market)+'">'+m.market+'</a></td>'+
+            d.markets.forEach(function(m,idx){
+                var extraAttr=idx>=10?' class="sc-extra-row" style="display:none"':'';
+                h+='<tr'+extraAttr+'><td><a href="/comps/market/'+encodeURIComponent(m.market)+'">'+m.market+'</a></td>'+
                    '<td class="right mono">'+fmt(m.deals)+'</td>'+
                    '<td class="right mono">$'+fmt(m.median_price)+'</td>'+
                    '<td class="right mono">'+m.min_year+'–'+m.max_year+'</td></tr>';
             });
             h+='</table>';
             document.getElementById('markets-table').innerHTML=h;
+            if(d.markets.length>10){
+                var toggle=document.createElement('div');
+                toggle.style.cssText='text-align:center;padding:12px;';
+                toggle.innerHTML='<a href="#" onclick="document.querySelectorAll(\'.sc-extra-row\').forEach(function(r){r.style.display=r.style.display===\'none\'?\'\':\'none\';}); this.textContent=this.textContent.indexOf(\'Show all\')!==-1?\'Show fewer\':\'Show all '+d.markets.length+' markets\'; return false;" style="color:var(--accent);font-size:13px;">Show all '+d.markets.length+' markets</a>';
+                document.getElementById('markets-table').appendChild(toggle);
+            }
         })
         .catch(function(e){
             document.getElementById('markets-table').innerHTML=

@@ -301,10 +301,11 @@ INDEX_HTML = """
             // Build table
             var html = '<table><tr><th>Market</th><th class="right">Scored</th><th class="right">Total</th>' +
                 '<th class="right">Coverage</th><th class="right">Peer Cuts</th><th class="right">Metrics</th></tr>';
-            markets.forEach(function(m) {
+            markets.forEach(function(m, idx) {
                 var pct = m.total_properties > 0 ? Math.round(m.scored_properties / m.total_properties * 100) : 0;
                 var cls = pct > 50 ? 'green' : 'orange';
-                html += '<tr>' +
+                var extraAttr = idx >= 10 ? ' class="inv-extra-row" style="display:none"' : '';
+                html += '<tr' + extraAttr + '>' +
                     '<td><a href="/inventory/market/' + encodeURIComponent(m.market) + '">' + m.market + '</a></td>' +
                     '<td class="right mono">' + fmt(m.scored_properties) + '</td>' +
                     '<td class="right mono">' + fmt(m.total_properties) + '</td>' +
@@ -315,6 +316,12 @@ INDEX_HTML = """
             });
             html += '</table>';
             document.getElementById('markets-table').innerHTML = html;
+            if (markets.length > 10) {
+                var toggle = document.createElement('div');
+                toggle.style.cssText = 'text-align:center;padding:12px;';
+                toggle.innerHTML = '<a href="#" onclick="document.querySelectorAll(\'.inv-extra-row\').forEach(function(r){r.style.display=r.style.display===\'none\'?\'\':\'none\';}); this.textContent=this.textContent.indexOf(\'Show all\')!==-1?\'Show fewer\':\'Show all ' + markets.length + ' markets\'; return false;" style="color:var(--accent);font-size:13px;">Show all ' + markets.length + ' markets</a>';
+                document.getElementById('markets-table').appendChild(toggle);
+            }
         })
         .catch(function(err) {
             document.getElementById('markets-table').innerHTML =
