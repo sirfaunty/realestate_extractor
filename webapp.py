@@ -2044,34 +2044,26 @@ def extraction_review(property_id=None):
         status_filter = request.args.get('status')  # pending, approved, flagged
         type_filter = request.args.get('type')       # document type filter
 
-        # Get review queue
-        docs = db.get_extraction_review_queue(
+        # Get review queue (single query)
+        all_docs = db.get_extraction_review_queue(
             property_id=property_id,
             status=status_filter
         )
 
-        # Apply doc type filter client-side (queue method doesn't support it)
+        # Build type list from full result, then filter
+        doc_types = sorted(set(
+            d.get('document_type', 'unknown') for d in all_docs
+        ))
         if type_filter:
-            docs = [d for d in docs if d.get('document_type') == type_filter]
+            docs = [d for d in all_docs if d.get('document_type') == type_filter]
+        else:
+            docs = all_docs
 
         # Get review stats
         stats = db.get_extraction_review_stats(property_id=property_id)
 
         # Get property list for filter dropdown
         all_props = db.list_properties()
-
-        # Get distinct doc types for filter
-        doc_types = sorted(set(
-            d.get('document_type', 'unknown') for d in docs
-        )) if not type_filter else []
-        # If filtering, get all types from unfiltered set
-        if type_filter:
-            all_docs = db.get_extraction_review_queue(
-                property_id=property_id, status=status_filter
-            )
-            doc_types = sorted(set(
-                d.get('document_type', 'unknown') for d in all_docs
-            ))
 
         # Current property info
         prop = db.get_property(property_id) if property_id else None

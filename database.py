@@ -405,6 +405,8 @@ CREATE INDEX IF NOT EXISTS idx_units_status ON units(status);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(document_type);
 CREATE INDEX IF NOT EXISTS idx_documents_property ON documents(property_name);
 CREATE INDEX IF NOT EXISTS idx_documents_property_id ON documents(property_id);
+CREATE INDEX IF NOT EXISTS idx_documents_review_status ON documents(review_status);
+CREATE INDEX IF NOT EXISTS idx_documents_extraction_review ON documents(extraction_review);
 CREATE INDEX IF NOT EXISTS idx_clauses_doc ON clauses(document_id);
 CREATE INDEX IF NOT EXISTS idx_clauses_type ON clauses(clause_type);
 CREATE INDEX IF NOT EXISTS idx_financial_terms_doc ON financial_terms(document_id);
@@ -876,7 +878,8 @@ class Database:
     def match_property(self, property_name: str = None,
                        property_address: str = None,
                        city: str = None, state: str = None,
-                       threshold: float = 0.4) -> List[Dict]:
+                       threshold: float = 0.4,
+                       _properties: list = None) -> List[Dict]:
         """
         Fuzzy-match extracted property info against existing properties.
 
@@ -887,8 +890,10 @@ class Database:
         - Name similarity: up to 50 points
         - Address similarity: up to 30 points
         - City+State match: up to 20 points
+
+        Pass _properties to avoid redundant list_properties() calls in loops.
         """
-        properties = self.list_properties()
+        properties = _properties if _properties is not None else self.list_properties()
         if not properties:
             return []
 
@@ -975,11 +980,15 @@ class Database:
         """, (limit,))
         docs = [dict(row) for row in cur.fetchall()]
 
+        # Fetch property list once (not per-document)
+        all_properties = self.list_properties()
+
         # Enrich each document with match suggestions
         for doc in docs:
             doc['suggested_matches'] = self.match_property(
                 property_name=doc.get('property_name'),
                 property_address=doc.get('property_address'),
+                _properties=all_properties,
             )
             if doc['suggested_matches']:
                 best = doc['suggested_matches'][0]

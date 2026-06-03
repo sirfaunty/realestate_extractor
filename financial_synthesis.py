@@ -87,6 +87,18 @@ class FinancialSynthesizer:
             db: Database instance (already connected)
         """
         self.db = db
+        self._cache = {}  # property_id -> (result, doc_count)
+
+    def invalidate_cache(self, property_id: int = None):
+        """Clear cached synthesis results.
+
+        Call after documents are added/removed/re-extracted for a property.
+        Pass None to clear all.
+        """
+        if property_id is None:
+            self._cache.clear()
+        else:
+            self._cache.pop(property_id, None)
 
     # ─── Main Entry Point ────────────────────────────────────────────
 
@@ -128,6 +140,20 @@ class FinancialSynthesizer:
                 "synthesis_notes": [str],
             }
         """
+        # Check cache — keyed by (property_id, doc_count) so adding
+        # or removing documents automatically invalidates.
+        try:
+            doc_count = self.db.conn.execute(
+                "SELECT COUNT(*) FROM documents WHERE property_id = ?",
+                (property_id,)
+            ).fetchone()[0]
+        except Exception:
+            doc_count = -1
+
+        cached = self._cache.get(property_id)
+        if cached and cached[1] == doc_count:
+            return cached[0]
+
         # Fetch all opstat items for this property, joined with doc info
         items = self._fetch_items(property_id)
         if not items:
@@ -165,7 +191,7 @@ class FinancialSynthesizer:
                 f"not shown: {', '.join(secondary_periods)}."
             )
 
-        return {
+        result = {
             'property_id': property_id,
             'property_name': property_name,
             'periods': primary_periods,
@@ -176,6 +202,11 @@ class FinancialSynthesizer:
             'document_sources': doc_sources,
             'synthesis_notes': notes,
         }
+
+        # Cache for reuse (portfolio comparison calls this per-property)
+        self._cache[property_id] = (result, doc_count)
+
+        return result
 
     # ─── Data Fetching ───────────────────────────────────────────────
 
