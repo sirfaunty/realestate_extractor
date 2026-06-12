@@ -406,7 +406,6 @@ CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(document_type);
 CREATE INDEX IF NOT EXISTS idx_documents_property ON documents(property_name);
 CREATE INDEX IF NOT EXISTS idx_documents_property_id ON documents(property_id);
 CREATE INDEX IF NOT EXISTS idx_documents_review_status ON documents(review_status);
-CREATE INDEX IF NOT EXISTS idx_documents_extraction_review ON documents(extraction_review);
 CREATE INDEX IF NOT EXISTS idx_clauses_doc ON clauses(document_id);
 CREATE INDEX IF NOT EXISTS idx_clauses_type ON clauses(clause_type);
 CREATE INDEX IF NOT EXISTS idx_financial_terms_doc ON financial_terms(document_id);
@@ -479,6 +478,7 @@ class Database:
         """Create all tables and indexes if they don't exist."""
         self.conn.executescript(SCHEMA_SQL)
         self._migrate()
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_extraction_review ON documents(extraction_review)")
         self.conn.commit()
 
     def _migrate(self):

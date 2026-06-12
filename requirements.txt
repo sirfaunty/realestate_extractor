@@ -30,3 +30,8 @@ pydantic>=2.0.0
 pyyaml>=6.0
 numpy-financial>=1.0.0
 python-dateutil>=2.8
+
+# Data analysis (analytics / scorecard)
+pandas>=2.0.0
+# Local analytical warehouse
+duckdb>=0.9.0
