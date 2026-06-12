@@ -2310,6 +2310,145 @@ def api_reextract(doc_id):
         db.close()
 
 
+# ─── Extraction Versioning & Comparison ──────────────────────────────
+
+@app.route('/api/property/<int:property_id>/reanalyze', methods=['POST'])
+@login_required
+def api_versioned_reanalyze(property_id):
+    """Re-analyze all documents for a property with extraction versioning.
+    Creates new extraction runs so results can be compared against previous runs."""
+    org_id = session['org_id']
+
+    _cleanup_expired_jobs()
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {
+        'id': job_id,
+        'org_id': org_id,
+        'status': 'processing',
+        'type': 'versioned_reanalyze',
+        'filename': f'Versioned re-analysis of property {property_id}',
+        'total': 1,
+        'progress': 0,
+        'results': [],
+        'error': None,
+        'started': datetime.now().isoformat(),
+        'step': 'analyzing',
+        'step_detail': 'Starting versioned re-analysis...',
+        'steps_log': [{'step': 'analyzing',
+                       'detail': 'Starting versioned re-analysis...',
+                       'time': datetime.now().isoformat()}],
+    }
+
+    def on_step(step, detail=''):
+        jobs[job_id]['step'] = step
+        jobs[job_id]['step_detail'] = detail
+        jobs[job_id]['steps_log'].append({
+            'step': step, 'detail': detail,
+            'time': datetime.now().isoformat()
+        })
+
+    def process_async():
+        db2 = None
+        try:
+            db2 = get_org_db(org_id)
+            llm = get_llm()
+            from property_analyzer import PropertyAnalyzer
+            analyzer = PropertyAnalyzer(db2, llm)
+            analyzer._on_step = on_step
+            summary = analyzer.analyze_property(property_id, versioned=True)
+            on_step('complete', f'Re-analysis complete — {summary.get("doc_count", 0)} documents')
+            jobs[job_id]['results'] = [summary]
+            jobs[job_id]['progress'] = 1
+            jobs[job_id]['status'] = 'completed' if 'error' not in summary else 'failed'
+            jobs[job_id]['error'] = summary.get('error')
+        except Exception as e:
+            jobs[job_id]['status'] = 'failed'
+            jobs[job_id]['error'] = str(e)
+        finally:
+            if db2 is not None:
+                db2.close()
+
+    enqueue_job(job_id, process_async)
+    return jsonify({'success': True, 'job_id': job_id})
+
+
+@app.route('/api/document/<int:doc_id>/extraction-runs')
+@login_required
+def api_extraction_runs(doc_id):
+    """List all extraction runs for a document."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        runs = db.get_extraction_runs(doc_id)
+        return jsonify({'runs': runs})
+    finally:
+        db.close()
+
+
+@app.route('/api/document/<int:doc_id>/compare-runs')
+@login_required
+def api_compare_runs(doc_id):
+    """Compare two extraction runs for a document.
+    Query params: run_a, run_b (extraction_run IDs)"""
+    org_id = session['org_id']
+    run_a = request.args.get('run_a', type=int)
+    run_b = request.args.get('run_b', type=int)
+    if not run_a or not run_b:
+        return jsonify({'error': 'run_a and run_b query params required'}), 400
+    db = get_org_db(org_id)
+    try:
+        comparison = db.get_run_comparison(doc_id, run_a, run_b)
+        return jsonify(comparison)
+    finally:
+        db.close()
+
+
+@app.route('/api/property/<int:property_id>/extraction-summary')
+@login_required
+def api_property_extraction_summary(property_id):
+    """Get extraction run summary across all documents for a property.
+    Shows which documents have multiple runs and are ready for comparison."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        docs = db.conn.execute("""
+            SELECT d.id, d.filename, d.document_type,
+                   COUNT(er.id) as run_count,
+                   MAX(er.run_number) as latest_run,
+                   MAX(CASE WHEN er.is_current = 1 THEN er.id END) as current_run_id,
+                   MIN(er.id) as first_run_id
+            FROM documents d
+            LEFT JOIN extraction_runs er ON er.document_id = d.id
+            WHERE d.property_id = ?
+            GROUP BY d.id
+            ORDER BY d.filename
+        """, (property_id,)).fetchall()
+        return jsonify({
+            'property_id': property_id,
+            'documents': [dict(d) for d in docs],
+            'total_docs': len(docs),
+            'docs_with_multiple_runs': sum(1 for d in docs if d['run_count'] and d['run_count'] > 1),
+        })
+    finally:
+        db.close()
+
+
+@app.route('/api/extraction-run/<int:run_id>/set-current', methods=['POST'])
+@login_required
+def api_set_current_run(run_id):
+    """Switch which extraction run is the active one for a document."""
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        run = db.conn.execute("SELECT document_id FROM extraction_runs WHERE id = ?", (run_id,)).fetchone()
+        if not run:
+            return jsonify({'error': 'Run not found'}), 404
+        db.set_current_run(run['document_id'], run_id)
+        return jsonify({'success': True})
+    finally:
+        db.close()
+
+
 # ─── Bulk Re-extract & Document Groups ─────────────────────────────
 
 @app.route('/api/documents/groups')

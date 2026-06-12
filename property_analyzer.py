@@ -52,7 +52,7 @@ class PropertyAnalyzer:
             except Exception:
                 pass
 
-    def analyze_property(self, property_id: int) -> Dict:
+    def analyze_property(self, property_id: int, versioned: bool = False) -> Dict:
         """
         Run full analysis on all documents for a property.
 
@@ -82,6 +82,14 @@ class PropertyAnalyzer:
             'clauses': 0,
             'by_type': {},
         }
+
+        # Track extraction run IDs when versioned re-extraction is enabled
+        self._doc_run_ids = {}
+        if versioned:
+            for doc in docs:
+                doc_id = doc['id']
+                ext_run_id = self.db.create_extraction_run(doc_id, engine_version='v2')
+                self._doc_run_ids[doc_id] = ext_run_id
 
         try:
             # ── Auto-reclassify docs with empty/missing document_type ──
@@ -190,6 +198,11 @@ class PropertyAnalyzer:
                     # Mark document as analyzed
                     self.db.mark_document_analyzed(doc_id)
 
+                    # Complete extraction run if versioned
+                    ext_run = self._doc_run_ids.get(doc_id)
+                    if ext_run:
+                        self.db.complete_extraction_run(ext_run)
+
                 summary['by_type'][doc_type] = type_summary
 
             summary['time'] = round(time.time() - start, 1)
@@ -199,12 +212,19 @@ class PropertyAnalyzer:
         except Exception as e:
             logger.error(f"Analysis failed for property {property_id}: {e}", exc_info=True)
             self.db.fail_analysis_run(run_id, str(e))
+            # Fail any incomplete extraction runs
+            for doc_id, ext_run_id in self._doc_run_ids.items():
+                try:
+                    self.db.fail_extraction_run(ext_run_id, str(e))
+                except Exception:
+                    pass
             summary['error'] = str(e)
             self._emit('failed', str(e))
 
         return summary
 
-    def analyze_documents(self, property_id: int, doc_ids: List[int]) -> Dict:
+    def analyze_documents(self, property_id: int, doc_ids: List[int],
+                          versioned: bool = False) -> Dict:
         """
         Run analysis on a specific set of documents (selective re-run).
 
@@ -234,6 +254,14 @@ class PropertyAnalyzer:
             'clauses': 0,
             'by_type': {},
         }
+
+        # Track extraction run IDs when versioned re-extraction is enabled
+        self._doc_run_ids = {}
+        if versioned:
+            for doc in docs:
+                doc_id = doc['id']
+                ext_run_id = self.db.create_extraction_run(doc_id, engine_version='v2')
+                self._doc_run_ids[doc_id] = ext_run_id
 
         try:
             # ── Auto-reclassify untyped docs (same as analyze_property) ──
@@ -322,6 +350,11 @@ class PropertyAnalyzer:
 
                     self.db.mark_document_analyzed(doc_id)
 
+                    # Complete extraction run if versioned
+                    ext_run = self._doc_run_ids.get(doc_id)
+                    if ext_run:
+                        self.db.complete_extraction_run(ext_run)
+
                 summary['by_type'][doc_type] = type_summary
 
             summary['time'] = round(time.time() - start, 1)
@@ -331,10 +364,20 @@ class PropertyAnalyzer:
         except Exception as e:
             logger.error(f"Selective analysis failed: {e}", exc_info=True)
             self.db.fail_analysis_run(run_id, str(e))
+            # Fail any incomplete extraction runs
+            for doc_id, ext_run_id in self._doc_run_ids.items():
+                try:
+                    self.db.fail_extraction_run(ext_run_id, str(e))
+                except Exception:
+                    pass
             summary['error'] = str(e)
             self._emit('failed', str(e))
 
         return summary
+
+    def _get_run_id(self, doc_id: int) -> int:
+        """Get the extraction run ID for a document (if versioned extraction is active)."""
+        return self._doc_run_ids.get(doc_id)
 
     def _reconstruct_document(self, doc_id: int, doc_record: Dict) -> Optional[DocumentContent]:
         """
@@ -483,6 +526,7 @@ class PropertyAnalyzer:
                             status=entry.get('status'),
                             notes=entry.get('notes'),
                             metadata=entry.get('metadata'),
+                            run_id=self._get_run_id(doc_id),
                         )
                         counts['rent_roll'] += 1
                     except Exception as e:
@@ -507,6 +551,7 @@ class PropertyAnalyzer:
                             is_subtotal=item.get('is_subtotal', False),
                             is_total=item.get('is_total', False),
                             metadata=item.get('metadata'),
+                            run_id=self._get_run_id(doc_id),
                         )
                         counts['operating_items'] += 1
                     except Exception as e:
@@ -524,6 +569,7 @@ class PropertyAnalyzer:
                             value_numeric=self._safe_float(term.get('value_numeric')),
                             confidence=0.95,
                             page_number=None,
+                            run_id=self._get_run_id(doc_id),
                         )
                         counts['financial_terms'] += 1
                     except Exception as e:
@@ -631,6 +677,7 @@ class PropertyAnalyzer:
                     notes=row.get('notes'),
                     page_number=row.get('page_number'),
                     metadata=row.get('metadata'),
+                    run_id=self._get_run_id(doc_id),
                 )
             except Exception as e:
                 logger.warning(f"Failed to store rent roll entry: {e}")
@@ -688,6 +735,7 @@ class PropertyAnalyzer:
                     is_subtotal=row.get('is_subtotal', False),
                     is_total=row.get('is_total', False),
                     page_number=row.get('page_number'),
+                    run_id=self._get_run_id(doc_id),
                 )
             except Exception as e:
                 logger.warning(f"Failed to store opstat item: {e}")
@@ -1909,6 +1957,7 @@ class PropertyAnalyzer:
                     section_ref=term.get('section_ref'),
                     page_number=term.get('page_number'),
                     confidence=self._safe_float(term.get('confidence')),
+                    run_id=self._get_run_id(doc_id),
                 )
                 counts['terms'] += 1
             except Exception as e:
@@ -1926,6 +1975,7 @@ class PropertyAnalyzer:
                     summary=clause.get('summary'),
                     page_number=clause.get('page_number'),
                     confidence=self._safe_float(clause.get('confidence')),
+                    run_id=self._get_run_id(doc_id),
                 )
                 counts['clauses'] += 1
             except Exception as e:
@@ -1948,6 +1998,7 @@ class PropertyAnalyzer:
                         balance=self._safe_float(row.get('balance')),
                         period=row.get('period'),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'balance_sheet':
                     self.db.insert_balance_sheet_item(
@@ -1961,6 +2012,7 @@ class PropertyAnalyzer:
                         is_subtotal=row.get('is_subtotal', False),
                         is_total=row.get('is_total', False),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'cash_flow':
                     self.db.insert_cash_flow_item(
@@ -1972,6 +2024,7 @@ class PropertyAnalyzer:
                         is_subtotal=row.get('is_subtotal', False),
                         is_total=row.get('is_total', False),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'bank_reconciliation':
                     self.db.insert_bank_recon_entry(
@@ -1985,6 +2038,7 @@ class PropertyAnalyzer:
                         reference=row.get('reference'),
                         cleared=row.get('cleared', False),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'security_deposit':
                     self.db.insert_security_deposit_entry(
@@ -2000,6 +2054,7 @@ class PropertyAnalyzer:
                         interest_accrued=self._safe_float(row.get('interest_accrued')),
                         notes=row.get('notes'),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'payables':
                     self.db.insert_payable_entry(
@@ -2014,6 +2069,7 @@ class PropertyAnalyzer:
                         account_code=row.get('account_code'),
                         status=row.get('status'),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'receivables':
                     self.db.insert_receivable_entry(
@@ -2029,6 +2085,7 @@ class PropertyAnalyzer:
                         balance_due=self._safe_float(row.get('balance_due')),
                         status=row.get('status'),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'bad_debt':
                     self.db.insert_bad_debt_entry(
@@ -2045,6 +2102,7 @@ class PropertyAnalyzer:
                         collection_agency=row.get('collection_agency'),
                         notes=row.get('notes'),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 elif dtype == 'concession':
                     self.db.insert_concession_entry(
@@ -2060,6 +2118,7 @@ class PropertyAnalyzer:
                         remaining_balance=self._safe_float(row.get('remaining_balance')),
                         status=row.get('status'),
                         page_number=row.get('page_number'),
+                        run_id=self._get_run_id(doc_id),
                     )
                 tabular_count += 1
             except Exception as e:

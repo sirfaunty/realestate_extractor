@@ -43,6 +43,10 @@
                         <strong>Full Re-run</strong>
                         <span>Clear all &amp; re-extract everything</span>
                     </button>
+                    <button onclick="runAnalysis('versioned')" class="analyze-menu-item">
+                        <strong>Versioned Re-analyze</strong>
+                        <span>Re-extract &amp; keep old data for comparison</span>
+                    </button>
                     <div style="border-top: 1px solid var(--border);">
                         <button onclick="runAssessment()" class="analyze-menu-item" style="border-bottom: none;">
                             <strong>Assess Health</strong>
@@ -1363,9 +1367,15 @@ document.addEventListener('click', () => {
     document.getElementById('analyze-menu').style.display = 'none';
 });
 
-/* ── Run analysis (mode: 'full' | 'smart' | 'new_only') ── */
+/* ── Run analysis (mode: 'full' | 'smart' | 'new_only' | 'versioned') ── */
 function runAnalysis(mode) {
     document.getElementById('analyze-menu').style.display = 'none';
+
+    // Versioned re-analyze uses a different endpoint
+    if (mode === 'versioned') {
+        return runVersionedReanalyze();
+    }
+
     const btn = document.getElementById('analyze-btn');
     const toggle = document.getElementById('analyze-dropdown-toggle');
     btn.disabled = true;
@@ -1439,6 +1449,61 @@ function pollAnalysis(jobId) {
             })
             .catch(() => {});
     }, 1500);
+}
+
+/* ── Versioned Re-analyze ── */
+function runVersionedReanalyze() {
+    const btn = document.getElementById('analyze-btn');
+    const toggle = document.getElementById('analyze-dropdown-toggle');
+    btn.disabled = true;
+    toggle.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:4px;"></span> Versioned re-analyze...';
+
+    document.getElementById('analysis-progress').style.display = 'block';
+    document.getElementById('assessment-panel').style.display = 'none';
+
+    fetch('/api/property/{{ prop.id }}/reanalyze', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                resetAnalyzeBtn();
+                document.getElementById('analysis-progress').style.display = 'none';
+                alert('Error: ' + data.error);
+                return;
+            }
+            const text = document.getElementById('analysis-progress-text');
+            const bar = document.getElementById('analysis-progress-bar');
+            text.textContent = 'Versioned re-analysis started...';
+            const jobId = data.job_id;
+            const poll = setInterval(() => {
+                fetch('/api/job/' + jobId)
+                    .then(r => r.json())
+                    .then(job => {
+                        text.textContent = job.step_detail || job.step || 'Processing...';
+                        bar.style.width = Math.max(5, (job.progress / Math.max(1, job.total)) * 100) + '%';
+                        if (job.status === 'completed' || job.status === 'failed') {
+                            clearInterval(poll);
+                            resetAnalyzeBtn();
+                            if (job.status === 'completed') {
+                                text.textContent = 'Versioned re-analysis complete. Check Extraction Runs tab on each document to compare.';
+                                bar.style.width = '100%';
+                            } else {
+                                text.textContent = 'Re-analysis failed: ' + (job.error || 'Unknown error');
+                                bar.style.background = 'var(--cap-danger)';
+                            }
+                        }
+                    })
+                    .catch(() => {});
+            }, 1500);
+        })
+        .catch(() => {
+            resetAnalyzeBtn();
+            document.getElementById('analysis-progress').style.display = 'none';
+            alert('Failed to start versioned re-analysis.');
+        });
 }
 
 /* ── Assess extraction health ── */
