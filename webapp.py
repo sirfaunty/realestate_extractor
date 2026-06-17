@@ -1188,7 +1188,7 @@ def search():
 @login_required
 def export_data(export_type):
     """Export data as CSV or Excel."""
-    from exports import EXPORT_TYPES, export_csv_bytes, export_excel, HAS_OPENPYXL
+    from .exports import EXPORT_TYPES, export_csv_bytes, export_excel, HAS_OPENPYXL
 
     if export_type not in EXPORT_TYPES:
         flash('Unknown export type.', 'error')
@@ -1197,7 +1197,7 @@ def export_data(export_type):
     # Check feature flag
     user = get_current_user()
     if user:
-        from config import ConfigStore
+        from .config import ConfigStore
         cfg = ConfigStore()
         cfg.connect()
         try:
@@ -1244,13 +1244,13 @@ def export_data(export_type):
 @login_required
 def export_property(property_id):
     """Export all data for a specific property as a multi-sheet Excel workbook."""
-    from exports import (export_property_workbook, export_csv_bytes,
+    from .exports import (export_property_workbook, export_csv_bytes,
                          RENT_ROLL_COLUMNS, HAS_OPENPYXL)
 
     # Check feature flag
     user = get_current_user()
     if user:
-        from config import ConfigStore
+        from .config import ConfigStore
         cfg = ConfigStore()
         cfg.connect()
         try:
@@ -2352,7 +2352,7 @@ def api_versioned_reanalyze(property_id):
         try:
             db2 = get_org_db(org_id)
             llm = get_llm()
-            from property_analyzer import PropertyAnalyzer
+            from .property_analyzer import PropertyAnalyzer
             analyzer = PropertyAnalyzer(db2, llm)
             analyzer._on_step = on_step
             summary = analyzer.analyze_property(property_id, versioned=True)
