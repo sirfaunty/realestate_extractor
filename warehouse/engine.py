@@ -80,7 +80,7 @@ class WarehouseEngine:
 
     def _ensure_schema(self):
         """Create tables if they don't exist."""
-        with open(_SCHEMA_PATH) as f:
+        with open(_SCHEMA_PATH, encoding="utf-8") as f:
             sql = f.read()
         # Strip comment-only lines, then split by semicolons
         lines = []
