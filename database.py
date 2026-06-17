@@ -452,6 +452,26 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_analysis_property ON analysis_runs(property_id);
+
+-- ─── Extraction Runs (versioning) ────────────────────────────────────
+-- Tracks each extraction run so results can be compared across versions.
+
+CREATE TABLE IF NOT EXISTS extraction_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL REFERENCES documents(id),
+    run_number      INTEGER NOT NULL DEFAULT 1,
+    engine_version  TEXT,
+    started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at    TIMESTAMP,
+    status          TEXT NOT NULL DEFAULT 'running',  -- running, completed, failed
+    is_current      INTEGER NOT NULL DEFAULT 1,       -- 1 = active run shown in UI
+    summary_json    TEXT,                              -- JSON: counts per extraction type
+    notes           TEXT,                              -- user/system notes
+    UNIQUE(document_id, run_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_extraction_runs_doc ON extraction_runs(document_id);
+CREATE INDEX IF NOT EXISTS idx_extraction_runs_current ON extraction_runs(document_id, is_current);
 """
 
 
@@ -520,6 +540,39 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE documents ADD COLUMN corrected_at TIMESTAMP"
             )
+
+        # ─── Extraction versioning migration ─────────────────────────
+        ft_cols = [row[1] for row in self.conn.execute("PRAGMA table_info(financial_terms)")]
+        if 'run_id' not in ft_cols:
+            extraction_tables = [
+                'financial_terms', 'clauses', 'rent_roll_entries', 'operating_statement_items',
+                'gl_entries', 'balance_sheet_items', 'cash_flow_items', 'bank_recon_entries',
+                'security_deposit_entries', 'payable_entries', 'receivable_entries',
+                'bad_debt_entries', 'concession_entries', 'document_tables'
+            ]
+            for table in extraction_tables:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN run_id INTEGER")
+                self.conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_run ON {table}(run_id)")
+
+            # Backfill: create run records for existing extracted documents
+            # Find all document_ids that have any extraction data
+            doc_ids_with_data = set()
+            for table in extraction_tables:
+                rows = self.conn.execute(f"SELECT DISTINCT document_id FROM {table}").fetchall()
+                for row in rows:
+                    doc_ids_with_data.add(row[0])
+
+            for doc_id in doc_ids_with_data:
+                cur = self.conn.execute("""
+                    INSERT INTO extraction_runs (document_id, run_number, status, is_current, completed_at)
+                    VALUES (?, 1, 'completed', 1, CURRENT_TIMESTAMP)
+                """, (doc_id,))
+                run_id = cur.lastrowid
+                for table in extraction_tables:
+                    self.conn.execute(
+                        f"UPDATE {table} SET run_id = ? WHERE document_id = ?",
+                        (run_id, doc_id)
+                    )
 
     def close(self):
         if self.conn:
@@ -1925,7 +1978,8 @@ class Database:
     # ─── Raw Table Storage (Phase 1 Ingest) ────────────────────────────
 
     def insert_document_table(self, document_id: int, page_number: int,
-                               table_index: int, table_data: List[List[str]]):
+                               table_index: int, table_data: List[List[str]],
+                               run_id: int = None):
         """Store a raw table extracted by pdfplumber/PyMuPDF."""
         if not table_data or len(table_data) < 1:
             return
@@ -1933,12 +1987,12 @@ class Database:
         rows = table_data[1:] if len(table_data) > 1 else []
         self.conn.execute("""
             INSERT INTO document_tables
-                (document_id, page_number, table_index, headers, rows_json, row_count, col_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (document_id, page_number, table_index, headers, rows_json, row_count, col_count, run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             document_id, page_number, table_index,
             json.dumps(headers), json.dumps(rows),
-            len(rows), len(headers)
+            len(rows), len(headers), run_id
         ))
 
     def get_document_tables(self, document_id: int) -> List[Dict]:
@@ -2014,6 +2068,196 @@ class Database:
             d['summary_json'] = json.loads(d['summary_json']) if d['summary_json'] else None
             return d
         return None
+
+    # ─── Extraction Run Versioning ──────────────────────────────────────
+
+    def create_extraction_run(self, document_id: int, engine_version: str = None,
+                              notes: str = None) -> int:
+        """Create a new extraction run for a document. Marks previous runs as non-current."""
+        # Get next run number
+        cur = self.conn.execute(
+            "SELECT COALESCE(MAX(run_number), 0) + 1 FROM extraction_runs WHERE document_id = ?",
+            (document_id,))
+        next_num = cur.fetchone()[0]
+
+        # Mark all previous runs as non-current
+        self.conn.execute(
+            "UPDATE extraction_runs SET is_current = 0 WHERE document_id = ?",
+            (document_id,))
+
+        # Create new run
+        cur = self.conn.execute("""
+            INSERT INTO extraction_runs (document_id, run_number, engine_version, status, is_current, notes)
+            VALUES (?, ?, ?, 'running', 1, ?)
+        """, (document_id, next_num, engine_version, notes))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def complete_extraction_run(self, run_id: int, summary: dict = None):
+        """Mark an extraction run as completed with a summary of what was extracted."""
+        self.conn.execute("""
+            UPDATE extraction_runs SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+                   summary_json = ? WHERE id = ?
+        """, (json.dumps(summary) if summary else None, run_id))
+        self.conn.commit()
+
+    def fail_extraction_run(self, run_id: int, error: str = None):
+        """Mark an extraction run as failed."""
+        self.conn.execute("""
+            UPDATE extraction_runs SET status = 'failed', completed_at = CURRENT_TIMESTAMP,
+                   notes = COALESCE(notes || '; ', '') || ? WHERE id = ?
+        """, (f"Error: {error}" if error else "Failed", run_id))
+        self.conn.commit()
+
+    def get_extraction_runs(self, document_id: int) -> List[Dict]:
+        """Get all extraction runs for a document, newest first."""
+        cur = self.conn.execute("""
+            SELECT * FROM extraction_runs WHERE document_id = ?
+            ORDER BY run_number DESC
+        """, (document_id,))
+        runs = []
+        for row in cur.fetchall():
+            d = dict(row)
+            if d.get('summary_json'):
+                d['summary'] = json.loads(d['summary_json'])
+            else:
+                d['summary'] = {}
+            runs.append(d)
+        return runs
+
+    def get_current_run_id(self, document_id: int) -> Optional[int]:
+        """Get the current (active) extraction run ID for a document."""
+        cur = self.conn.execute(
+            "SELECT id FROM extraction_runs WHERE document_id = ? AND is_current = 1",
+            (document_id,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    def get_run_comparison(self, document_id: int, run_id_a: int, run_id_b: int) -> Dict:
+        """Compare two extraction runs for a document.
+        Returns per-table counts and detailed diffs for key metrics."""
+        extraction_tables = [
+            'financial_terms', 'clauses', 'rent_roll_entries', 'operating_statement_items',
+            'gl_entries', 'balance_sheet_items', 'cash_flow_items', 'bank_recon_entries',
+            'security_deposit_entries', 'payable_entries', 'receivable_entries',
+            'bad_debt_entries', 'concession_entries'
+        ]
+
+        comparison = {
+            'document_id': document_id,
+            'run_a': run_id_a,
+            'run_b': run_id_b,
+            'tables': {},
+        }
+
+        for table in extraction_tables:
+            # Count rows per run
+            cur_a = self.conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE document_id = ? AND run_id = ?",
+                (document_id, run_id_a))
+            count_a = cur_a.fetchone()[0]
+
+            cur_b = self.conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE document_id = ? AND run_id = ?",
+                (document_id, run_id_b))
+            count_b = cur_b.fetchone()[0]
+
+            table_info = {
+                'count_a': count_a,
+                'count_b': count_b,
+                'delta': count_b - count_a,
+            }
+
+            # For operating statements, compare totals
+            if table == 'operating_statement_items':
+                for run_id, key in [(run_id_a, 'totals_a'), (run_id_b, 'totals_b')]:
+                    cur = self.conn.execute("""
+                        SELECT category, SUM(amount) as total
+                        FROM operating_statement_items
+                        WHERE document_id = ? AND run_id = ? AND is_total = 0 AND is_subtotal = 0
+                        GROUP BY category
+                    """, (document_id, run_id))
+                    table_info[key] = {row['category']: row['total'] for row in cur.fetchall()}
+
+            # For rent roll, compare unit counts and totals
+            if table == 'rent_roll_entries':
+                for run_id, key in [(run_id_a, 'summary_a'), (run_id_b, 'summary_b')]:
+                    cur = self.conn.execute("""
+                        SELECT COUNT(*) as units,
+                               SUM(monthly_rent) as total_monthly,
+                               AVG(monthly_rent) as avg_rent
+                        FROM rent_roll_entries
+                        WHERE document_id = ? AND run_id = ?
+                    """, (document_id, run_id))
+                    row = cur.fetchone()
+                    table_info[key] = dict(row) if row else {}
+
+            # For financial terms, compare by term_type
+            if table == 'financial_terms':
+                for run_id, key in [(run_id_a, 'terms_a'), (run_id_b, 'terms_b')]:
+                    cur = self.conn.execute("""
+                        SELECT term_type, COUNT(*) as count,
+                               AVG(confidence) as avg_confidence
+                        FROM financial_terms
+                        WHERE document_id = ? AND run_id = ?
+                        GROUP BY term_type
+                    """, (document_id, run_id))
+                    table_info[key] = {row['term_type']: {'count': row['count'], 'avg_confidence': row['avg_confidence']} for row in cur.fetchall()}
+
+            if count_a > 0 or count_b > 0:
+                comparison['tables'][table] = table_info
+
+        return comparison
+
+    def archive_document_extractions(self, doc_id: int) -> Dict:
+        """Like delete_document_extractions but preserves data for old runs.
+        Only deletes extractions from the CURRENT run to make room for a re-extract.
+        Returns the document info needed for re-processing."""
+        doc = self.get_document(doc_id)
+        if not doc:
+            return None
+
+        info = {
+            'filepath': doc['filepath'],
+            'document_type': doc.get('document_type'),
+            'property_name': doc.get('property_name'),
+            'property_id': doc.get('property_id'),
+        }
+
+        # We do NOT delete the document row or old run data
+        # The re-extract flow will create a new run
+        return info
+
+    def set_current_run(self, document_id: int, run_id: int):
+        """Set a specific run as the current (active) one for a document."""
+        self.conn.execute(
+            "UPDATE extraction_runs SET is_current = 0 WHERE document_id = ?",
+            (document_id,))
+        self.conn.execute(
+            "UPDATE extraction_runs SET is_current = 1 WHERE id = ? AND document_id = ?",
+            (run_id, document_id))
+        self.conn.commit()
+
+    def delete_extraction_run(self, run_id: int):
+        """Delete a specific extraction run and all its data. Cannot delete the current run."""
+        cur = self.conn.execute("SELECT document_id, is_current FROM extraction_runs WHERE id = ?", (run_id,))
+        row = cur.fetchone()
+        if not row:
+            return False
+        if row['is_current']:
+            return False  # Can't delete the active run
+
+        extraction_tables = [
+            'financial_terms', 'clauses', 'rent_roll_entries', 'operating_statement_items',
+            'gl_entries', 'balance_sheet_items', 'cash_flow_items', 'bank_recon_entries',
+            'security_deposit_entries', 'payable_entries', 'receivable_entries',
+            'bad_debt_entries', 'concession_entries', 'document_tables'
+        ]
+        for table in extraction_tables:
+            self.conn.execute(f"DELETE FROM {table} WHERE run_id = ?", (run_id,))
+        self.conn.execute("DELETE FROM extraction_runs WHERE id = ?", (run_id,))
+        self.conn.commit()
+        return True
 
     def get_property_fulltext(self, property_id: int) -> List[Dict]:
         """Get all fulltext content for a property's documents."""
@@ -2308,14 +2552,15 @@ class Database:
     def insert_clause(self, document_id: int, clause_type: str, full_text: str,
                       section_ref: str = None, clause_title: str = None,
                       summary: str = None, page_number: int = None,
-                      confidence: float = None, metadata: dict = None) -> int:
+                      confidence: float = None, metadata: dict = None,
+                      run_id: int = None) -> int:
         cur = self.conn.execute("""
             INSERT INTO clauses (document_id, clause_type, section_ref, clause_title,
-                                 full_text, summary, page_number, confidence, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 full_text, summary, page_number, confidence, metadata, run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (document_id, clause_type, section_ref, clause_title, full_text,
               summary, page_number, confidence,
-              json.dumps(metadata) if metadata else None))
+              json.dumps(metadata) if metadata else None, run_id))
         self.conn.commit()
         return cur.lastrowid
 
@@ -2340,17 +2585,18 @@ class Database:
                               effective_date: str = None, expiration_date: str = None,
                               escalation_type: str = None, escalation_detail: str = None,
                               section_ref: str = None, page_number: int = None,
-                              confidence: float = None, metadata: dict = None) -> int:
+                              confidence: float = None, metadata: dict = None,
+                              run_id: int = None) -> int:
         cur = self.conn.execute("""
             INSERT INTO financial_terms (document_id, term_type, term_label, value_raw,
                                          value_numeric, value_unit, effective_date,
                                          expiration_date, escalation_type, escalation_detail,
-                                         section_ref, page_number, confidence, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                         section_ref, page_number, confidence, metadata, run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (document_id, term_type, term_label, value_raw, value_numeric, value_unit,
               effective_date, expiration_date, escalation_type, escalation_detail,
               section_ref, page_number, confidence,
-              json.dumps(metadata) if metadata else None))
+              json.dumps(metadata) if metadata else None, run_id))
         self.conn.commit()
         return cur.lastrowid
 
@@ -2381,7 +2627,7 @@ class Database:
 
     # ─── Rent Roll Operations ────────────���───────────────────────────
 
-    def insert_rent_roll_entry(self, document_id: int, **kwargs) -> int:
+    def insert_rent_roll_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_name', 'unit_number', 'tenant_name', 'suite',
                   'square_footage', 'lease_start', 'lease_end', 'monthly_rent',
                   'annual_rent', 'rent_psf', 'status', 'notes', 'page_number', 'metadata']
@@ -2390,6 +2636,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2413,7 +2662,7 @@ class Database:
     # ─── Operating Statement Operations ──────────────────────────────
 
     def insert_operating_statement_item(self, document_id: int, category: str,
-                                         line_item: str, **kwargs) -> int:
+                                         line_item: str, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'period', 'subcategory', 'amount', 'amount_psf',
                   'is_subtotal', 'is_total', 'page_number', 'metadata']
         values = {f: kwargs.get(f) for f in fields}
@@ -2421,6 +2670,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id', 'category', 'line_item'] + [k for k, v in values.items() if v is not None]
         vals = [document_id, category, line_item] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2448,7 +2700,7 @@ class Database:
 
     # ─── General Ledger Operations ───────────────────────────────────
 
-    def insert_gl_entry(self, document_id: int, **kwargs) -> int:
+    def insert_gl_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_name', 'account_code', 'account_name', 'entry_date',
                   'description', 'debit', 'credit', 'balance', 'period',
                   'vendor', 'reference', 'page_number', 'metadata']
@@ -2457,6 +2709,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2489,7 +2744,7 @@ class Database:
     # ─── Balance Sheet Operations ──────────────────────────────────
 
     def insert_balance_sheet_item(self, document_id: int, category: str,
-                                   line_item: str, **kwargs) -> int:
+                                   line_item: str, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'period', 'subcategory', 'amount',
                   'prior_period_amount', 'is_subtotal', 'is_total', 'page_number', 'metadata']
         values = {f: kwargs.get(f) for f in fields}
@@ -2497,6 +2752,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id', 'category', 'line_item'] + [k for k, v in values.items() if v is not None]
         vals = [document_id, category, line_item] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2524,7 +2782,7 @@ class Database:
     # ─── Cash Flow Operations ──────────────────────────────────────
 
     def insert_cash_flow_item(self, document_id: int, activity_type: str,
-                               line_item: str, **kwargs) -> int:
+                               line_item: str, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'period', 'amount',
                   'is_subtotal', 'is_total', 'page_number', 'metadata']
         values = {f: kwargs.get(f) for f in fields}
@@ -2532,6 +2790,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id', 'activity_type', 'line_item'] + [k for k, v in values.items() if v is not None]
         vals = [document_id, activity_type, line_item] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2559,7 +2820,7 @@ class Database:
     # ─── Bank Reconciliation Operations ────────────────────────────
 
     def insert_bank_recon_entry(self, document_id: int, line_item: str,
-                                 entry_type: str, **kwargs) -> int:
+                                 entry_type: str, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'amount', 'check_number',
                   'entry_date', 'payee', 'reference', 'cleared', 'page_number', 'metadata']
         values = {f: kwargs.get(f) for f in fields}
@@ -2567,6 +2828,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id', 'line_item', 'entry_type'] + [k for k, v in values.items() if v is not None]
         vals = [document_id, line_item, entry_type] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2589,7 +2853,7 @@ class Database:
 
     # ─── Security Deposit Operations ───────────────────────────────
 
-    def insert_security_deposit_entry(self, document_id: int, **kwargs) -> int:
+    def insert_security_deposit_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'unit_number', 'tenant_name',
                   'deposit_amount', 'deposit_date', 'refund_amount', 'refund_date',
                   'forfeiture_amount', 'status', 'interest_accrued', 'notes',
@@ -2599,6 +2863,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2622,7 +2889,7 @@ class Database:
 
     # ─── Payable Operations ────────────────────────────────────────
 
-    def insert_payable_entry(self, document_id: int, **kwargs) -> int:
+    def insert_payable_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'vendor_name', 'invoice_number',
                   'invoice_date', 'due_date', 'amount', 'aging_bucket',
                   'description', 'account_code', 'status', 'page_number', 'metadata']
@@ -2631,6 +2898,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2657,7 +2927,7 @@ class Database:
 
     # ─── Receivable Operations ─────────────────────────────────────
 
-    def insert_receivable_entry(self, document_id: int, **kwargs) -> int:
+    def insert_receivable_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'tenant_name', 'unit_number',
                   'charge_type', 'charge_date', 'due_date', 'amount',
                   'aging_bucket', 'payments_received', 'balance_due', 'status',
@@ -2667,6 +2937,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2693,7 +2966,7 @@ class Database:
 
     # ─── Bad Debt Operations ───────────────────────────────────────
 
-    def insert_bad_debt_entry(self, document_id: int, **kwargs) -> int:
+    def insert_bad_debt_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'tenant_name', 'unit_number',
                   'original_amount', 'write_off_amount', 'write_off_date',
                   'recovery_amount', 'recovery_date', 'reason', 'status',
@@ -2703,6 +2976,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(
@@ -2725,7 +3001,7 @@ class Database:
 
     # ─── Concession Operations ─────────────────────────────────────
 
-    def insert_concession_entry(self, document_id: int, **kwargs) -> int:
+    def insert_concession_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
         fields = ['property_id', 'property_name', 'tenant_name', 'unit_number',
                   'concession_type', 'total_amount', 'start_date', 'end_date',
                   'amortization_period', 'monthly_burn', 'remaining_balance',
@@ -2735,6 +3011,9 @@ class Database:
             values['metadata'] = json.dumps(values['metadata'])
         cols = ['document_id'] + [k for k, v in values.items() if v is not None]
         vals = [document_id] + [v for v in values.values() if v is not None]
+        if run_id is not None:
+            cols.append('run_id')
+            vals.append(run_id)
         placeholders = ','.join(['?'] * len(cols))
         col_str = ','.join(cols)
         cur = self.conn.execute(

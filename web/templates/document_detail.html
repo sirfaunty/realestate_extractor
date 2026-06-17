@@ -47,6 +47,7 @@
     {% if gl %}
     <button class="tab" onclick="showTab('gl')">General Ledger ({{ gl|length }})</button>
     {% endif %}
+    <button class="tab" onclick="showTab('runs')" id="runs-tab">Extraction Runs</button>
 </div>
 
 <!-- Financial Terms -->
@@ -408,6 +409,17 @@
 </div>
 {% endif %}
 
+<!-- Extraction Runs -->
+<div class="tab-content" id="tab-runs">
+    <div class="card" id="runs-loading" style="text-align: center; padding: 24px; color: var(--text-muted);">
+        Loading extraction runs...
+    </div>
+    <div id="runs-content" style="display: none;">
+        <div id="runs-list"></div>
+        <div id="comparison-result" style="display: none; margin-top: 20px;"></div>
+    </div>
+</div>
+
 <!-- Empty state if nothing extracted -->
 {% if not terms and not clauses and not rent_roll and not opstat and not gl %}
 <div class="card">
@@ -496,6 +508,7 @@ function showTab(name) {
     const content = document.getElementById('tab-' + name);
     if (content) content.classList.add('active');
     event.target.classList.add('active');
+    if (name === 'runs') loadRuns();
 }
 
 // Inline editing for financial terms
@@ -567,6 +580,192 @@ function showTab(name) {
         });
     });
 })();
+
+// ─── Extraction Runs ────────────────────────────────────────────────
+let runsLoaded = false;
+async function loadRuns() {
+    if (runsLoaded) return;
+    runsLoaded = true;
+    try {
+        const resp = await fetch('/api/document/{{ doc.id }}/extraction-runs');
+        const data = await resp.json();
+        const runs = data.runs || [];
+        document.getElementById('runs-loading').style.display = 'none';
+        document.getElementById('runs-content').style.display = '';
+
+        if (runs.length === 0) {
+            document.getElementById('runs-list').innerHTML = `
+                <div class="card" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                    <p>No extraction runs recorded yet. Run a versioned re-analysis from the property page to create comparison data.</p>
+                </div>`;
+            return;
+        }
+
+        // Build runs table
+        let html = '<div class="card"><table class="data-table"><thead><tr>' +
+            '<th>Run</th><th>Status</th><th>Started</th><th>Completed</th><th>Current</th><th>Actions</th>' +
+            '</tr></thead><tbody>';
+
+        runs.forEach(r => {
+            const isCurrent = r.is_current ? '<span class="badge" style="background:var(--cap-signal);color:white;">Active</span>' : '';
+            const status = r.status === 'completed' ? '<span style="color:var(--cap-signal);">Completed</span>' :
+                           r.status === 'failed' ? '<span style="color:var(--cap-danger);">Failed</span>' :
+                           '<span style="color:var(--cap-primary);">Running</span>';
+            const started = r.started_at ? r.started_at.substring(0, 19).replace('T', ' ') : '—';
+            const completed = r.completed_at ? r.completed_at.substring(0, 19).replace('T', ' ') : '—';
+
+            let actions = '';
+            if (!r.is_current && r.status === 'completed') {
+                actions += `<button class="btn btn-sm btn-secondary" onclick="setCurrentRun(${r.id})">Set Active</button> `;
+            }
+            if (runs.length >= 2 && r.status === 'completed') {
+                actions += `<input type="checkbox" class="run-compare-check" value="${r.id}" data-run="${r.run_number}" onchange="updateCompareBtn()"> Compare`;
+            }
+
+            html += `<tr>
+                <td style="font-weight:600;">Run ${r.run_number}</td>
+                <td>${status}</td>
+                <td>${started}</td>
+                <td>${completed}</td>
+                <td>${isCurrent}</td>
+                <td>${actions}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+
+        if (runs.length >= 2) {
+            html += `<div style="padding:12px; text-align:right;">
+                <button class="btn btn-primary" id="compare-btn" onclick="compareRuns()" disabled>
+                    Select 2 runs to compare
+                </button>
+            </div>`;
+        }
+
+        html += '</div>';
+        document.getElementById('runs-list').innerHTML = html;
+
+    } catch (err) {
+        document.getElementById('runs-loading').innerHTML =
+            '<div style="color:var(--cap-danger);">Failed to load extraction runs.</div>';
+    }
+}
+
+function updateCompareBtn() {
+    const checked = document.querySelectorAll('.run-compare-check:checked');
+    const btn = document.getElementById('compare-btn');
+    if (!btn) return;
+    if (checked.length === 2) {
+        btn.disabled = false;
+        btn.textContent = `Compare Run ${checked[0].dataset.run} vs Run ${checked[1].dataset.run}`;
+    } else {
+        btn.disabled = true;
+        btn.textContent = checked.length > 2 ? 'Select exactly 2 runs' : 'Select 2 runs to compare';
+    }
+}
+
+async function compareRuns() {
+    const checked = document.querySelectorAll('.run-compare-check:checked');
+    if (checked.length !== 2) return;
+    const runA = checked[0].value;
+    const runB = checked[1].value;
+
+    const resultDiv = document.getElementById('comparison-result');
+    resultDiv.style.display = '';
+    resultDiv.innerHTML = '<div class="card" style="text-align:center; padding:24px; color:var(--text-muted);">Loading comparison...</div>';
+
+    try {
+        const resp = await fetch(`/api/document/{{ doc.id }}/compare-runs?run_a=${runA}&run_b=${runB}`);
+        const data = await resp.json();
+
+        let html = `<div class="card">
+            <h3 style="margin-bottom:16px; color:var(--cap-navy);">
+                Run ${checked[0].dataset.run} vs Run ${checked[1].dataset.run} Comparison
+            </h3>
+            <table class="data-table"><thead><tr>
+                <th>Extraction Type</th>
+                <th style="text-align:right;">Run ${checked[0].dataset.run}</th>
+                <th style="text-align:right;">Run ${checked[1].dataset.run}</th>
+                <th style="text-align:right;">Delta</th>
+            </tr></thead><tbody>`;
+
+        const tableLabels = {
+            financial_terms: 'Financial Terms',
+            clauses: 'Legal Clauses',
+            rent_roll_entries: 'Rent Roll Entries',
+            operating_statement_items: 'Operating Statement Items',
+            gl_entries: 'General Ledger Entries',
+            balance_sheet_items: 'Balance Sheet Items',
+            cash_flow_items: 'Cash Flow Items',
+            bank_recon_entries: 'Bank Reconciliation',
+            security_deposit_entries: 'Security Deposits',
+            payable_entries: 'Payables',
+            receivable_entries: 'Receivables',
+            bad_debt_entries: 'Bad Debt',
+            concession_entries: 'Concessions',
+        };
+
+        let totalA = 0, totalB = 0;
+        for (const [table, info] of Object.entries(data.tables || {})) {
+            const label = tableLabels[table] || table.replace(/_/g, ' ');
+            const delta = info.delta;
+            const deltaColor = delta > 0 ? 'var(--cap-signal)' : delta < 0 ? 'var(--cap-danger)' : 'var(--text-muted)';
+            const deltaText = delta > 0 ? `+${delta}` : `${delta}`;
+            totalA += info.count_a;
+            totalB += info.count_b;
+            html += `<tr>
+                <td>${label}</td>
+                <td style="text-align:right;">${info.count_a}</td>
+                <td style="text-align:right;">${info.count_b}</td>
+                <td style="text-align:right; font-weight:600; color:${deltaColor};">${deltaText}</td>
+            </tr>`;
+
+            // Show operating statement category breakdown
+            if (table === 'operating_statement_items' && info.totals_a && info.totals_b) {
+                for (const cat of [...new Set([...Object.keys(info.totals_a || {}), ...Object.keys(info.totals_b || {})])]) {
+                    const valA = (info.totals_a || {})[cat] || 0;
+                    const valB = (info.totals_b || {})[cat] || 0;
+                    const catDelta = valB - valA;
+                    const catColor = Math.abs(catDelta) < 1 ? 'var(--text-muted)' : catDelta > 0 ? 'var(--cap-signal)' : 'var(--cap-danger)';
+                    html += `<tr style="font-size:12px; color:var(--text-secondary);">
+                        <td style="padding-left:28px;">${cat}</td>
+                        <td style="text-align:right;">$${valA.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                        <td style="text-align:right;">$${valB.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                        <td style="text-align:right; color:${catColor};">${catDelta > 0 ? '+' : ''}$${catDelta.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                    </tr>`;
+                }
+            }
+        }
+
+        const totalDelta = totalB - totalA;
+        const totalDeltaColor = totalDelta > 0 ? 'var(--cap-signal)' : totalDelta < 0 ? 'var(--cap-danger)' : 'var(--text-muted)';
+        html += `<tr style="font-weight:700; border-top:2px solid var(--border);">
+            <td>Total Items</td>
+            <td style="text-align:right;">${totalA}</td>
+            <td style="text-align:right;">${totalB}</td>
+            <td style="text-align:right; color:${totalDeltaColor};">${totalDelta > 0 ? '+' : ''}${totalDelta}</td>
+        </tr>`;
+
+        html += '</tbody></table></div>';
+        resultDiv.innerHTML = html;
+
+    } catch (err) {
+        resultDiv.innerHTML = '<div class="card" style="color:var(--cap-danger); padding:16px;">Failed to load comparison.</div>';
+    }
+}
+
+async function setCurrentRun(runId) {
+    try {
+        const resp = await fetch(`/api/extraction-run/${runId}/set-current`, {method: 'POST'});
+        const data = await resp.json();
+        if (data.success) {
+            runsLoaded = false;
+            loadRuns();
+        }
+    } catch (err) {
+        alert('Failed to switch active run.');
+    }
+}
 
 async function reextract() {
     const confirmed = await capModal.confirm({
