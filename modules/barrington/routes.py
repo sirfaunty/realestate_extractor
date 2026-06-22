@@ -75,6 +75,18 @@ def _stage_documents(rows):
     return ncf, nrr
 
 
+def _prune_old_workbooks(keep=5):
+    """Keep only the most recent generated workbooks on disk."""
+    import glob
+    files = sorted(glob.glob(os.path.join(_BARR_ROOT, 'Barrington_Portfolio_*.xlsx')),
+                   key=os.path.getmtime, reverse=True)
+    for old in files[keep:]:
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+
+
 def _run_generate(job_id, org_id, portfolio_id):
     job = _JOBS[job_id]
 
@@ -134,6 +146,7 @@ def _run_generate(job_id, org_id, portfolio_id):
             conn.close()
         except Exception:
             pass
+        _prune_old_workbooks(keep=5)
 
         summary = {
             'tie_out': tie, 'portfolio': portfolio, 'total_noi': total_noi,
@@ -187,28 +200,14 @@ def api_generate():
     except (TypeError, ValueError):
         return jsonify({'error': 'Select a portfolio first.'}), 400
     org_id = session.get('org_id', 'dev')
+    # Don't start a second build while one is already running.
+    for jid, j in _JOBS.items():
+        if j.get('status') == 'running':
+            return jsonify({'job_id': jid, 'already_running': True}), 202
     job_id = uuid.uuid4().hex[:8]
     _JOBS[job_id] = {
         'id': job_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting...',
         'error': None, 'portfolio_id': portfolio_id,
         'started': datetime.datetime.now().isoformat(timespec='seconds'),
     }
-    threading.Thread(target=_run_generate, args=(job_id, org_id, portfolio_id), daemon=True).start()
-    return jsonify({'job_id': job_id})
-
-
-@barrington_bp.route('/api/status/<job_id>')
-def api_status(job_id):
-    job = _JOBS.get(job_id)
-    if not job:
-        return jsonify({'error': 'Unknown job'}), 404
-    return jsonify({k: v for k, v in job.items() if k != 'traceback'})
-
-
-@barrington_bp.route('/api/download')
-def api_download():
-    path = _LATEST.get('xlsx')
-    if not path or not os.path.exists(path):
-        abort(404)
-    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
-
+    
