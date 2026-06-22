@@ -66,3 +66,8 @@ test_*.db
 
 # Large ZIP uploads (stage locally, don't push)
 *.zip
+
+# Portfolio B source financials (keep local, do not commit)
+portfolio_cashflow_db/source_docs/
+portfolio_cashflow_db/data/
+portfolio_cashflow_db/*.xlsx
