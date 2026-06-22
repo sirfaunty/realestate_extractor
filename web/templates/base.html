@@ -119,6 +119,11 @@
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M1 14c0-2.2 1.8-4 4-4s4 1.8 4 4M7 14c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </span> Partnership Dashboard
             </a></li>
+            <li><a href="/barrington" class="{% if request.endpoint and request.endpoint.startswith('barrington.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 13V3a1 1 0 011-1h7l4 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 9h6M5 6h3M5 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </span> Portfolio Cash Flow
+            </a></li>
         </ul>
 
         {% if current_user and current_user.role == 'admin' %}
@@ -559,24 +564,4 @@ fetch('/api/status')
                 }
 
                 if (queued.length > 0 && processing.length > 0) {
-                    detail.textContent += ' · ' + queued.length + ' more queued';
-                }
-
-                link.textContent = 'View progress';
-                link.href = '/job/' + job.id;
-                banner.style.display = '';
-            })
-            .catch(() => {});
-    }
-
-    // Poll immediately, then every 3 seconds
-    pollActiveJobs();
-    setInterval(pollActiveJobs, 3000);
-})();
-</script>
-
-{# capactive utilities now defined above the content block to avoid script ordering issues #}
-
-{% block scripts %}{% endblock %}
-</body>
-</html>
+                    detail

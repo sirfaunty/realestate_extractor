@@ -28,6 +28,7 @@ INSTALLED_MODULES = [
     'modules.distribution',
     'modules.debt_analysis',
     'modules.partnership_dashboard',
+    'modules.barrington',
 ]
 
 
@@ -100,4 +101,4 @@ class ModuleRegistry:
 
 
 # Singleton registry
-registry = ModuleRegistry()
+re

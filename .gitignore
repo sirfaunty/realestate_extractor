@@ -66,3 +66,8 @@ test_*.db
 
 # Large ZIP uploads (stage locally, don't push)
 *.zip
+
+# Barrington source financials (keep local, do not commit)
+barrington_db/source_docs/
+barrington_db/data/
+barrington_db/*.xlsx

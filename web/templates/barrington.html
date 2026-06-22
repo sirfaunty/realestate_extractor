@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio Cash Flow — capactive{% endblock %}
+
+{% block content %}
+<style>
+.barr-root { --barr-primary: var(--cap-primary, #185FA5); --barr-ink:#1A1A2E;
+  --barr-cloud:#E6F1FB; --barr-line:#E3E8EF; --barr-good:#10B981; --barr-bad:#DC2626;
+  max-width: 1100px; color: var(--barr-ink); }
+.barr-root h1 { font-size: 22px; margin: 0 0 4px; }
+.barr-sub { color:#5B6472; margin: 0 0 22px; font-size: 14px; }
+.barr-card { background:#fff; border:1px solid var(--barr-line); border-radius:10px;
+  padding:20px 22px; margin-bottom:18px; }
+.barr-card h2 { font-size:15px; margin:0 0 14px; letter-spacing:.01em; }
+.barr-row { display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
+.barr-field label { font-weight:600; font-size:13px; display:block; margin-bottom:6px; }
+.barr-field select { min-width:320px; padding:9px 11px; font-size:14px; border:1px solid #C7D2E0;
+  border-radius:8px; background:#fff; }
+.barr-btn { background:var(--barr-primary); color:#fff; border:none; border-radius:8px;
+  padding:11px 20px; font-size:14px; font-weight:600; cursor:pointer; }
+.barr-btn:disabled { opacity:.55; cursor:not-allowed; }
+.barr-progress { display:none; align-items:center; gap:12px; font-size:14px; color:#3A4655; margin-top:14px; }
+.barr-spin { width:18px; height:18px; border:2.5px solid #D7E3F2; border-top-color:var(--barr-primary);
+  border-radius:50%; animation:barrspin .8s linear infinite; }
+@keyframes barrspin { to { transform:rotate(360deg); } }
+.barr-results { display:none; }
+.barr-kpis { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+.barr-kpi { background:var(--barr-cloud); border-radius:9px; padding:12px 16px; min-width:150px; }
+.barr-kpi .v { font-size:20px; font-weight:700; color:var(--barr-primary); }
+.barr-kpi .l { font-size:12px; color:#5B6472; margin-top:2px; }
+.barr-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+.barr-table th { text-align:left; background:#F4F8FD; padding:8px 10px; border-bottom:1px solid var(--barr-line); font-weight:600; }
+.barr-table td { padding:7px 10px; border-bottom:1px solid #F0F3F7; }
+.barr-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+.barr-pill { font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; }
+.barr-pill.ok { background:#E7F8F0; color:var(--barr-good); }
+.barr-pill.diff { background:#FDEAEA; color:var(--barr-bad); }
+.barr-err { display:none; background:#FDEAEA; color:#9B1C1C; border:1px solid #F5C2C2;
+  border-radius:8px; padding:12px 14px; font-size:13px; white-space:pre-wrap; margin-top:14px; }
+</style>
+
+<div class="barr-root">
+  <h1>Portfolio Cash Flow</h1>
+  <p class="barr-sub">Generate a portfolio cash-flow, capital, and lease-rollover model — with NOI
+    tied out to source — straight from documents already stored in Capactive. Produces an Excel
+    deliverable. All processing runs on this device.</p>
+
+  <div class="barr-card">
+    <h2>1 · Select a portfolio</h2>
+    <div class="barr-row">
+      <div class="barr-field">
+        <label for="pf-select">Portfolio</label>
+        <select id="pf-select"><option>Loading…</option></select>
+      </div>
+      <button class="barr-btn" id="gen-btn">Generate Deliverable</button>
+    </div>
+    <div class="barr-progress" id="progress">
+      <div class="barr-spin"></div><span id="progress-text">Working…</span>
+    </div>
+    <div class="barr-err" id="error-box"></div>
+  </div>
+
+  <div class="barr-card barr-results" id="results">
+    <h2>2 · Deliverable</h2>
+    <div class="barr-row" style="margin-bottom:16px;">
+      <a class="barr-btn" id="download-btn" href="/barrington/api/download">⬇ Download Excel workbook</a>
+      <span style="font-size:12px;color:#5B6472;" id="gen-meta"></span>
+    </div>
+    <div class="barr-kpis" id="kpis"></div>
+    <h2 style="margin-top:18px;">NOI tie-out (extracted vs source)</h2>
+    <table class="barr-table"><thead><tr><th>Property</th><th class="num">Extracted NOI</th>
+      <th class="num">Expected NOI</th><th>Status</th></tr></thead><tbody id="tie-body"></tbody></table>
+    <h2 style="margin-top:22px;">Portfolio summary</h2>
+    <table class="barr-table"><thead><tr><th>Code</th><th>Property</th><th>Market</th>
+      <th class="num">NOI 2026</th><th class="num">Occupied SF</th><th class="num">Tenants</th>
+      <th class="num">Exp. ’28</th><th class="num">TI+LC+Bldg</th></tr></thead><tbody id="pf-body"></tbody></table>
+  </div>
+</div>
+
+<script>
+const LATEST = {{ latest|tojson }};
+const $ = (id) => document.getElementById(id);
+const money = (v) => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
+
+function renderSummary(s) {
+  if (!s) return;
+  $('results').style.display = 'block';
+  $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
+  const c = s.counts || {};
+  $('kpis').innerHTML = [
+    ['$' + money(s.total_noi), 'Portfolio NOI 2026'],
+    [money(c.cashflow_facts), 'Cash-flow facts'],
+    [money(c.rent_roll_rows), 'Rent-roll rows'],
+    [money(c.leasing_assumptions), 'Leasing assumptions'],
+  ].map(([v, l]) => `<div class="barr-kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('tie-body').innerHTML = (s.tie_out || []).map(t =>
+    `<tr><td>${t.code}</td><td class="num">${money(t.got)}</td><td class="num">${money(t.exp)}</td>
+     <td><span class="barr-pill ${t.ok ? 'ok' : 'diff'}">${t.ok ? 'OK' : 'DIFF'}</span></td></tr>`).join('');
+  $('pf-body').innerHTML = (s.portfolio || []).map(p =>
+    `<tr><td>${p.code}</td><td>${p.name}</td><td>${p.market || ''}</td>
+     <td class="num">${money(p.noi_2026)}</td><td class="num">${money(p.occupied_sf)}</td>
+     <td class="num">${p.tenants}</td><td class="num">${p.expiring_thru_2028}</td>
+     <td class="num">${money(p.capital_2026)}</td></tr>`).join('');
+}
+
+// Load portfolios into the selector
+fetch('/barrington/api/portfolios').then(r => r.json()).then(list => {
+  const sel = $('pf-select');
+  if (!Array.isArray(list) || !list.length) {
+    sel.innerHTML = '<option value="">No portfolios found</option>';
+    return;
+  }
+  sel.innerHTML = list.map(p =>
+    `<option value="${p.id}">${p.name} — ${p.n_props} properties, ${p.n_docs} docs</option>`).join('');
+  const barr = list.find(p => /barrington/i.test(p.name));
+  if (barr) sel.value = barr.id;
+}).catch(() => { $('pf-select').innerHTML = '<option value="">Error loading portfolios</option>'; });
+
+let pollTimer = null;
+function poll(jobId) {
+  fetch('/barrington/api/status/' + jobId).then(r => r.json()).then(j => {
+    if (j.status === 'running') {
+      $('progress-text').textContent = j.detail || j.step || 'Working…';
+      pollTimer = setTimeout(() => poll(jobId), 1500);
+    } else if (j.status === 'done') {
+      $('progress').style.display = 'none';
+      $('gen-btn').disabled = false;
+      renderSummary(j.summary);
+      $('results').scrollIntoView({ behavior: 'smooth' });
+    } else if (j.status === 'error') {
+      $('progress').style.display = 'none';
+      $('gen-btn').disabled = false;
+      const e = $('error-box'); e.style.display = 'block';
+      e.textContent = 'Generation failed:\n' + (j.error || 'Unknown error');
+    }
+  }).catch(() => { pollTimer = setTimeout(() => poll(jobId), 2000); });
+}
+
+$('gen-btn').addEventListener('click', () => {
+  const pid = $('pf-select').value;
+  $('error-box').style.display = 'none';
+  if (!pid) {
+    const e = $('error-box'); e.style.display = 'block'; e.textContent = 'Select a portfolio first.';
+    return;
+  }
+  $('gen-btn').disabled = true;
+  $('progress').style.display = 'flex';
+  $('progress-text').textContent = 'Starting…';
+  fetch('/barrington/api/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ portfolio_id: pid }),
+  }).then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (!ok) throw new Error(j.error || 'Failed to start');
+      poll(j.job_id);
+    })
+    .catch(err => {
+      $('progress').style.display = 'none';
+      $('gen-btn').disabled = false;
+      const e = $('error-box'); e.style.display = 'block'; e.textContent = err.message;
+    });
+});
+
+if (LATEST) renderSummary(LATEST);
+</script>
+{% endblock %}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
