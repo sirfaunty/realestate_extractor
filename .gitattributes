@@ -1,0 +1,19 @@
+# Normalize line endings: store text as LF in the repo, check out native on each OS.
+# This stops Windows/Mac from fighting over CRLF vs LF.
+* text=auto eol=lf
+
+# Treat known binary types as binary (never normalize / diff as text).
+*.pdf   binary
+*.xlsx  binary
+*.xls   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.zip   binary
+*.db    binary
+*.sqlite binary
+*.duckdb binary
+*.pkl   binary
+*.msg   binary
+*.ico   binary
