@@ -499,7 +499,36 @@ class Database:
         self.conn.executescript(SCHEMA_SQL)
         self._migrate()
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_extraction_review ON documents(extraction_review)")
+        self._create_run_scoped_views()
         self.conn.commit()
+
+    _RUN_SCOPED_TABLES = [
+        'financial_terms', 'clauses', 'rent_roll_entries', 'operating_statement_items',
+        'gl_entries', 'balance_sheet_items', 'cash_flow_items', 'bank_recon_entries',
+        'security_deposit_entries', 'payable_entries', 'receivable_entries',
+        'bad_debt_entries', 'concession_entries',
+    ]
+
+    def _create_run_scoped_views(self):
+        """Create/refresh cur_<table> views exposing only each document's CURRENT
+        extraction run (extraction_runs.is_current = 1). Documents with no recorded
+        runs fall back to all their rows so pre-versioning data is never hidden.
+        Display/read queries select from these views; writes, deletes, and
+        get_run_comparison use the base tables directly.
+
+        NOTE: document_tables is intentionally NOT scoped here — it is populated at
+        ingestion, not by analyze_property, so a current-run filter would hide it."""
+        for t in self._RUN_SCOPED_TABLES:
+            self.conn.execute(f"DROP VIEW IF EXISTS cur_{t}")
+            self.conn.execute(
+                f"CREATE VIEW cur_{t} AS "
+                f"SELECT base.* FROM {t} base "
+                f"WHERE base.run_id = ("
+                f"SELECT er.id FROM extraction_runs er "
+                f"WHERE er.document_id = base.document_id AND er.is_current = 1) "
+                f"OR NOT EXISTS ("
+                f"SELECT 1 FROM extraction_runs er2 WHERE er2.document_id = base.document_id)"
+            )
 
     def _migrate(self):
         """Add columns for schema evolution on existing databases."""
@@ -1194,68 +1223,68 @@ class Database:
             LEFT JOIN properties p ON d.property_id = p.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt, SUM(amount) as total
-                FROM operating_statement_items
+                FROM cur_operating_statement_items
                 WHERE category IN ('income', 'revenue') AND is_subtotal = 0
                 GROUP BY document_id
             ) os_income ON os_income.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt, SUM(amount) as total
-                FROM operating_statement_items
+                FROM cur_operating_statement_items
                 WHERE category = 'expense' AND is_subtotal = 0
                 GROUP BY document_id
             ) os_expense ON os_expense.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM operating_statement_items
+                FROM cur_operating_statement_items
                 GROUP BY document_id
             ) os_all ON os_all.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM rent_roll_entries GROUP BY document_id
+                FROM cur_rent_roll_entries GROUP BY document_id
             ) rr ON rr.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM financial_terms GROUP BY document_id
+                FROM cur_financial_terms GROUP BY document_id
             ) ft ON ft.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM clauses GROUP BY document_id
+                FROM cur_clauses GROUP BY document_id
             ) cl ON cl.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM gl_entries GROUP BY document_id
+                FROM cur_gl_entries GROUP BY document_id
             ) gl ON gl.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM balance_sheet_items GROUP BY document_id
+                FROM cur_balance_sheet_items GROUP BY document_id
             ) bs ON bs.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM cash_flow_items GROUP BY document_id
+                FROM cur_cash_flow_items GROUP BY document_id
             ) cf ON cf.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM bank_recon_entries GROUP BY document_id
+                FROM cur_bank_recon_entries GROUP BY document_id
             ) br ON br.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM security_deposit_entries GROUP BY document_id
+                FROM cur_security_deposit_entries GROUP BY document_id
             ) sd ON sd.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM payable_entries GROUP BY document_id
+                FROM cur_payable_entries GROUP BY document_id
             ) pe ON pe.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM receivable_entries GROUP BY document_id
+                FROM cur_receivable_entries GROUP BY document_id
             ) re_t ON re_t.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM bad_debt_entries GROUP BY document_id
+                FROM cur_bad_debt_entries GROUP BY document_id
             ) bd ON bd.document_id = d.id
             LEFT JOIN (
                 SELECT document_id, COUNT(*) as cnt
-                FROM concession_entries GROUP BY document_id
+                FROM cur_concession_entries GROUP BY document_id
             ) ce ON ce.document_id = d.id
             WHERE {where}
             ORDER BY d.property_id, d.document_type, d.filename
@@ -1309,7 +1338,7 @@ class Database:
 
         # Rent roll from latest document
         cur = self.conn.execute("""
-            SELECT rr.* FROM rent_roll_entries rr
+            SELECT rr.* FROM cur_rent_roll_entries rr
             JOIN documents d ON rr.document_id = d.id
             WHERE d.property_id = ?
             ORDER BY d.processed_at DESC
@@ -1327,7 +1356,7 @@ class Database:
 
         # Operating expenses from latest operating statement
         cur = self.conn.execute("""
-            SELECT os.* FROM operating_statement_items os
+            SELECT os.* FROM cur_operating_statement_items os
             JOIN documents d ON os.document_id = d.id
             WHERE d.property_id = ? AND os.category = 'expense'
             ORDER BY d.processed_at DESC, os.id
@@ -1606,7 +1635,7 @@ class Database:
 
         # Total units from financial_terms
         cur = self.conn.execute("""
-            SELECT ft.value_numeric FROM financial_terms ft
+            SELECT ft.value_numeric FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE d.property_id = ? AND ft.term_type = 'total_units'
             ORDER BY ft.id DESC LIMIT 1
@@ -1616,7 +1645,7 @@ class Database:
 
         # Occupancy rate (prefer computed-from-unit-mix, then Current, then any)
         cur = self.conn.execute("""
-            SELECT ft.value_numeric FROM financial_terms ft
+            SELECT ft.value_numeric FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE d.property_id = ? AND ft.term_type = 'occupancy_rate'
             AND ft.term_label LIKE '%Computed%'
@@ -1627,7 +1656,7 @@ class Database:
 
         if metrics['occupancy_rate'] is None:
             cur = self.conn.execute("""
-                SELECT ft.value_numeric FROM financial_terms ft
+                SELECT ft.value_numeric FROM cur_financial_terms ft
                 JOIN documents d ON ft.document_id = d.id
                 WHERE d.property_id = ? AND ft.term_type = 'occupancy_rate'
                 AND ft.term_label LIKE '%Current%'
@@ -1638,7 +1667,7 @@ class Database:
 
         if metrics['occupancy_rate'] is None:
             cur = self.conn.execute("""
-                SELECT ft.value_numeric FROM financial_terms ft
+                SELECT ft.value_numeric FROM cur_financial_terms ft
                 JOIN documents d ON ft.document_id = d.id
                 WHERE d.property_id = ? AND ft.term_type = 'occupancy_rate'
                 ORDER BY ft.id DESC LIMIT 1
@@ -1648,7 +1677,7 @@ class Database:
 
         # Monthly GPR
         cur = self.conn.execute("""
-            SELECT ft.value_numeric FROM financial_terms ft
+            SELECT ft.value_numeric FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE d.property_id = ? AND ft.term_type = 'gross_potential_rent'
             AND ft.term_label LIKE '%Monthly%'
@@ -1659,7 +1688,7 @@ class Database:
 
         # Annual NOI from operating_statement_items
         cur = self.conn.execute("""
-            SELECT os.amount FROM operating_statement_items os
+            SELECT os.amount FROM cur_operating_statement_items os
             JOIN documents d ON os.document_id = d.id
             WHERE d.property_id = ?
             AND LOWER(os.line_item) LIKE '%net operating income%'
@@ -1672,13 +1701,13 @@ class Database:
         # Average rent from unit_mix rent_roll_entries
         cur = self.conn.execute("""
             SELECT AVG(rr.monthly_rent) as avg_rent
-            FROM rent_roll_entries rr
+            FROM cur_rent_roll_entries rr
             JOIN documents d ON rr.document_id = d.id
             WHERE d.property_id = ?
             AND rr.monthly_rent IS NOT NULL
             AND rr.metadata LIKE '%"source": "unit_mix"%'
             AND rr.document_id = (
-                SELECT rr2.document_id FROM rent_roll_entries rr2
+                SELECT rr2.document_id FROM cur_rent_roll_entries rr2
                 JOIN documents d2 ON rr2.document_id = d2.id
                 WHERE d2.property_id = ?
                 AND rr2.metadata LIKE '%"source": "unit_mix"%'
@@ -1690,7 +1719,7 @@ class Database:
 
         # Occupied / vacant from occupancy financial terms
         cur = self.conn.execute("""
-            SELECT ft.term_label, ft.value_numeric FROM financial_terms ft
+            SELECT ft.term_label, ft.value_numeric FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE d.property_id = ?
             AND ft.term_type = 'occupancy_count'
@@ -1718,7 +1747,7 @@ class Database:
 
         # Financial terms from loan documents
         cur = self.conn.execute("""
-            SELECT ft.* FROM financial_terms ft
+            SELECT ft.* FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE d.property_id = ? AND d.document_type IN ('loan', 'closing')
             ORDER BY d.processed_at DESC
@@ -1727,7 +1756,7 @@ class Database:
 
         # Clauses from loan and guarantee documents
         cur = self.conn.execute("""
-            SELECT c.*, d.document_type, d.filename FROM clauses c
+            SELECT c.*, d.document_type, d.filename FROM cur_clauses c
             JOIN documents d ON c.document_id = d.id
             WHERE d.property_id = ? AND d.document_type IN ('loan', 'guarantee')
             ORDER BY d.document_type, c.clause_type
@@ -1750,7 +1779,7 @@ class Database:
 
         # Revenue items from operating statements
         cur = self.conn.execute("""
-            SELECT os.* FROM operating_statement_items os
+            SELECT os.* FROM cur_operating_statement_items os
             JOIN documents d ON os.document_id = d.id
             WHERE d.property_id = ? AND os.category IN ('revenue', 'income')
             ORDER BY d.processed_at DESC, os.id
@@ -1759,7 +1788,7 @@ class Database:
 
         # Expense items
         cur = self.conn.execute("""
-            SELECT os.* FROM operating_statement_items os
+            SELECT os.* FROM cur_operating_statement_items os
             JOIN documents d ON os.document_id = d.id
             WHERE d.property_id = ? AND os.category = 'expense'
             ORDER BY d.processed_at DESC, os.id
@@ -1768,7 +1797,7 @@ class Database:
 
         # NOI line items (if extracted directly)
         cur = self.conn.execute("""
-            SELECT os.* FROM operating_statement_items os
+            SELECT os.* FROM cur_operating_statement_items os
             JOIN documents d ON os.document_id = d.id
             WHERE d.property_id = ? AND os.category IN ('noi', 'debt_service', 'cash_flow')
             ORDER BY d.processed_at DESC, os.id
@@ -1788,7 +1817,7 @@ class Database:
 
         # Debt service from loan terms
         cur = self.conn.execute("""
-            SELECT ft.* FROM financial_terms ft
+            SELECT ft.* FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE d.property_id = ?
               AND ft.term_type IN ('debt_service', 'annual_debt_service', 'monthly_payment')
@@ -2368,7 +2397,7 @@ class Database:
             clause_sql = """
                 SELECT c.*, d.filename, d.document_type, d.property_id,
                        p.name as property_name
-                FROM clauses c
+                FROM cur_clauses c
                 JOIN documents d ON c.document_id = d.id
                 LEFT JOIN properties p ON d.property_id = p.id
                 WHERE (c.full_text LIKE ? OR c.summary LIKE ?
@@ -2392,7 +2421,7 @@ class Database:
             fin_sql = """
                 SELECT ft.*, d.filename, d.document_type, d.property_id,
                        p.name as property_name
-                FROM financial_terms ft
+                FROM cur_financial_terms ft
                 JOIN documents d ON ft.document_id = d.id
                 LEFT JOIN properties p ON d.property_id = p.id
                 WHERE (ft.term_label LIKE ? OR ft.term_type LIKE ?
@@ -2412,7 +2441,7 @@ class Database:
             tenant_sql = """
                 SELECT rr.*, d.filename, d.document_type, d.property_id,
                        p.name as property_name
-                FROM rent_roll_entries rr
+                FROM cur_rent_roll_entries rr
                 JOIN documents d ON rr.document_id = d.id
                 LEFT JOIN properties p ON COALESCE(rr.property_id, d.property_id) = p.id
                 WHERE (rr.tenant_name LIKE ? OR rr.unit_number LIKE ?
@@ -2432,7 +2461,7 @@ class Database:
             exp_sql = """
                 SELECT os.*, d.filename, d.document_type, d.property_id,
                        p.name as property_name
-                FROM operating_statement_items os
+                FROM cur_operating_statement_items os
                 JOIN documents d ON os.document_id = d.id
                 LEFT JOIN properties p ON COALESCE(os.property_id, d.property_id) = p.id
                 WHERE (os.line_item LIKE ? OR os.subcategory LIKE ?
@@ -2452,7 +2481,7 @@ class Database:
             gl_sql = """
                 SELECT gl.*, d.filename, d.document_type, d.property_id,
                        p.name as property_name
-                FROM gl_entries gl
+                FROM cur_gl_entries gl
                 JOIN documents d ON gl.document_id = d.id
                 LEFT JOIN properties p ON COALESCE(gl.property_id, d.property_id) = p.id
                 WHERE (gl.account_name LIKE ? OR gl.description LIKE ?
@@ -2566,7 +2595,7 @@ class Database:
 
     def get_clauses(self, document_id: int = None,
                     clause_type: str = None) -> List[Dict]:
-        query = "SELECT c.*, d.filename FROM clauses c JOIN documents d ON c.document_id = d.id WHERE 1=1"
+        query = "SELECT c.*, d.filename FROM cur_clauses c JOIN documents d ON c.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND c.document_id = ?"
@@ -2602,7 +2631,7 @@ class Database:
 
     def get_financial_terms(self, document_id: int = None,
                             term_type: str = None) -> List[Dict]:
-        query = "SELECT ft.*, d.filename FROM financial_terms ft JOIN documents d ON ft.document_id = d.id WHERE 1=1"
+        query = "SELECT ft.*, d.filename FROM cur_financial_terms ft JOIN documents d ON ft.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND ft.document_id = ?"
@@ -2648,7 +2677,7 @@ class Database:
 
     def get_rent_roll(self, document_id: int = None,
                       property_name: str = None) -> List[Dict]:
-        query = "SELECT rr.*, d.filename FROM rent_roll_entries rr JOIN documents d ON rr.document_id = d.id WHERE 1=1"
+        query = "SELECT rr.*, d.filename FROM cur_rent_roll_entries rr JOIN documents d ON rr.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND rr.document_id = ?"
@@ -2683,7 +2712,7 @@ class Database:
     def get_operating_statement(self, document_id: int = None,
                                  category: str = None,
                                  period: str = None) -> List[Dict]:
-        query = "SELECT os.*, d.filename FROM operating_statement_items os JOIN documents d ON os.document_id = d.id WHERE 1=1"
+        query = "SELECT os.*, d.filename FROM cur_operating_statement_items os JOIN documents d ON os.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND os.document_id = ?"
@@ -2723,7 +2752,7 @@ class Database:
                        account_code: str = None,
                        date_from: str = None,
                        date_to: str = None) -> List[Dict]:
-        query = "SELECT gl.*, d.filename FROM gl_entries gl JOIN documents d ON gl.document_id = d.id WHERE 1=1"
+        query = "SELECT gl.*, d.filename FROM cur_gl_entries gl JOIN documents d ON gl.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND gl.document_id = ?"
@@ -2764,7 +2793,7 @@ class Database:
 
     def get_balance_sheet(self, document_id: int = None, category: str = None,
                           period: str = None) -> List[Dict]:
-        query = "SELECT bs.*, d.filename FROM balance_sheet_items bs JOIN documents d ON bs.document_id = d.id WHERE 1=1"
+        query = "SELECT bs.*, d.filename FROM cur_balance_sheet_items bs JOIN documents d ON bs.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND bs.document_id = ?"
@@ -2802,7 +2831,7 @@ class Database:
 
     def get_cash_flow(self, document_id: int = None, activity_type: str = None,
                       period: str = None) -> List[Dict]:
-        query = "SELECT cf.*, d.filename FROM cash_flow_items cf JOIN documents d ON cf.document_id = d.id WHERE 1=1"
+        query = "SELECT cf.*, d.filename FROM cur_cash_flow_items cf JOIN documents d ON cf.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND cf.document_id = ?"
@@ -2839,7 +2868,7 @@ class Database:
         return cur.lastrowid
 
     def get_bank_recon(self, document_id: int = None, entry_type: str = None) -> List[Dict]:
-        query = "SELECT br.*, d.filename FROM bank_recon_entries br JOIN documents d ON br.document_id = d.id WHERE 1=1"
+        query = "SELECT br.*, d.filename FROM cur_bank_recon_entries br JOIN documents d ON br.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND br.document_id = ?"
@@ -2875,7 +2904,7 @@ class Database:
 
     def get_security_deposits(self, document_id: int = None,
                                tenant_name: str = None) -> List[Dict]:
-        query = "SELECT sd.*, d.filename FROM security_deposit_entries sd JOIN documents d ON sd.document_id = d.id WHERE 1=1"
+        query = "SELECT sd.*, d.filename FROM cur_security_deposit_entries sd JOIN documents d ON sd.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND sd.document_id = ?"
@@ -2910,7 +2939,7 @@ class Database:
 
     def get_payables(self, document_id: int = None, vendor_name: str = None,
                      aging_bucket: str = None) -> List[Dict]:
-        query = "SELECT pe.*, d.filename FROM payable_entries pe JOIN documents d ON pe.document_id = d.id WHERE 1=1"
+        query = "SELECT pe.*, d.filename FROM cur_payable_entries pe JOIN documents d ON pe.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND pe.document_id = ?"
@@ -2949,7 +2978,7 @@ class Database:
 
     def get_receivables(self, document_id: int = None, tenant_name: str = None,
                         aging_bucket: str = None) -> List[Dict]:
-        query = "SELECT re.*, d.filename FROM receivable_entries re JOIN documents d ON re.document_id = d.id WHERE 1=1"
+        query = "SELECT re.*, d.filename FROM cur_receivable_entries re JOIN documents d ON re.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND re.document_id = ?"
@@ -2987,7 +3016,7 @@ class Database:
         return cur.lastrowid
 
     def get_bad_debts(self, document_id: int = None, status: str = None) -> List[Dict]:
-        query = "SELECT bd.*, d.filename FROM bad_debt_entries bd JOIN documents d ON bd.document_id = d.id WHERE 1=1"
+        query = "SELECT bd.*, d.filename FROM cur_bad_debt_entries bd JOIN documents d ON bd.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND bd.document_id = ?"
@@ -3023,7 +3052,7 @@ class Database:
 
     def get_concessions(self, document_id: int = None, status: str = None,
                         concession_type: str = None) -> List[Dict]:
-        query = "SELECT ce.*, d.filename FROM concession_entries ce JOIN documents d ON ce.document_id = d.id WHERE 1=1"
+        query = "SELECT ce.*, d.filename FROM cur_concession_entries ce JOIN documents d ON ce.document_id = d.id WHERE 1=1"
         params = []
         if document_id:
             query += " AND ce.document_id = ?"
@@ -3071,7 +3100,7 @@ class Database:
                    SUM(monthly_rent) as total_monthly_rent,
                    AVG(rent_psf) as avg_rent_psf,
                    SUM(square_footage) as total_sqft
-            FROM rent_roll_entries
+            FROM cur_rent_roll_entries
         """)
         row = cur.fetchone()
         summary['rent_roll'] = dict(row) if row else {}
@@ -3141,13 +3170,13 @@ class Database:
         stats['total_market_rent'] = row['total'] or 0
 
         # ── Extraction counts ──
-        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM clauses")
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM cur_clauses")
         stats['clause_count'] = cur.fetchone()['cnt']
 
-        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM financial_terms")
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM cur_financial_terms")
         stats['financial_term_count'] = cur.fetchone()['cnt']
 
-        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM rent_roll_entries")
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM cur_rent_roll_entries")
         stats['rent_roll_count'] = cur.fetchone()['cnt']
 
         # ── Recent documents (last 10) ──
@@ -3210,7 +3239,7 @@ class Database:
 
         # Total units from financial_terms (total_units term type)
         cur = self.conn.execute("""
-            SELECT value_numeric FROM financial_terms
+            SELECT value_numeric FROM cur_financial_terms
             WHERE term_type = 'total_units'
             ORDER BY id DESC LIMIT 1
         """)
@@ -3219,7 +3248,7 @@ class Database:
 
         # Occupancy rate from financial_terms (prefer computed, then Current, then any)
         cur = self.conn.execute("""
-            SELECT value_numeric FROM financial_terms
+            SELECT value_numeric FROM cur_financial_terms
             WHERE term_type = 'occupancy_rate'
             AND term_label LIKE '%Computed%'
             ORDER BY id DESC LIMIT 1
@@ -3229,7 +3258,7 @@ class Database:
 
         if metrics['occupancy_rate'] is None:
             cur = self.conn.execute("""
-                SELECT value_numeric FROM financial_terms
+                SELECT value_numeric FROM cur_financial_terms
                 WHERE term_type = 'occupancy_rate'
                 AND term_label LIKE '%Current%'
                 ORDER BY id DESC LIMIT 1
@@ -3239,7 +3268,7 @@ class Database:
 
         if metrics['occupancy_rate'] is None:
             cur = self.conn.execute("""
-                SELECT value_numeric FROM financial_terms
+                SELECT value_numeric FROM cur_financial_terms
                 WHERE term_type = 'occupancy_rate'
                 ORDER BY id DESC LIMIT 1
             """)
@@ -3248,7 +3277,7 @@ class Database:
 
         # Monthly GPR from financial_terms
         cur = self.conn.execute("""
-            SELECT value_numeric FROM financial_terms
+            SELECT value_numeric FROM cur_financial_terms
             WHERE term_type = 'gross_potential_rent'
             AND term_label LIKE '%Monthly%'
             ORDER BY id DESC LIMIT 1
@@ -3258,7 +3287,7 @@ class Database:
 
         # Annual NOI from operating_statement_items (latest Total period)
         cur = self.conn.execute("""
-            SELECT amount FROM operating_statement_items
+            SELECT amount FROM cur_operating_statement_items
             WHERE LOWER(line_item) LIKE '%net operating income%'
             AND period = 'Total'
             ORDER BY id DESC LIMIT 1
@@ -3267,23 +3296,23 @@ class Database:
         metrics['annual_noi'] = row['amount'] if row else None
 
         # Counts
-        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM rent_roll_entries")
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM cur_rent_roll_entries")
         metrics['rent_roll_entries'] = cur.fetchone()['cnt']
 
-        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM operating_statement_items")
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM cur_operating_statement_items")
         metrics['os_items'] = cur.fetchone()['cnt']
 
-        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM financial_terms")
+        cur = self.conn.execute("SELECT COUNT(*) as cnt FROM cur_financial_terms")
         metrics['financial_terms'] = cur.fetchone()['cnt']
 
         # Average rent from rent_roll_entries (unit_mix source, most recent doc)
         cur = self.conn.execute("""
             SELECT AVG(monthly_rent) as avg_rent
-            FROM rent_roll_entries
+            FROM cur_rent_roll_entries
             WHERE monthly_rent IS NOT NULL
             AND metadata LIKE '%"source": "unit_mix"%'
             AND document_id = (
-                SELECT document_id FROM rent_roll_entries
+                SELECT document_id FROM cur_rent_roll_entries
                 WHERE metadata LIKE '%"source": "unit_mix"%'
                 ORDER BY id DESC LIMIT 1
             )
@@ -3325,7 +3354,7 @@ class Database:
             SELECT COUNT(*) as total_corrections,
                    COUNT(DISTINCT document_id) as documents_with_corrections,
                    COUNT(DISTINCT term_type) as field_types_corrected
-            FROM financial_terms
+            FROM cur_financial_terms
             WHERE user_value_raw IS NOT NULL
         """)
         row = cur.fetchone()
@@ -3339,7 +3368,7 @@ class Database:
         cur = self.conn.execute("""
             SELECT COUNT(*) as total_terms,
                    SUM(CASE WHEN user_value_raw IS NOT NULL THEN 1 ELSE 0 END) as correction_count
-            FROM financial_terms
+            FROM cur_financial_terms
         """)
         row = cur.fetchone()
         if row and row['total_terms'] > 0:
@@ -3355,7 +3384,7 @@ class Database:
                    COUNT(*) as total_terms,
                    SUM(CASE WHEN user_value_raw IS NOT NULL THEN 1 ELSE 0 END) as corrections,
                    ROUND(SUM(CASE WHEN user_value_raw IS NOT NULL THEN 1.0 ELSE 0.0 END) / COUNT(*) * 100, 1) as correction_rate
-            FROM financial_terms
+            FROM cur_financial_terms
             GROUP BY term_type
             ORDER BY corrections DESC
         """)
@@ -3364,7 +3393,7 @@ class Database:
         # Most common corrections
         cur = self.conn.execute("""
             SELECT ft.*, d.filename
-            FROM financial_terms ft
+            FROM cur_financial_terms ft
             JOIN documents d ON ft.document_id = d.id
             WHERE ft.user_value_raw IS NOT NULL
             ORDER BY ft.user_modified_at DESC
