@@ -52,6 +52,13 @@
         <label for="pf-select">Portfolio</label>
         <select id="pf-select"><option>Loading…</option></select>
       </div>
+      <div class="barr-field">
+        <label for="style-select">Output style</label>
+        <select id="style-select">
+          <option value="summary">Portfolio Summary (multi-tab)</option>
+          <option value="consolidated">Consolidated Cash Flow (client format)</option>
+        </select>
+      </div>
       <button class="barr-btn" id="gen-btn">Generate Deliverable</button>
     </div>
     <div class="barr-progress" id="progress">
@@ -148,7 +155,7 @@ $('gen-btn').addEventListener('click', () => {
   $('progress-text').textContent = 'Starting…';
   fetch('/barrington/api/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ portfolio_id: pid }),
+    body: JSON.stringify({ portfolio_id: pid, style: $('style-select').value }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))
     .then(({ ok, j }) => {
       if (!ok) throw new Error(j.error || 'Failed to start');

@@ -87,7 +87,7 @@ def _prune_old_workbooks(keep=5):
             pass
 
 
-def _run_generate(job_id, org_id, portfolio_id):
+def _run_generate(job_id, org_id, portfolio_id, style='summary'):
     job = _JOBS[job_id]
 
     def step(s, detail=''):
@@ -102,6 +102,8 @@ def _run_generate(job_id, org_id, portfolio_id):
             """SELECT d.filename, d.filepath, d.document_type
                  FROM documents d JOIN properties p ON d.property_id = p.id
                 WHERE p.portfolio_id = ?""", (portfolio_id,)).fetchall()
+        pf_row = db.conn.execute("SELECT name FROM portfolios WHERE id = ?", (portfolio_id,)).fetchone()
+        portfolio_title = pf_row['name'] if pf_row else 'Portfolio'
         try:
             db.close()
         except Exception:
@@ -140,8 +142,11 @@ def _run_generate(job_id, org_id, portfolio_id):
 
         step('exporting', 'Generating the Excel workbook…')
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        xlsx_path = os.path.join(_BARR_ROOT, f'Barrington_Portfolio_{ts}.xlsx')
-        export_excel.build(conn, xlsx_path, 2026)
+        xlsx_path = os.path.join(_BARR_ROOT, f'Barrington_Portfolio_{style}_{ts}.xlsx')
+        if style == 'consolidated':
+            export_excel.build_consolidated(conn, xlsx_path, 2026, portfolio_title)
+        else:
+            export_excel.build(conn, xlsx_path, 2026)
         try:
             conn.close()
         except Exception:
@@ -199,6 +204,9 @@ def api_generate():
         portfolio_id = int(data.get('portfolio_id'))
     except (TypeError, ValueError):
         return jsonify({'error': 'Select a portfolio first.'}), 400
+    style = (data.get('style') or 'summary')
+    if style not in ('summary', 'consolidated'):
+        style = 'summary'
     org_id = session.get('org_id', 'dev')
     # Don't start a second build while one is already running.
     for jid, j in _JOBS.items():
@@ -207,7 +215,24 @@ def api_generate():
     job_id = uuid.uuid4().hex[:8]
     _JOBS[job_id] = {
         'id': job_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting...',
-        'error': None, 'portfolio_id': portfolio_id,
+        'error': None, 'portfolio_id': portfolio_id, 'style': style,
         'started': datetime.datetime.now().isoformat(timespec='seconds'),
     }
-    
+    threading.Thread(target=_run_generate, args=(job_id, org_id, portfolio_id, style), daemon=True).start()
+    return jsonify({'job_id': job_id})
+
+
+@barrington_bp.route('/api/status/<job_id>')
+def api_status(job_id):
+    job = _JOBS.get(job_id)
+    if not job:
+        return jsonify({'error': 'Unknown job'}), 404
+    return jsonify({k: v for k, v in job.items() if k != 'traceback'})
+
+
+@barrington_bp.route('/api/download')
+def api_download():
+    path = _LATEST.get('xlsx')
+    if not path or not os.path.exists(path):
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path))

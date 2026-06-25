@@ -10,6 +10,7 @@ Tabs produced:
 All on-device; reads only the built SQLite DB.
 """
 import argparse, datetime
+from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -163,12 +164,155 @@ def build(conn, out_path, year=2026):
     wb.save(out_path)
     return out_path
 
+
+# ─────────────────────────────────────────────────────────────────────────
+# "Consolidated Cash Flow" style — a single sheet matching the client's
+# layout: sections (Revenue, OpEx, NOI, Debt Service, Building Capital,
+# Leasing Capital, Cash Flow, Loan Funding) with one row per property across
+# the 12 months + Full Year, in $000s. Corporate Center I & II are combined.
+# ─────────────────────────────────────────────────────────────────────────
+_CONS_PROPS = [
+    ("100/150 South Wacker", ["WACKER"]),
+    ("O'Hare Plaza I", ["OHP1"]),
+    ("O'Hare Plaza II", ["OHP2"]),
+    ("Drake Oak Brook", ["DRAKE"]),
+    ("Corporate Center I and II", ["CCI", "CCII"]),
+    ("Combined Center", ["COMBINED"]),
+    ("One Northbrook Place", ["ONB"]),
+    ("JTM MKE LLC", ["JTM"]),
+    ("MB MKE LLC", ["MB"]),
+]
+_CONS_SECTIONS = [
+    ("revenue", "I.  Revenue", "Total Portfolio Revenue"),
+    ("opex", "II.  Operating Expenses", "Total Portfolio Expenses"),
+    ("noi", "III.  Net Operating Income", "Portfolio NOI"),
+    ("debt", "IV.  Debt Service", "Portfolio Debt Service"),
+    ("building", "V.  Building Capital", "Portfolio Building Capital"),
+    ("leasing", "VI.  Leasing Capital", "Portfolio Leasing Capital"),
+    ("cashflow", "VII.  Cash Flow", "Portfolio Cash Flow"),
+    ("loan", "VIII.  Loan Funding Offset", "Portfolio Loan Funding"),
+]
+
+
+def _consolidated_data(conn, year):
+    """Aggregate cash_flow_fact into per-property, per-section monthly arrays
+    (12 months + Full Year). Returns {property_label: {section: [13 values]}}."""
+    rows = conn.execute("""
+        SELECT property_code, line_item_code, period_id, SUM(amount) amt
+        FROM cash_flow_fact f JOIN period p USING(period_id)
+        WHERE p.year = ? GROUP BY property_code, line_item_code, period_id
+    """, (year,)).fetchall()
+    piv = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    for pc, code, pid, amt in rows:
+        piv[pc][code][pid] += amt or 0.0
+
+    def cm(codes, prop_codes, period):
+        return sum(piv[pc][c].get(period, 0.0) for pc in prop_codes for c in codes)
+
+    data = {}
+    for label, pcs in _CONS_PROPS:
+        # OHP I/II only have a combined CAP_SUBTOTAL (leasing-related); others
+        # have the Building/TI/LC detail. Use detail when present.
+        detail = any(c in piv[pc] for pc in pcs
+                     for c in ('CAP_BUILDING', 'CAP_TI', 'CAP_LC', 'CAP_DEFERRED', 'CAP_NONOP'))
+
+        def arr(codes):
+            a = [cm(codes, pcs, p) for p in MONTHS_2026]
+            a.append(sum(a))
+            return a
+        noi = arr({'NOI'})
+        debt = arr({'INTEREST', 'PRINCIPAL'})
+        bldg = arr({'CAP_BUILDING'})
+        leas = arr({'CAP_TI', 'CAP_LC', 'CAP_DEFERRED', 'CAP_NONOP'}) if detail else arr({'CAP_SUBTOTAL'})
+        cf = [noi[i] + debt[i] + bldg[i] + leas[i] for i in range(13)]
+        loan = arr({'CONTRIBUTION'})
+        data[label] = {
+            'revenue': arr({'REVENUE', 'REVENUE_ADJ'}),
+            'opex': arr({'OPEX', 'TAX_PAYMENT', 'INSURANCE_PAYMENT'}),
+            'noi': noi, 'debt': debt, 'building': bldg, 'leasing': leas,
+            'cashflow': cf, 'loan': loan,
+            'net': [cf[i] + loan[i] for i in range(13)],
+        }
+    return data
+
+
+def build_consolidated(conn, out_path, year=2026, title="Portfolio"):
+    """Client 'Consolidated Cash Flow' workbook (single sheet, $000s)."""
+    d = _consolidated_data(conn, year)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{year} Budget"
+    ws.cell(1, 8, title).font = Font(bold=True, size=13)
+    ws.cell(2, 8, "Consolidated Cash Flow").font = Font(bold=True, size=11)
+    ws.cell(3, 8, f"{year} Budgets ($000s)").font = Font(italic=True)
+    for i, m in enumerate(MONTH_LABELS):
+        c = ws.cell(6, 3 + i, m); c.font = WHITE_BOLD; c.fill = NAVY
+        c.alignment = Alignment(horizontal="center")
+    c = ws.cell(6, 15, f"Full Year {year}"); c.font = WHITE_BOLD; c.fill = NAVY
+    c.alignment = Alignment(horizontal="center")
+
+    def put(r, idx, v, bold=False, fill=False):
+        col = 15 if idx == 12 else 3 + idx
+        show = round(v / 1000) if (v and abs(v) >= 500) else (0 if idx == 12 else None)
+        cell = ws.cell(r, col, show)
+        cell.number_format = MONEY
+        if bold:
+            cell.font = BOLD
+        if fill:
+            cell.fill = LIGHT
+        return cell
+
+    r = 8
+    for key, roman, totlabel in _CONS_SECTIONS:
+        ws.cell(r, 1, roman).font = BOLD
+        r += 1
+        tot = [0.0] * 13
+        for label, _ in _CONS_PROPS:
+            ws.cell(r, 1, label)
+            vals = d[label][key]
+            for i in range(13):
+                put(r, i, vals[i])
+                tot[i] += vals[i]
+            r += 1
+        r += 1
+        ws.cell(r, 1, totlabel).font = BOLD
+        for i in range(13):
+            put(r, i, tot[i], bold=True, fill=True)
+        r += 2
+
+    net = [0.0] * 13
+    for label, _ in _CONS_PROPS:
+        for i in range(13):
+            net[i] += d[label]['net'][i]
+    ws.cell(r, 1, "PORTFOLIO NET CASH FLOW").font = Font(bold=True, size=12)
+    for i in range(13):
+        put(r, i, net[i], bold=True, fill=True)
+
+    ws.column_dimensions['A'].width = 28
+    for i in range(3, 16):
+        ws.column_dimensions[get_column_letter(i)].width = 10
+    ws.freeze_panes = "C7"
+    wb.save(out_path)
+    return out_path
+
+
+# Selectable output styles: name -> builder(conn, out_path, year[, title])
+STYLES = {
+    "summary": build,
+    "consolidated": build_consolidated,
+}
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=None)
     ap.add_argument("--out", default=f"Barrington_Portfolio_{datetime.date.today():%Y%m%d}.xlsx")
     ap.add_argument("--year", type=int, default=2026)
+    ap.add_argument("--style", default="summary", choices=list(STYLES))
     a = ap.parse_args()
     conn = connect(a.db)
-    path = build(conn, a.out, a.year)
+    if a.style == "consolidated":
+        path = build_consolidated(conn, a.out, a.year, "Portfolio")
+    else:
+        path = build(conn, a.out, a.year)
     print("Wrote", path)
