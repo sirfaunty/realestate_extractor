@@ -101,4 +101,4 @@ class ModuleRegistry:
 
 
 # Singleton registry
-re
+registry = ModuleRegistry()
