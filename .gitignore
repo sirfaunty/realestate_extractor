@@ -78,3 +78,5 @@ lease_abstraction_db/source_docs/
 lease_abstraction_db/**/*.db
 lease_abstraction_db/**/*.docx
 lease_abstraction_db/_preview*
+lease_abstraction_db/**/*.xlsx
+lease_abstraction_db/_rpv*
