@@ -33,6 +33,9 @@
 .st-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
 .st-table th { text-align:left; background:#F4F8FD; padding:8px 10px; border-bottom:1px solid var(--st-line); font-weight:600; }
 .st-table td { padding:7px 10px; border-bottom:1px solid #F0F3F7; }
+.st-pill { font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; }
+.st-pill.ok { background:#E7F8F0; color:#10B981; }
+.st-pill.bad { background:#FDEAEA; color:#DC2626; }
 .st-banner { background:#FCEEF0; color:#8C1020; border:1px solid #F3C6CC; border-radius:8px;
   padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
 .st-err { display:none; background:#FDEAEA; color:#9B1C1C; border:1px solid #F5C2C2;
@@ -86,10 +89,33 @@
       <div class="st-note" id="failed-note"></div>
     </div>
   </div>
+
+  <div class="st-card">
+    <h2>3 · Co-Tenancy &amp; Returns Model</h2>
+    <p class="st-note" style="margin-top:0;">DHOS development returns (Yield-on-Cost, exit-cap
+      value) plus the §1.6/§1.7 <strong>65% co-tenancy test</strong> across vacancy scenarios.
+      Computed on-device; produces a live formula-driven Excel model. Ties out to source.</p>
+    <div class="st-row">
+      <button class="st-btn" id="ret-btn">Generate Returns Model</button>
+    </div>
+    <div class="st-err" id="ret-error"></div>
+    <div class="st-results" id="ret-results" style="margin-top:16px;">
+      <div class="st-row" style="margin-bottom:16px;">
+        <a class="st-btn" id="ret-download" href="/southtown/api/download_returns">⬇ Download Excel model</a>
+        <span style="font-size:12px;color:#5B6472;" id="ret-meta"></span>
+      </div>
+      <div class="st-kpis" id="ret-kpis"></div>
+      <h2 style="margin-top:6px;">Co-tenancy scenarios</h2>
+      <table class="st-table"><thead><tr><th>Scenario</th><th>Occupancy</th><th>Result</th></tr></thead>
+        <tbody id="ret-scenarios"></tbody></table>
+      <div class="st-note" id="ret-tieout" style="margin-top:10px;"></div>
+    </div>
+  </div>
 </div>
 
 <script>
 const LATEST = {{ latest|tojson }};
+const LATEST_RET = {{ latest_returns|tojson }};
 const $ = (id) => document.getElementById(id);
 const TIER_LABEL = { detailed: 'Detailed', detailed_summary: 'Detailed Summary', abstract_summary: 'Abstract Summary' };
 
@@ -177,5 +203,43 @@ $('gen-btn').addEventListener('click', () => {
 });
 
 if (LATEST) renderSummary(LATEST);
+
+const pct1 = (v) => (v * 100).toFixed(1) + '%';
+const pct2 = (v) => (v * 100).toFixed(2) + '%';
+function renderReturns(s) {
+  if (!s) return;
+  $('ret-results').style.display = 'block';
+  $('ret-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
+  $('ret-kpis').innerHTML = [
+    [pct1(s.base_occupancy) + (s.base_pass ? ' ✓' : ''), 'Base occupancy (' + (s.base_pass ? 'PASS' : 'FAIL') + ')'],
+    [pct2(s.yoc_all_in), 'Yield-on-Cost (all-in)'],
+    [pct2(s.yoc_cash), 'Yield-on-Cost (cash basis)'],
+    ['$' + Math.round(s.tpc).toLocaleString('en-US'), 'Total Project Cost'],
+  ].map(([v, l]) => `<div class="st-kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('ret-scenarios').innerHTML = (s.scenarios || []).map(x =>
+    `<tr><td>${x.name}</td><td>${pct1(x.occ)}</td>
+     <td><span class="st-pill ${x.pass ? 'ok' : 'bad'}">${x.pass ? 'PASS' : 'FAIL'}</span></td></tr>`).join('');
+  $('ret-tieout').textContent = s.tie_out_pass
+    ? `Tie-out: all ${s.tie_out_n} checks pass against the source model ✓`
+    : 'Tie-out: review needed';
+}
+
+$('ret-btn').addEventListener('click', () => {
+  $('ret-error').style.display = 'none';
+  $('ret-btn').disabled = true; $('ret-btn').textContent = 'Generating…';
+  fetch('/southtown/api/generate_returns', { method: 'POST' })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      $('ret-btn').disabled = false; $('ret-btn').textContent = 'Generate Returns Model';
+      if (!ok) throw new Error(j.error || 'Failed to generate');
+      renderReturns(j);
+      $('ret-results').scrollIntoView({ behavior: 'smooth' });
+    })
+    .catch(err => {
+      $('ret-btn').disabled = false; $('ret-btn').textContent = 'Generate Returns Model';
+      const e = $('ret-error'); e.style.display = 'block'; e.textContent = err.message;
+    });
+});
+if (LATEST_RET) renderReturns(LATEST_RET);
 </script>
 {% endblock %}

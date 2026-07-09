@@ -37,7 +37,7 @@ if _ST_ROOT not in sys.path:
 southtown_bp = Blueprint('southtown', __name__, url_prefix='/southtown')
 
 _JOBS = {}
-_LATEST = {'docx': None, 'summary': None}
+_LATEST = {'docx': None, 'summary': None, 'returns': None, 'returns_summary': None}
 
 
 def register_southtown_routes(app):
@@ -147,7 +147,8 @@ def _run_generate(job_id, lease_rel, force):
 # ── Page ──────────────────────────────────────────────────────────────────
 @southtown_bp.route('/')
 def southtown_index():
-    return render_template('southtown.html', latest=_LATEST.get('summary'))
+    return render_template('southtown.html', latest=_LATEST.get('summary'),
+                           latest_returns=_LATEST.get('returns_summary'))
 
 
 # ── API ───────────────────────────────────────────────────────────────────
@@ -188,6 +189,47 @@ def api_status(job_id):
 @southtown_bp.route('/api/download')
 def api_download():
     path = _LATEST.get('docx')
+    if not path or not os.path.exists(path):
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+
+
+# ── Co-Tenancy & Returns Model (fast, synchronous — no lease warehouse needed) ──
+@southtown_bp.route('/api/generate_returns', methods=['POST'])
+def api_generate_returns():
+    try:
+        import returns_model as RM
+        import returns_xlsx
+        os.makedirs(_DATA_DIR, exist_ok=True)
+        ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        out = os.path.join(_DATA_DIR, f'Southtown_CoTenancy_and_Returns_Model_{ts}.xlsx')
+        returns_xlsx.build(out)
+
+        ct = RM.cotenancy_table()
+        base = next(s for s in ct if s['name'].startswith('Base'))
+        y = RM.yield_on_cost()
+        checks = RM.validate()
+        summary = {
+            'base_occupancy': base['occupancy'], 'base_pass': base['pass'],
+            'yoc_all_in': y['all_in']['yoc'], 'yoc_cash': y['cash']['yoc'],
+            'tpc': RM.total_project_cost(),
+            'tie_out_pass': all(ok for *_, ok in checks), 'tie_out_n': len(checks),
+            'scenarios': [{'name': s['name'], 'occ': s['occupancy'], 'pass': s['pass']}
+                          for s in ct],
+            'xlsx_name': os.path.basename(out),
+            'generated_at': datetime.datetime.now().isoformat(timespec='seconds'),
+        }
+        _LATEST['returns'] = out
+        _LATEST['returns_summary'] = summary
+        return jsonify(summary)
+    except Exception as e:
+        logger.exception('Southtown returns generate failed')
+        return jsonify({'error': str(e)}), 500
+
+
+@southtown_bp.route('/api/download_returns')
+def api_download_returns():
+    path = _LATEST.get('returns')
     if not path or not os.path.exists(path):
         abort(404)
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
