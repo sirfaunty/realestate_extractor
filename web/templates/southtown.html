@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Lease Abstraction — capactive{% endblock %}
+
+{% block content %}
+<style>
+.st-root { --st-primary: var(--cap-primary, #1B2A4A); --st-accent:#C8102E; --st-ink:#1A1A2E;
+  --st-cloud:#EEF3F8; --st-line:#E3E8EF; --st-good:#10B981; --st-bad:#DC2626;
+  max-width: 1100px; color: var(--st-ink); }
+.st-root h1 { font-size: 22px; margin: 0 0 4px; }
+.st-sub { color:#5B6472; margin: 0 0 22px; font-size: 14px; }
+.st-card { background:#fff; border:1px solid var(--st-line); border-radius:10px;
+  padding:20px 22px; margin-bottom:18px; }
+.st-card h2 { font-size:15px; margin:0 0 14px; letter-spacing:.01em; }
+.st-row { display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
+.st-field label { font-weight:600; font-size:13px; display:block; margin-bottom:6px; }
+.st-field select { min-width:360px; padding:9px 11px; font-size:14px; border:1px solid #C7D2E0;
+  border-radius:8px; background:#fff; }
+.st-check { display:flex; align-items:center; gap:7px; font-size:13px; color:#3A4655; }
+.st-btn { background:var(--st-primary); color:#fff; border:none; border-radius:8px;
+  padding:11px 20px; font-size:14px; font-weight:600; cursor:pointer; }
+.st-btn:disabled { opacity:.55; cursor:not-allowed; }
+.st-note { font-size:12px; color:#7A8494; margin-top:10px; }
+.st-progress { display:none; align-items:center; gap:12px; font-size:14px; color:#3A4655; margin-top:14px; }
+.st-spin { width:18px; height:18px; border:2.5px solid #D7E3F2; border-top-color:var(--st-primary);
+  border-radius:50%; animation:stspin .8s linear infinite; }
+@keyframes stspin { to { transform:rotate(360deg); } }
+.st-results { display:none; }
+.st-kpis { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+.st-kpi { background:var(--st-cloud); border-radius:9px; padding:12px 16px; min-width:140px; }
+.st-kpi .v { font-size:20px; font-weight:700; color:var(--st-primary); }
+.st-kpi .l { font-size:12px; color:#5B6472; margin-top:2px; }
+.st-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+.st-table th { text-align:left; background:#F4F8FD; padding:8px 10px; border-bottom:1px solid var(--st-line); font-weight:600; }
+.st-table td { padding:7px 10px; border-bottom:1px solid #F0F3F7; }
+.st-banner { background:#FCEEF0; color:#8C1020; border:1px solid #F3C6CC; border-radius:8px;
+  padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
+.st-err { display:none; background:#FDEAEA; color:#9B1C1C; border:1px solid #F5C2C2;
+  border-radius:8px; padding:12px 14px; font-size:13px; white-space:pre-wrap; margin-top:14px; }
+</style>
+
+<div class="st-root">
+  <h1>Lease Abstraction</h1>
+  <p class="st-sub">Segment a commercial lease into a searchable provision warehouse with
+    three-tier abstracts, and export a Lease Abstract Compendium — every provision
+    abstracted on this device by the local model. Nothing is sent off-device.</p>
+
+  <div class="st-banner">Abstracts are machine-generated (local model) and are a
+    <strong>first draft for human review</strong> — verify figures and defined terms
+    against the source lease. Not attorney work product.</div>
+
+  <div class="st-card">
+    <h2>1 · Select a lease</h2>
+    <div class="st-row">
+      <div class="st-field">
+        <label for="lease-select">Lease document</label>
+        <select id="lease-select"><option>Loading…</option></select>
+      </div>
+      <label class="st-check"><input type="checkbox" id="force-check"> Re-run abstraction from scratch</label>
+      <button class="st-btn" id="gen-btn">Generate Compendium</button>
+    </div>
+    <div class="st-note">First run abstracts all provisions with the local model and can take
+      10–40 minutes. Later runs reuse existing abstracts and just rebuild the document
+      (unless you tick “re-run from scratch”).</div>
+    <div class="st-progress" id="progress">
+      <div class="st-spin"></div><span id="progress-text">Working…</span>
+    </div>
+    <div class="st-err" id="error-box"></div>
+  </div>
+
+  <div class="st-card st-results" id="results">
+    <h2>2 · Compendium</h2>
+    <div class="st-row" style="margin-bottom:16px;">
+      <a class="st-btn" id="download-btn" href="/southtown/api/download">⬇ Download Word compendium</a>
+      <span style="font-size:12px;color:#5B6472;" id="gen-meta"></span>
+    </div>
+    <div class="st-kpis" id="kpis"></div>
+    <div id="recall-wrap" style="display:none;">
+      <h2 style="margin-top:18px;">Abstract quality — figure recall vs. reference</h2>
+      <table class="st-table"><thead><tr><th>Tier</th><th>Figure recall</th></tr></thead>
+        <tbody id="recall-body"></tbody></table>
+      <div class="st-note">Fraction of the reference abstract’s hard figures ($, %, SF, dates,
+        periods) preserved by the local model.</div>
+    </div>
+    <div id="failed-wrap" style="display:none;margin-top:14px;">
+      <div class="st-note" id="failed-note"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const LATEST = {{ latest|tojson }};
+const $ = (id) => document.getElementById(id);
+const TIER_LABEL = { detailed: 'Detailed', detailed_summary: 'Detailed Summary', abstract_summary: 'Abstract Summary' };
+
+function renderSummary(s) {
+  if (!s) return;
+  $('results').style.display = 'block';
+  $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at + ' · ' + (s.model || '')) : '';
+  $('kpis').innerHTML = [
+    [s.provisions, 'Provisions'],
+    [s.covered, 'Provisions abstracted'],
+    [s.abstracted_now, 'Newly abstracted this run'],
+  ].map(([v, l]) => `<div class="st-kpi"><div class="v">${v == null ? '—' : v}</div><div class="l">${l}</div></div>`).join('');
+
+  const r = s.figure_recall;
+  if (r && Object.keys(r).length) {
+    $('recall-wrap').style.display = 'block';
+    $('recall-body').innerHTML = Object.keys(TIER_LABEL)
+      .filter(k => r[k] != null)
+      .map(k => `<tr><td>${TIER_LABEL[k]}</td><td>${r[k]}%</td></tr>`).join('');
+  } else {
+    $('recall-wrap').style.display = 'none';
+  }
+
+  if (s.failed && s.failed.length) {
+    $('failed-wrap').style.display = 'block';
+    $('failed-note').textContent = 'Provisions that failed to abstract (re-run to retry): ' + s.failed.join(', ');
+  } else {
+    $('failed-wrap').style.display = 'none';
+  }
+}
+
+fetch('/southtown/api/leases').then(r => r.json()).then(list => {
+  const sel = $('lease-select');
+  if (!Array.isArray(list) || !list.length) {
+    sel.innerHTML = '<option value="">No lease documents found on this device</option>';
+    return;
+  }
+  sel.innerHTML = list.map(d =>
+    `<option value="${d.path}">${d.name}${d.is_exhibits ? ' (exhibits)' : ''}</option>`).join('');
+}).catch(() => { $('lease-select').innerHTML = '<option value="">Error loading leases</option>'; });
+
+let pollTimer = null;
+function poll(jobId) {
+  fetch('/southtown/api/status/' + jobId).then(r => r.json()).then(j => {
+    if (j.status === 'running') {
+      $('progress-text').textContent = j.detail || j.step || 'Working…';
+      pollTimer = setTimeout(() => poll(jobId), 1500);
+    } else if (j.status === 'done') {
+      $('progress').style.display = 'none';
+      $('gen-btn').disabled = false;
+      renderSummary(j.summary);
+      $('results').scrollIntoView({ behavior: 'smooth' });
+    } else if (j.status === 'error') {
+      $('progress').style.display = 'none';
+      $('gen-btn').disabled = false;
+      const e = $('error-box'); e.style.display = 'block';
+      e.textContent = 'Generation failed:\n' + (j.error || 'Unknown error');
+    }
+  }).catch(() => { pollTimer = setTimeout(() => poll(jobId), 2000); });
+}
+
+$('gen-btn').addEventListener('click', () => {
+  const lease = $('lease-select').value;
+  $('error-box').style.display = 'none';
+  if (!lease) {
+    const e = $('error-box'); e.style.display = 'block'; e.textContent = 'Select a lease first.';
+    return;
+  }
+  $('gen-btn').disabled = true;
+  $('progress').style.display = 'flex';
+  $('progress-text').textContent = 'Starting…';
+  fetch('/southtown/api/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lease, force: $('force-check').checked }),
+  }).then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (!ok) throw new Error(j.error || 'Failed to start');
+      poll(j.job_id);
+    })
+    .catch(err => {
+      $('progress').style.display = 'none';
+      $('gen-btn').disabled = false;
+      const e = $('error-box'); e.style.display = 'block'; e.textContent = err.message;
+    });
+});
+
+if (LATEST) renderSummary(LATEST);
+</script>
+{% endblock %}

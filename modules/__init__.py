@@ -29,6 +29,7 @@ INSTALLED_MODULES = [
     'modules.debt_analysis',
     'modules.partnership_dashboard',
     'modules.barrington',
+    'modules.southtown',
 ]
 
 

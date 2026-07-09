@@ -124,6 +124,11 @@
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 13V3a1 1 0 011-1h7l4 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 9h6M5 6h3M5 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </span> Portfolio Cash Flow
             </a></li>
+            <li><a href="/southtown" class="{% if request.endpoint and request.endpoint.startswith('southtown.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2h5l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 2v4h4M6 9h4M6 11.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </span> Lease Abstraction
+            </a></li>
         </ul>
 
         {% if current_user and current_user.role == 'admin' %}
