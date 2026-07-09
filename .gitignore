@@ -71,3 +71,8 @@ test_*.db
 portfolio_cashflow_db/source_docs/
 portfolio_cashflow_db/data/
 portfolio_cashflow_db/*.xlsx
+
+# Center C lease-abstraction warehouse — local-only (source docs + text-laden DBs never leave device)
+lease_abstraction_db/data/
+lease_abstraction_db/source_docs/
+lease_abstraction_db/**/*.db
