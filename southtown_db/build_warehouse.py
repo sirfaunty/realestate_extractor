@@ -45,7 +45,7 @@ def build(lease_path, db_path, doc_code="DHOS-LEASE",
     with open(os.path.join(_HERE, "schema.sql"), encoding="utf-8") as f:
         cur.executescript(f.read())
 
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     cur.execute(
         "INSERT INTO source_files(filename, sha256, byte_size, doc_type, ingested_at) "
         "VALUES(?,?,?,?,?)",
