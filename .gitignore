@@ -78,3 +78,5 @@ southtown_db/source_docs/
 southtown_db/**/*.db
 southtown_db/**/*.docx
 southtown_db/_preview*
+southtown_db/**/*.xlsx
+southtown_db/_rpv*

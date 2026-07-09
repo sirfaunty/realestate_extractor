@@ -39,6 +39,8 @@ southtown_db/
   abstract_lease.py       local-engine abstraction (3 tiers; --missing/--only)
   score_abstracts.py      abstract quality vs. gold (figure recall, overlap, length)
   compendium_docx.py      Lease Abstract Compendium deliverable (Word .docx)
+  returns_model.py        co-tenancy + development-returns engine (tie-out validated)
+  returns_xlsx.py         Co-Tenancy & Returns Model deliverable (live Excel)
   validate.py             tie-out vs. gold warehouse
   data/          (gitignored)  built + gold warehouses — never committed
   source_docs/   (gitignored)  lease .docx + exhibits — re-run locally, never leave device
@@ -71,6 +73,27 @@ provision grouped by Article, each shown as a heading + a three-row table
 machine-generated, the document is labeled an **automated first draft for internal
 review — not attorney work product**. Pass `--engine gold` to render the reference
 abstracts instead of the local ones.
+
+## Deliverable — Co-Tenancy & Returns Model (Phase 2)
+
+`returns_model.py` is the calc engine (tenant roster + Brama's TPC uses + key
+figures) computing the §1.6/§1.7 **co-tenancy** test (occupancy vs. 65%, across
+vacancy scenarios) and the DHOS **development returns** (Yield-on-Cost all-in vs.
+cash basis, exit-cap value sensitivity). `validate()` ties every headline number to
+the partner's model (base occupancy 65.49%, YoC 5.66%/6.58%, TPC $41.35M).
+
+`returns_xlsx.py` renders a **live, formula-driven** five-sheet workbook (README ·
+Dashboard · Returns · Scenarios · Tenant Roster) — blue cells are inputs, black are
+formulas; toggle a tenant vacant and the co-tenancy test recomputes. Zero formula
+errors (verified via recalc).
+
+```bash
+python returns_model.py                                   # print + tie-out check
+python returns_xlsx.py --out Southtown_CoTenancy_and_Returns_Model.xlsx
+```
+
+Inputs are currently transcribed from source (rent roll 5/31/26 + Brama proforma);
+local extraction of the rent roll / proforma is the next layer.
 
 ## Security posture
 
