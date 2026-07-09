@@ -71,3 +71,8 @@ test_*.db
 barrington_db/source_docs/
 barrington_db/data/
 barrington_db/*.xlsx
+
+# Southtown lease-abstraction warehouse — local-only (source docs + text-laden DBs never leave device)
+southtown_db/data/
+southtown_db/source_docs/
+southtown_db/**/*.db
