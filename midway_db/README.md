@@ -44,8 +44,17 @@ instrument — validated against the 73 gold facts.
 
 - **P0 (this) — consolidate + scaffold.** Canonical project, ported `schema.sql`,
   gold DB staged for tie-out, source docs gitignored.
-- **P1 — document ingestion + OCR.** Tenant PDFs → text (digital where possible,
-  OCR where scanned), registered like `lease_document_file`.
+- **P1 (done) — document ingestion + OCR** (`ingest.py`). Registers each tenant PDF
+  in `lease_document_file` (tenant from folder, `doc_role` from filename, text-layer
+  probe) and extracts text — digital via **PyMuPDF**, scanned via **RapidOCR** (ONNX,
+  no system Tesseract/poppler). Pip-only. Verified: 8 tenants, 24 files, 9 digital /
+  15 scanned; OCR pulls clean text from scanned estoppels/SNDAs.
+
+  ```bash
+  pip install pymupdf rapidocr-onnxruntime pdfplumber
+  python ingest.py --no-ocr     # fast: digital text only, register scanned as needs_ocr
+  python ingest.py              # full: OCR the scanned docs too (a few minutes)
+  ```
 - **P2 — structured abstraction.** Local model → `lease_abstract` facts, validated
   vs. the 73 gold facts.
 - **P3 — diligence layer.** Missing-document tracker, due-diligence items,
