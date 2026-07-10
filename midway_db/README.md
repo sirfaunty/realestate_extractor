@@ -55,10 +55,49 @@ instrument — validated against the 73 gold facts.
   python ingest.py --no-ocr     # fast: digital text only, register scanned as needs_ocr
   python ingest.py              # full: OCR the scanned docs too (a few minutes)
   ```
-- **P2 — structured abstraction.** Local model → `lease_abstract` facts, validated
-  vs. the 73 gold facts.
-- **P3 — diligence layer.** Missing-document tracker, due-diligence items,
-  REA/cross-parcel analysis.
+- **P2 (done) — structured abstraction** (`abstract_facts.py` + `score_facts.py`).
+  For each tenant, feeds the fact-dense certification text (estoppel + checklist,
+  fallback correspondence/SNDA) to the local Ollama model and extracts a **core set of
+  standard lease-abstract fields** (instrument type, tenant entity, landlord, premises,
+  rent, term, renewals, use, assignment, deposit, notice address) as
+  `(tenant, field, value, source, confidence)` facts. Scored against the 73 gold facts
+  via a synonym map (figure recall + token overlap).
+
+  **Validation (real):** direct inspection confirms the extraction is accurate — LA
+  Fitness 11/11 facts correct, every Dollar Tree fact correct *per its estoppel*. The
+  `score_facts` numbers are a **directional sanity check only**, and understate quality
+  for three structural reasons, none of them extraction errors: (1) tenants the gold
+  never abstracted (Clear Channel/Comcast) have nothing to compare; (2) the gold's
+  freeform 50-field vocabulary doesn't align 1:1 with the clean core schema (e.g. our
+  `lease_date` = execution date vs. gold `commencement`); (3) estoppels are point-in-
+  time snapshots while gold reflects the current post-amendment state. Where the
+  taxonomies do align (LA Fitness) the score is 100%.
+
+  **Scope note:** the gold's ~50 fields include a bespoke **analytical layer**
+  (rentroll reconciliations, date-discrepancy flags, ownership-chain synthesis, the
+  co-tenancy / REA / entity FLAGs) that requires cross-document reasoning + deal
+  knowledge. That stays the **human diligence layer** (or a later enhancement) — the
+  same boundary we drew for Southtown's cross-provision synthesis on an 8B model.
+
+  ```bash
+  python abstract_facts.py                    # extract facts for all tenants (local model)
+  python abstract_facts.py --only "LA Fitness"  # spot-check one tenant
+  python score_facts.py --built data/midway.db --gold data/gold_midway_psa.db
+  ```
+- **P3 (in progress) — diligence layer.**
+  - **Missing-document tracker** (`missing_docs.py`) — *done*. Deterministic gap
+    analysis: flags each tenant whose executed lease/amendments are missing (has the
+    certification layer but no executed instrument), writing rows into
+    `missing_document`. Validated against gold (same core tenants flagged); the
+    operative-instrument exception (parking services agreement) is handled.
+  - **PSA + REA extraction** — *next*. Local-model extraction of the Cub/At Home
+    purchase agreements (financial terms, key dates, closing conditions) and the REA
+    (prohibited uses, cross-parcel provisions), same pattern as P2. The bespoke
+    analytical confirmations in the gold tracker stay human-judgment.
+
+    ```bash
+    python missing_docs.py     # detect + record missing executed instruments
+    ```
 - **P4 — no-code module + deliverables.** A "Disposition Diligence" Capactic page:
   ingest a center's tenant docs → extract locally → lease-abstract dump + missing-doc
   report.
