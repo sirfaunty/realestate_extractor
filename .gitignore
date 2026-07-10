@@ -80,3 +80,8 @@ lease_abstraction_db/**/*.docx
 lease_abstraction_db/_preview*
 lease_abstraction_db/**/*.xlsx
 lease_abstraction_db/_rpv*
+
+# Center D disposition-diligence — local-only (source docs + text-laden DBs never leave device)
+disposition_diligence_db/data/
+disposition_diligence_db/source_docs/
+disposition_diligence_db/**/*.db
