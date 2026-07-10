@@ -75,23 +75,25 @@ def _ocr_page(page):
 
 
 def extract_pdf(path, limit_pages=None, ocr=True):
-    """Return (text, pages, has_text_layer, used_ocr). If ocr=False, scanned files
-    are registered (needs_ocr) but not OCR'd — a fast digital-only pass."""
+    """Per-page extraction: use the digital text layer where a page has one, OCR only
+    the pages that don't. Returns (text, pages, has_text_layer, used_ocr, needs_ocr).
+    With ocr=False, text-less pages are skipped and the file is flagged needs_ocr."""
     import fitz
     doc = fitz.open(path)
     pages = doc.page_count
-    probe = "".join(doc[i].get_text() for i in range(min(pages, 3))).strip()
-    has_text = len(probe) >= _TEXT_LAYER_MIN
-    if not has_text and not ocr:
-        doc.close()
-        return "", pages, False, False       # deferred: needs_ocr, not extracted
-    out = []
     n = pages if limit_pages is None else min(pages, limit_pages)
+    out, any_text, any_ocr, pending = [], False, False, False
     for i in range(n):
         page = doc[i]
-        out.append(page.get_text() if has_text else _ocr_page(page))
+        t = page.get_text().strip()
+        if len(t) >= 20:
+            out.append(t); any_text = True
+        elif ocr:
+            out.append(_ocr_page(page)); any_ocr = True
+        else:
+            pending = True
     doc.close()
-    return "\n".join(out), pages, has_text, (not has_text)
+    return "\n".join(out), pages, any_text, any_ocr, (any_ocr or pending)
 
 
 def run(src=DEFAULT_SRC, db_path=DEFAULT_DB, text_dir=DEFAULT_TEXT, limit_pages=None, ocr=True):
@@ -120,11 +122,11 @@ def run(src=DEFAULT_SRC, db_path=DEFAULT_DB, text_dir=DEFAULT_TEXT, limit_pages=
         tid = tenants[tname]
         role = _classify(os.path.basename(path))
         try:
-            text, pages, has_text, used_ocr = extract_pdf(path, limit_pages, ocr=ocr)
+            text, pages, has_text, used_ocr, needs_ocr = extract_pdf(path, limit_pages, ocr=ocr)
         except Exception as e:
             print(f"  ! {rel[:55]}: {str(e)[:50]}")
             continue
-        extracted = int(has_text or used_ocr)
+        extracted = int(bool(text))
         text_path = None
         if text:
             tp = os.path.join(text_dir, folder, os.path.basename(path) + ".txt")
@@ -138,10 +140,11 @@ def run(src=DEFAULT_SRC, db_path=DEFAULT_DB, text_dir=DEFAULT_TEXT, limit_pages=
                   needs_ocr, extracted, text_path)
                VALUES(?,?,?,?,?,?,?,?,?)""",
             (tid, rel, role, os.path.getsize(path), pages, int(has_text),
-             int(not has_text), extracted, text_path))
+             int(needs_ocr), extracted, text_path))
         n_ocr += used_ocr
-        n_digital += has_text
-        status = "OCR " if used_ocr else ("text" if has_text else "defer")
+        n_digital += (has_text and not used_ocr)
+        status = "mix " if (has_text and used_ocr) else ("OCR " if used_ocr
+                 else ("text" if has_text else "defer"))
         print(f"  {status}  {role:26} {len(text):>6}c  {rel[:48]}", flush=True)
     con.commit()
     con.close()
