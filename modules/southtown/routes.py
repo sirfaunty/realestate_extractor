@@ -214,6 +214,7 @@ def api_generate_returns():
             'yoc_all_in': y['all_in']['yoc'], 'yoc_cash': y['cash']['yoc'],
             'tpc': RM.total_project_cost(),
             'tie_out_pass': all(ok for *_, ok in checks), 'tie_out_n': len(checks),
+            'roster_source': RM.ROSTER_SOURCE, 'uses_source': RM.USES_SOURCE,
             'scenarios': [{'name': s['name'], 'occ': s['occupancy'], 'pass': s['pass']}
                           for s in ct],
             'xlsx_name': os.path.basename(out),

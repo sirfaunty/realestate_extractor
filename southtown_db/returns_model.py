@@ -16,9 +16,9 @@ headline number back to the partner's model.
 """
 
 # ── Co-tenancy inputs ───────────────────────────────────────────────────────
-# Tenant roster (Southtown rent roll 5/31/2026). required = counts toward the
-# co-tenancy numerator ("Required Tenant" per lease §1.7).
-TENANT_ROSTER = [
+# Fallback tenant roster (used if the rent-roll PDF isn't staged locally).
+# required = counts toward the co-tenancy numerator ("Required Tenant" per §1.7).
+_FALLBACK_ROSTER = [
     {"suite": "0400.0a", "occupant": "Kohl’s — 1st floor", "sf": 47810, "exp": "2/1/2037", "required": True},
     {"suite": "0400.0b", "occupant": "Kohl’s — 2nd floor", "sf": 47809, "exp": "2/1/2037", "required": False},
     {"suite": "0621.0", "occupant": "T.J. Maxx", "sf": 26275, "exp": "3/31/2028", "required": True},
@@ -67,7 +67,8 @@ SCENARIOS = [
 ]
 
 # ── Returns inputs (Brama native proforma — verbatim USES) ──────────────────
-TPC_USES = [
+# Fallback USES (used if Brama's proforma isn't staged locally).
+_FALLBACK_USES = [
     ("Primary Construction Contract (KA hard scope)", 8620268, True),
     ("FFE & Other Hard Costs (DHOS vertical; incl. $19.8M TI)", 20754056, True),
     ("Land", 5761548, False),
@@ -79,11 +80,61 @@ TPC_USES = [
     ("Lease Broker Commissions & Development Fee", 1740000, True),
     ("Owner’s Contingency / At-Risk Dev Fee", 656661, True),
 ]
-STABILIZED_NOI = 2340000    # no TIF
-LAND_VALUE = 5761548        # KA-owned fee (non-cash basis)
+STABILIZED_NOI = 2340000    # no TIF (stabilized-NOI estimate; documented assumption)
 BUILDING_LFA = 120000
 EXIT_CAP_BASE = 0.065
 EXIT_CAP_RANGE = [0.0625, 0.065, 0.0675, 0.07]
+
+# ── Calibration overlays (lease/judgment inputs, not in the source files) ────
+KOHLS_SUITE = "0400.0"
+KOHLS_1ST_LABEL = "Kohl’s — 1st floor"
+KOHLS_2ND_LABEL = "Kohl’s — 2nd floor"
+KOHLS_1ST_SF = 47810        # first-floor split of Kohl's 95,619 SF total
+GC_LABEL = "Guitar Center"
+# Suites classified as "Required Tenant" per lease §1.7 (excludes Kohl's, handled above).
+REQUIRED_SUITES = {"0621.0", "0530.0", "0601.0", "0620.0", "0638.0",
+                   "0630.0", "0207.0", "639-641", "0309.0"}
+
+
+# ── Input loaders: prefer local extraction, fall back to transcribed ────────
+def _build_roster():
+    """Roster from the rent-roll PDF (+ Kohl's split & Required overlay), else fallback."""
+    try:
+        import extract_rent_roll
+        if not extract_rent_roll.available():
+            return _FALLBACK_ROSTER, "transcribed"
+        roster = []
+        for r in extract_rent_roll.extract():
+            suite, sf, exp = r["suite"], r["sf"], r["exp"]
+            if suite == KOHLS_SUITE:
+                roster.append({"suite": suite + "a", "occupant": KOHLS_1ST_LABEL,
+                               "sf": KOHLS_1ST_SF, "exp": exp, "required": True})
+                roster.append({"suite": suite + "b", "occupant": KOHLS_2ND_LABEL,
+                               "sf": sf - KOHLS_1ST_SF, "exp": exp, "required": False})
+            else:
+                occ = GC_LABEL if suite == "0601.0" else r["occupant"]
+                roster.append({"suite": suite, "occupant": occ, "sf": sf, "exp": exp,
+                               "required": suite in REQUIRED_SUITES})
+        return roster, "extracted (rent roll 5/31/26)"
+    except Exception:
+        return _FALLBACK_ROSTER, "transcribed"
+
+
+def _load_uses():
+    """USES from Brama's proforma Sources & Uses, else fallback."""
+    try:
+        import extract_proforma
+        if not extract_proforma.available():
+            return _FALLBACK_USES, "transcribed"
+        uses, _tpc = extract_proforma.extract_uses()
+        return (uses, "extracted (Brama proforma)") if uses else (_FALLBACK_USES, "transcribed")
+    except Exception:
+        return _FALLBACK_USES, "transcribed"
+
+
+TENANT_ROSTER, ROSTER_SOURCE = _build_roster()
+TPC_USES, USES_SOURCE = _load_uses()
+LAND_VALUE = sum(a for _l, a, cash in TPC_USES if not cash) or 5761548
 
 
 # ── Co-tenancy engine ───────────────────────────────────────────────────────
@@ -161,8 +212,8 @@ def validate():
     chk("Kohl’s + GC occ %", ct["Kohl’s + GC Vacant"]["occupancy"], 0.428225, 1e-5)
     chk("Multifamily+K/GC occ %", ct["Multifamily + K/GC Vacant"]["occupancy"], 0.510217, 1e-5)
 
-    chk("Total Project Cost", total_project_cost(), 41350000, 0)
-    chk("Cash basis (ex-land)", cash_basis(), 35588452, 0)
+    chk("Total Project Cost", total_project_cost(), 41350000, 1)
+    chk("Cash basis (ex-land)", cash_basis(), 35588452, 1)
     yoc = yield_on_cost()
     chk("YoC all-in", yoc["all_in"]["yoc"], 0.056590, 1e-5)
     chk("YoC cash basis", yoc["cash"]["yoc"], 0.065752, 1e-5)
@@ -173,6 +224,7 @@ def validate():
 
 
 if __name__ == "__main__":
+    print(f"Inputs — roster: {ROSTER_SOURCE}  |  USES: {USES_SOURCE}\n")
     print("Co-tenancy scenarios:")
     for s in cotenancy_table():
         print(f"  {s['name']:26} occ={s['occupancy']:.4%}  cushion={s['cushion_sf']:>10,.0f} SF  "

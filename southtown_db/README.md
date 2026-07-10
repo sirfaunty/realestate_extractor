@@ -41,6 +41,8 @@ southtown_db/
   compendium_docx.py      Lease Abstract Compendium deliverable (Word .docx)
   returns_model.py        co-tenancy + development-returns engine (tie-out validated)
   returns_xlsx.py         Co-Tenancy & Returns Model deliverable (live Excel)
+  extract_rent_roll.py    rent-roll PDF -> tenant roster (local)
+  extract_proforma.py     Brama proforma -> TPC USES (local)
   validate.py             tie-out vs. gold warehouse
   data/          (gitignored)  built + gold warehouses — never committed
   source_docs/   (gitignored)  lease .docx + exhibits — re-run locally, never leave device
@@ -92,8 +94,21 @@ python returns_model.py                                   # print + tie-out chec
 python returns_xlsx.py --out Southtown_CoTenancy_and_Returns_Model.xlsx
 ```
 
-Inputs are currently transcribed from source (rent roll 5/31/26 + Brama proforma);
-local extraction of the rent roll / proforma is the next layer.
+The model is **source-driven**: `returns_model` builds the tenant roster from the
+rent-roll PDF (`extract_rent_roll.py`) and the TPC USES from Brama's proforma
+Sources & Uses sheet (`extract_proforma.py`) when those files are staged locally in
+`source_docs/returns/`, and falls back to transcribed constants otherwise. Extracted
+inputs tie out to the same headline numbers (qualifying SF 184,432; TPC $41.35M).
+
+Two calibration overlays are applied in `returns_model` (lease/judgment inputs, not
+present in the source files): the Kohl's first/second-floor SF split (47,810 of
+95,619) and the "Required Tenant" classification per lease §1.7.
+
+```bash
+python extract_rent_roll.py    # preview the parsed roster
+python extract_proforma.py     # preview the parsed USES
+python returns_model.py        # prints roster/USES source + full tie-out
+```
 
 ## Security posture
 
