@@ -80,3 +80,8 @@ southtown_db/**/*.docx
 southtown_db/_preview*
 southtown_db/**/*.xlsx
 southtown_db/_rpv*
+
+# Midway disposition-diligence — local-only (source docs + text-laden DBs never leave device)
+midway_db/data/
+midway_db/source_docs/
+midway_db/**/*.db
