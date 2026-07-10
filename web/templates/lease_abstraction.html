@@ -109,6 +109,7 @@
       <table class="st-table"><thead><tr><th>Scenario</th><th>Occupancy</th><th>Result</th></tr></thead>
         <tbody id="ret-scenarios"></tbody></table>
       <div class="st-note" id="ret-tieout" style="margin-top:10px;"></div>
+      <div class="st-note" id="ret-source" style="display:none;margin-top:4px;"></div>
     </div>
   </div>
 </div>
@@ -222,6 +223,10 @@ function renderReturns(s) {
   $('ret-tieout').textContent = s.tie_out_pass
     ? `Tie-out: all ${s.tie_out_n} checks pass against the source model ✓`
     : 'Tie-out: review needed';
+  if (s.roster_source || s.uses_source) {
+    $('ret-source').style.display = 'block';
+    $('ret-source').textContent = `Inputs — roster: ${s.roster_source || 'n/a'} · USES: ${s.uses_source || 'n/a'}`;
+  }
 }
 
 $('ret-btn').addEventListener('click', () => {
