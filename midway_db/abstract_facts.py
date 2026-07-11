@@ -35,7 +35,9 @@ DEFAULT_DB = os.path.join(_HERE, "data", "midway.db")
 
 # Core field schema: field -> guidance shown to the model.
 CORE_FIELDS = {
-    "instrument_type": "Lease, Ground Lease, License, or Services Agreement",
+    "instrument_type": ("the instrument type — use 'Ground Lease' ONLY if the document "
+                        "explicitly calls it a ground or land lease; a normal in-line/space "
+                        "lease is just 'Lease'. Other types: 'License', 'Services Agreement'"),
     "tenant_entity": "the tenant's full legal entity name (with state/type if given)",
     "landlord": "the current landlord named in the estoppel/certification",
     "premises_address": "street address and/or suite of the demised premises",
@@ -56,6 +58,11 @@ _ROLE_PRIORITY = ["estoppel", "checklist_ner", "snda", "tenant_approval_sos",
                   "parking_services_agreement", "vendor_setup_packet",
                   "sale_letter", "correspondence"]
 _PER_DOC_CHARS = 7000    # cap any single doc so it can't crowd out the others
+# A tenant needs at least one of these to be abstracted; correspondence/sale_letter
+# alone is too thin and the model hallucinates lease facts from it (Clear Channel,
+# Comcast). These are triaged, not abstracted — matching the partner's own handling.
+SUBSTANTIVE_ROLES = {"estoppel", "checklist_ner", "snda", "tenant_approval_sos",
+                     "parking_services_agreement", "vendor_setup_packet"}
 
 SYSTEM_PROMPT = (
     "You are a commercial real-estate lease analyst extracting structured facts from a "
@@ -134,6 +141,11 @@ def _gather_text(con, tenant_id):
 
 
 def abstract_tenant(con, tenant_id, model=OLLAMA_MODEL):
+    roles = {r[0] for r in con.execute(
+        "SELECT DISTINCT doc_role FROM lease_document_file WHERE tenant_id=? AND extracted=1",
+        (tenant_id,))}
+    if not (roles & SUBSTANTIVE_ROLES):
+        return 0    # correspondence-only: triage, don't abstract (avoids hallucination)
     text = _gather_text(con, tenant_id)
     if not text:
         return 0
@@ -171,6 +183,9 @@ def run(db_path=DEFAULT_DB, only=None, model=OLLAMA_MODEL):
         q += " WHERE name LIKE ?"
         params = [f"%{only}%"]
     tenants = con.execute(q + " ORDER BY tenant_id", params).fetchall()
+    if not only:
+        con.execute("DELETE FROM lease_abstract WHERE source_page LIKE '[%'")  # clean slate
+        con.commit()
     print(f"Abstracting {len(tenants)} tenant(s) with {model}")
     total = 0
     for tid, name in tenants:

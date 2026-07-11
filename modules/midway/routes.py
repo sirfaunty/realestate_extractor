@@ -83,18 +83,26 @@ def _run_generate(job_id, force):
 
     try:
         import diligence_report
+        warnings = []
         if force or not os.path.exists(_WAREHOUSE):
             import ingest, abstract_facts, missing_docs, extract_psa, extract_rea
             step('ingesting', 'OCR + registering tenant documents (this can take minutes)…')
-            ingest.run()
-            step('abstracting', 'Extracting lease-abstract facts with the local model…')
-            abstract_facts.run()
-            step('diligence', 'Detecting missing documents…')
-            missing_docs.run()
-            step('psa', 'Extracting PSA deal economics…')
-            extract_psa.run()
-            step('rea', 'Extracting REA prohibited uses…')
-            extract_rea.run()
+            ingest.run()   # foundation — a failure here is fatal
+            # The rest each add to the warehouse; degrade gracefully if one fails so the
+            # report still builds from what succeeded.
+            for label, detail, fn in [
+                ('abstracting', 'Extracting lease-abstract facts with the local model…',
+                 abstract_facts.run),
+                ('diligence', 'Detecting missing documents…', missing_docs.run),
+                ('psa', 'Extracting PSA deal economics…', extract_psa.run),
+                ('rea', 'Extracting REA prohibited uses…', extract_rea.run),
+            ]:
+                step(label, detail)
+                try:
+                    fn()
+                except Exception as e:      # noqa: BLE001
+                    logger.exception('Midway %s step failed', label)
+                    warnings.append(f'{label}: {str(e)[:100]}')
 
         if not os.path.exists(_WAREHOUSE):
             raise RuntimeError('No warehouse found. Run the extraction pipeline first '
@@ -108,6 +116,8 @@ def _run_generate(job_id, force):
         summary = _summary() or {}
         summary['generated_at'] = datetime.datetime.now().isoformat(timespec='seconds')
         summary['docx_name'] = os.path.basename(out)
+        if warnings:
+            summary['warnings'] = warnings
         job.update(status='done', step='complete', detail='Report ready.', summary=summary)
         _LATEST['docx'] = out
         _LATEST['summary'] = summary
