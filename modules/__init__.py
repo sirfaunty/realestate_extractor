@@ -30,6 +30,7 @@ INSTALLED_MODULES = [
     'modules.partnership_dashboard',
     'modules.portfolio_cashflow',
     'modules.lease_abstraction',
+    'modules.disposition_diligence',
 ]
 
 
