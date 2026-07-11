@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Disposition Diligence — capactive{% endblock %}
+
+{% block content %}
+<style>
+.mw-root { --mw-primary:#1F3A5F; --mw-accent:#185FA5; --mw-ink:#1A1A2E; --mw-cloud:#EEF3F8;
+  --mw-line:#E3E8EF; --mw-bad:#C8102E; max-width:1100px; color:var(--mw-ink); }
+.mw-root h1 { font-size:22px; margin:0 0 4px; }
+.mw-sub { color:#5B6472; margin:0 0 16px; font-size:14px; }
+.mw-banner { background:#FCEEF0; color:#8C1020; border:1px solid #F3C6CC; border-radius:8px;
+  padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
+.mw-card { background:#fff; border:1px solid var(--mw-line); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+.mw-card h2 { font-size:15px; margin:0 0 14px; }
+.mw-row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+.mw-check { display:flex; align-items:center; gap:7px; font-size:13px; color:#3A4655; }
+.mw-btn { background:var(--mw-primary); color:#fff; border:none; border-radius:8px; padding:11px 20px;
+  font-size:14px; font-weight:600; cursor:pointer; }
+.mw-btn:disabled { opacity:.55; cursor:not-allowed; }
+.mw-note { font-size:12px; color:#7A8494; margin-top:10px; }
+.mw-progress { display:none; align-items:center; gap:12px; font-size:14px; color:#3A4655; margin-top:14px; }
+.mw-spin { width:18px; height:18px; border:2.5px solid #D7E3F2; border-top-color:var(--mw-primary);
+  border-radius:50%; animation:mwspin .8s linear infinite; }
+@keyframes mwspin { to { transform:rotate(360deg); } }
+.mw-kpis { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px; }
+.mw-kpi { background:var(--mw-cloud); border-radius:9px; padding:12px 16px; min-width:130px; }
+.mw-kpi .v { font-size:20px; font-weight:700; color:var(--mw-primary); }
+.mw-kpi .v.flag { color:var(--mw-bad); }
+.mw-kpi .l { font-size:12px; color:#5B6472; margin-top:2px; }
+.mw-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+.mw-table th { text-align:left; background:#F4F8FD; padding:8px 10px; border-bottom:1px solid var(--mw-line); font-weight:600; }
+.mw-table td { padding:7px 10px; border-bottom:1px solid #F0F3F7; }
+.mw-err { display:none; background:#FDEAEA; color:#9B1C1C; border:1px solid #F5C2C2;
+  border-radius:8px; padding:12px 14px; font-size:13px; white-space:pre-wrap; margin-top:14px; }
+</style>
+
+<div class="mw-root">
+  <h1>Disposition Diligence</h1>
+  <p class="mw-sub">Midway Marketplace — partial sale to GSC RE Holdings (H Mart affiliate).
+    Tenant certification documents are OCR'd and abstracted on-device into a diligence
+    database, and rolled up into a Word report. Nothing leaves the device.</p>
+
+  <div class="mw-banner">Abstracts are machine-generated from the <strong>certification layer</strong>
+    (estoppels, SNDAs, checklists) — not executed leases — and are a <strong>first draft for
+    review</strong>, not legal advice.</div>
+
+  <div class="mw-card">
+    <h2>1 · Generate the diligence report</h2>
+    <div class="mw-row">
+      <button class="mw-btn" id="gen-btn">Generate Report</button>
+      <label class="mw-check"><input type="checkbox" id="force-check"> Re-run full extraction (OCR — slow)</label>
+    </div>
+    <div class="mw-note">The report builds from the existing warehouse in seconds. Tick “re-run
+      full extraction” to OCR and re-abstract every document first (several minutes).</div>
+    <div class="mw-progress" id="progress"><div class="mw-spin"></div><span id="progress-text">Working…</span></div>
+    <div class="mw-err" id="error-box"></div>
+  </div>
+
+  <div class="mw-card" id="summary-card">
+    <h2>2 · Diligence summary</h2>
+    <div class="mw-row" style="margin-bottom:14px;">
+      <a class="mw-btn" id="download-btn" href="/midway/api/download">⬇ Download Word report</a>
+      <span style="font-size:12px;color:#5B6472;" id="gen-meta"></span>
+    </div>
+    <div class="mw-kpis" id="kpis"></div>
+    <h2 style="margin-top:18px;">The sale</h2>
+    <table class="mw-table"><thead><tr><th>Agreement</th><th>Purchase price</th></tr></thead>
+      <tbody id="deals-body"></tbody></table>
+    <h2 style="margin-top:18px;">Missing executed documents</h2>
+    <table class="mw-table"><thead><tr><th>Item</th><th>Priority</th></tr></thead>
+      <tbody id="missing-body"></tbody></table>
+  </div>
+</div>
+
+<script>
+const SUMMARY = {{ summary|tojson }};
+const $ = (id) => document.getElementById(id);
+
+function render(s) {
+  if (!s || !Object.keys(s).length) { $('summary-card').style.display = 'none'; return; }
+  $('summary-card').style.display = 'block';
+  $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
+  $('kpis').innerHTML = [
+    [s.tenants_abstracted, 'Tenants abstracted', false],
+    [s.facts, 'Lease facts', false],
+    [s.rea_prohibited, 'REA prohibited uses', false],
+    [s.rea_grocery_flag, 'Grocery-use flags', (s.rea_grocery_flag > 0)],
+  ].map(([v, l, flag]) => `<div class="mw-kpi"><div class="v ${flag ? 'flag' : ''}">${v == null ? '—' : v}</div><div class="l">${l}</div></div>`).join('');
+  $('deals-body').innerHTML = (s.deals || []).map(d =>
+    `<tr><td>${d.label || ''}</td><td>${d.price || '—'}</td></tr>`).join('') || '<tr><td colspan=2>—</td></tr>';
+  $('missing-body').innerHTML = (s.missing || []).map(m =>
+    `<tr><td>${m.item || ''}</td><td>${m.priority || ''}</td></tr>`).join('') || '<tr><td colspan=2>None</td></tr>';
+}
+
+let pollTimer = null;
+function poll(jobId) {
+  fetch('/midway/api/status/' + jobId).then(r => r.json()).then(j => {
+    if (j.status === 'running') {
+      $('progress-text').textContent = j.detail || j.step || 'Working…';
+      pollTimer = setTimeout(() => poll(jobId), 1500);
+    } else if (j.status === 'done') {
+      $('progress').style.display = 'none'; $('gen-btn').disabled = false;
+      render(j.summary);
+      $('summary-card').scrollIntoView({ behavior: 'smooth' });
+    } else if (j.status === 'error') {
+      $('progress').style.display = 'none'; $('gen-btn').disabled = false;
+      const e = $('error-box'); e.style.display = 'block';
+      e.textContent = 'Generation failed:\n' + (j.error || 'Unknown error');
+    }
+  }).catch(() => { pollTimer = setTimeout(() => poll(jobId), 2000); });
+}
+
+$('gen-btn').addEventListener('click', () => {
+  $('error-box').style.display = 'none';
+  $('gen-btn').disabled = true;
+  $('progress').style.display = 'flex';
+  $('progress-text').textContent = 'Starting…';
+  fetch('/midway/api/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: $('force-check').checked }),
+  }).then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => { if (!ok) throw new Error(j.error || 'Failed to start'); poll(j.job_id); })
+    .catch(err => {
+      $('progress').style.display = 'none'; $('gen-btn').disabled = false;
+      const e = $('error-box'); e.style.display = 'block'; e.textContent = err.message;
+    });
+});
+
+render(SUMMARY);
+</script>
+{% endblock %}

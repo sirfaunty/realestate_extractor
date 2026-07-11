@@ -129,6 +129,11 @@
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2h5l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 2v4h4M6 9h4M6 11.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </span> Lease Abstraction
             </a></li>
+            <li><a href="/midway" class="{% if request.endpoint and request.endpoint.startswith('midway.') %}active{% endif %}">
+                <span class="icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2.5h7l3 3v8a1 1 0 01-1 1H3a1 1 0 01-1-1v-10a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 8.5h4M6 11h4M6 6h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </span> Disposition Diligence
+            </a></li>
         </ul>
 
         {% if current_user and current_user.role == 'admin' %}

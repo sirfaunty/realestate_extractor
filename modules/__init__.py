@@ -30,6 +30,7 @@ INSTALLED_MODULES = [
     'modules.partnership_dashboard',
     'modules.barrington',
     'modules.southtown',
+    'modules.midway',
 ]
 
 
