@@ -40,7 +40,7 @@ class Center DModule(AbstractModule):
     def get_nav_items(self):
         return [{
             'label': 'Disposition Diligence',
-            'url': '/disposition_diligence',
+            'url': '/disposition-diligence',
             'icon': 'document',
             'section': 'analytics',
         }]

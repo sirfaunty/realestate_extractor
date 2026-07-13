@@ -26,7 +26,7 @@ _REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
 if _ST_ROOT not in sys.path:
     sys.path.insert(0, _ST_ROOT)
 
-lease_abstraction_bp = Blueprint('lease_abstraction', __name__, url_prefix='/lease_abstraction')
+lease_abstraction_bp = Blueprint('lease_abstraction', __name__, url_prefix='/lease-abstraction')
 
 _JOBS = {}
 _LATEST = {}   # slug -> {'docx','summary','returns','returns_summary'}

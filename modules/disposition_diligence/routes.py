@@ -29,7 +29,7 @@ _REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
 if _CENTER_D_ROOT not in sys.path:
     sys.path.insert(0, _CENTER_D_ROOT)
 
-disposition_diligence_bp = Blueprint('disposition_diligence', __name__, url_prefix='/disposition_diligence')
+disposition_diligence_bp = Blueprint('disposition_diligence', __name__, url_prefix='/disposition-diligence')
 
 _JOBS = {}
 _LATEST = {}   # slug -> {'docx': path, 'summary': {...}}

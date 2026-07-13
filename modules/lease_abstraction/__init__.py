@@ -40,7 +40,7 @@ class Center CModule(AbstractModule):
     def get_nav_items(self):
         return [{
             'label': 'Lease Abstraction',
-            'url': '/lease_abstraction',
+            'url': '/lease-abstraction',
             'icon': 'document',
             'section': 'analytics',
         }]
