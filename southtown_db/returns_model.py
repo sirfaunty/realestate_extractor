@@ -132,6 +132,28 @@ def _load_uses():
         return _FALLBACK_USES, "transcribed"
 
 
+def _reload():
+    global TENANT_ROSTER, ROSTER_SOURCE, TPC_USES, USES_SOURCE, LAND_VALUE
+    TENANT_ROSTER, ROSTER_SOURCE = _build_roster()
+    TPC_USES, USES_SOURCE = _load_uses()
+    LAND_VALUE = sum(a for _l, a, cash in TPC_USES if not cash) or 5761548
+
+
+def configure(returns_dir):
+    """Point the extractors at a specific deal's returns folder (a dir containing the
+    rent-roll PDF + proforma xlsx) and recompute the roster/USES. Enables per-property
+    use from the module. Discovers the first *.pdf / *.xlsx in the folder."""
+    import os
+    import glob
+    import extract_rent_roll
+    import extract_proforma
+    pdfs = sorted(glob.glob(os.path.join(returns_dir, "*.pdf")))
+    xlsxs = sorted(glob.glob(os.path.join(returns_dir, "*.xlsx")))
+    extract_rent_roll.DEFAULT_PDF = pdfs[0] if pdfs else os.path.join(returns_dir, "_none.pdf")
+    extract_proforma.DEFAULT_XLSX = xlsxs[0] if xlsxs else os.path.join(returns_dir, "_none.xlsx")
+    _reload()
+
+
 TENANT_ROSTER, ROSTER_SOURCE = _build_roster()
 TPC_USES, USES_SOURCE = _load_uses()
 LAND_VALUE = sum(a for _l, a, cash in TPC_USES if not cash) or 5761548

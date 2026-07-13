@@ -53,8 +53,12 @@
     against the source lease. Not attorney work product.</div>
 
   <div class="st-card">
-    <h2>1 · Select a lease</h2>
+    <h2>1 · Select property &amp; lease</h2>
     <div class="st-row">
+      <div class="st-field">
+        <label for="prop-select">Property</label>
+        <select id="prop-select"><option>Loading…</option></select>
+      </div>
       <div class="st-field">
         <label for="lease-select">Lease document</label>
         <select id="lease-select"><option>Loading…</option></select>
@@ -115,14 +119,15 @@
 </div>
 
 <script>
-const LATEST = {{ latest|tojson }};
-const LATEST_RET = {{ latest_returns|tojson }};
+const PROPERTIES = {{ properties|tojson }};
 const $ = (id) => document.getElementById(id);
+const currentSlug = () => $('prop-select').value;
 const TIER_LABEL = { detailed: 'Detailed', detailed_summary: 'Detailed Summary', abstract_summary: 'Abstract Summary' };
 
 function renderSummary(s) {
   if (!s) return;
   $('results').style.display = 'block';
+  $('download-btn').href = '/southtown/api/download?slug=' + encodeURIComponent(s.slug || currentSlug());
   $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at + ' · ' + (s.model || '')) : '';
   $('kpis').innerHTML = [
     [s.provisions, 'Provisions'],
@@ -148,15 +153,29 @@ function renderSummary(s) {
   }
 }
 
-fetch('/southtown/api/leases').then(r => r.json()).then(list => {
+function loadLeases() {
+  const slug = currentSlug();
   const sel = $('lease-select');
-  if (!Array.isArray(list) || !list.length) {
-    sel.innerHTML = '<option value="">No lease documents found on this device</option>';
-    return;
-  }
-  sel.innerHTML = list.map(d =>
-    `<option value="${d.path}">${d.name}${d.is_exhibits ? ' (exhibits)' : ''}</option>`).join('');
-}).catch(() => { $('lease-select').innerHTML = '<option value="">Error loading leases</option>'; });
+  $('results').style.display = 'none';
+  $('ret-results').style.display = 'none';
+  if (!slug) { sel.innerHTML = '<option value="">—</option>'; return; }
+  fetch('/southtown/api/leases?slug=' + encodeURIComponent(slug)).then(r => r.json()).then(list => {
+    if (!Array.isArray(list) || !list.length) {
+      sel.innerHTML = '<option value="">No lease documents found for this property</option>';
+      return;
+    }
+    sel.innerHTML = list.map(d =>
+      `<option value="${d.path}">${d.name}${d.is_exhibits ? ' (exhibits)' : ''}</option>`).join('');
+  }).catch(() => { sel.innerHTML = '<option value="">Error loading leases</option>'; });
+}
+
+(function initProps() {
+  const sel = $('prop-select');
+  if (!PROPERTIES.length) { sel.innerHTML = '<option value="">No properties configured</option>'; return; }
+  sel.innerHTML = PROPERTIES.map(p => `<option value="${p.slug}">${p.label}</option>`).join('');
+  sel.addEventListener('change', loadLeases);
+  loadLeases();
+})();
 
 let pollTimer = null;
 function poll(jobId) {
@@ -190,7 +209,7 @@ $('gen-btn').addEventListener('click', () => {
   $('progress-text').textContent = 'Starting…';
   fetch('/southtown/api/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lease, force: $('force-check').checked }),
+    body: JSON.stringify({ slug: currentSlug(), lease, force: $('force-check').checked }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))
     .then(({ ok, j }) => {
       if (!ok) throw new Error(j.error || 'Failed to start');
@@ -203,13 +222,12 @@ $('gen-btn').addEventListener('click', () => {
     });
 });
 
-if (LATEST) renderSummary(LATEST);
-
 const pct1 = (v) => (v * 100).toFixed(1) + '%';
 const pct2 = (v) => (v * 100).toFixed(2) + '%';
 function renderReturns(s) {
   if (!s) return;
   $('ret-results').style.display = 'block';
+  $('ret-download').href = '/southtown/api/download_returns?slug=' + encodeURIComponent(s.slug || currentSlug());
   $('ret-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
   $('ret-kpis').innerHTML = [
     [pct1(s.base_occupancy) + (s.base_pass ? ' ✓' : ''), 'Base occupancy (' + (s.base_pass ? 'PASS' : 'FAIL') + ')'],
@@ -232,8 +250,10 @@ function renderReturns(s) {
 $('ret-btn').addEventListener('click', () => {
   $('ret-error').style.display = 'none';
   $('ret-btn').disabled = true; $('ret-btn').textContent = 'Generating…';
-  fetch('/southtown/api/generate_returns', { method: 'POST' })
-    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+  fetch('/southtown/api/generate_returns', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug: currentSlug() }),
+  }).then(r => r.json().then(j => ({ ok: r.ok, j })))
     .then(({ ok, j }) => {
       $('ret-btn').disabled = false; $('ret-btn').textContent = 'Generate Returns Model';
       if (!ok) throw new Error(j.error || 'Failed to generate');
@@ -245,6 +265,6 @@ $('ret-btn').addEventListener('click', () => {
       const e = $('ret-error'); e.style.display = 'block'; e.textContent = err.message;
     });
 });
-if (LATEST_RET) renderReturns(LATEST_RET);
+// Compendium + returns results stay hidden until generated for the selected property.
 </script>
 {% endblock %}
