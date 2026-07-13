@@ -29,7 +29,7 @@ _REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
 if _MIDWAY_ROOT not in sys.path:
     sys.path.insert(0, _MIDWAY_ROOT)
 
-midway_bp = Blueprint('midway', __name__, url_prefix='/midway')
+midway_bp = Blueprint('midway', __name__, url_prefix='/disposition-diligence')
 
 _JOBS = {}
 _LATEST = {}   # slug -> {'docx': path, 'summary': {...}}

@@ -40,7 +40,7 @@ class MidwayModule(AbstractModule):
     def get_nav_items(self):
         return [{
             'label': 'Disposition Diligence',
-            'url': '/midway',
+            'url': '/disposition-diligence',
             'icon': 'document',
             'section': 'analytics',
         }]

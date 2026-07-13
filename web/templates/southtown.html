@@ -78,7 +78,7 @@
   <div class="st-card st-results" id="results">
     <h2>Lease Abstract Compendium</h2>
     <div class="st-row" style="margin-bottom:16px;">
-      <a class="st-btn" id="download-btn" href="/southtown/api/download">⬇ Download Word compendium</a>
+      <a class="st-btn" id="download-btn" href="/lease-abstraction/api/download">⬇ Download Word compendium</a>
       <span style="font-size:12px;color:#5B6472;" id="gen-meta"></span>
     </div>
     <div class="st-kpis" id="kpis"></div>
@@ -105,7 +105,7 @@
     <div class="st-err" id="ret-error"></div>
     <div class="st-results" id="ret-results" style="margin-top:16px;">
       <div class="st-row" style="margin-bottom:16px;">
-        <a class="st-btn" id="ret-download" href="/southtown/api/download_returns">⬇ Download Excel model</a>
+        <a class="st-btn" id="ret-download" href="/lease-abstraction/api/download_returns">⬇ Download Excel model</a>
         <span style="font-size:12px;color:#5B6472;" id="ret-meta"></span>
       </div>
       <div class="st-kpis" id="ret-kpis"></div>
@@ -127,7 +127,7 @@ const TIER_LABEL = { detailed: 'Detailed', detailed_summary: 'Detailed Summary',
 function renderSummary(s) {
   if (!s) return;
   $('results').style.display = 'block';
-  $('download-btn').href = '/southtown/api/download?slug=' + encodeURIComponent(s.slug || currentSlug());
+  $('download-btn').href = '/lease-abstraction/api/download?slug=' + encodeURIComponent(s.slug || currentSlug());
   $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at + ' · ' + (s.model || '')) : '';
   $('kpis').innerHTML = [
     [s.provisions, 'Provisions'],
@@ -159,7 +159,7 @@ function loadLeases() {
   $('results').style.display = 'none';
   $('ret-results').style.display = 'none';
   if (!slug) { sel.innerHTML = '<option value="">—</option>'; return; }
-  fetch('/southtown/api/leases?slug=' + encodeURIComponent(slug)).then(r => r.json()).then(list => {
+  fetch('/lease-abstraction/api/leases?slug=' + encodeURIComponent(slug)).then(r => r.json()).then(list => {
     if (!Array.isArray(list) || !list.length) {
       sel.innerHTML = '<option value="">No lease documents found for this property</option>';
       return;
@@ -179,7 +179,7 @@ function loadLeases() {
 
 let pollTimer = null;
 function poll(jobId) {
-  fetch('/southtown/api/status/' + jobId).then(r => r.json()).then(j => {
+  fetch('/lease-abstraction/api/status/' + jobId).then(r => r.json()).then(j => {
     if (j.status === 'running') {
       $('progress-text').textContent = j.detail || j.step || 'Working…';
       pollTimer = setTimeout(() => poll(jobId), 1500);
@@ -207,7 +207,7 @@ $('gen-btn').addEventListener('click', () => {
   $('gen-btn').disabled = true;
   $('progress').style.display = 'flex';
   $('progress-text').textContent = 'Starting…';
-  fetch('/southtown/api/generate', {
+  fetch('/lease-abstraction/api/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug: currentSlug(), lease, force: $('force-check').checked }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))
@@ -227,7 +227,7 @@ const pct2 = (v) => (v * 100).toFixed(2) + '%';
 function renderReturns(s) {
   if (!s) return;
   $('ret-results').style.display = 'block';
-  $('ret-download').href = '/southtown/api/download_returns?slug=' + encodeURIComponent(s.slug || currentSlug());
+  $('ret-download').href = '/lease-abstraction/api/download_returns?slug=' + encodeURIComponent(s.slug || currentSlug());
   $('ret-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
   $('ret-kpis').innerHTML = [
     [pct1(s.base_occupancy) + (s.base_pass ? ' ✓' : ''), 'Base occupancy (' + (s.base_pass ? 'PASS' : 'FAIL') + ')'],
@@ -250,7 +250,7 @@ function renderReturns(s) {
 $('ret-btn').addEventListener('click', () => {
   $('ret-error').style.display = 'none';
   $('ret-btn').disabled = true; $('ret-btn').textContent = 'Generating…';
-  fetch('/southtown/api/generate_returns', {
+  fetch('/lease-abstraction/api/generate_returns', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug: currentSlug() }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))

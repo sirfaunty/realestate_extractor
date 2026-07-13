@@ -66,7 +66,7 @@
   <div class="mw-card" id="summary-card" style="display:none;">
     <h2>2 · Diligence summary</h2>
     <div class="mw-row" style="margin-bottom:14px;">
-      <a class="mw-btn" id="download-btn" href="/midway/api/download">⬇ Download Word report</a>
+      <a class="mw-btn" id="download-btn" href="/disposition-diligence/api/download">⬇ Download Word report</a>
       <span style="font-size:12px;color:#5B6472;" id="gen-meta"></span>
     </div>
     <div class="mw-kpis" id="kpis"></div>
@@ -89,7 +89,7 @@ function render(s) {
   if (!s || !Object.keys(s).length) { $('summary-card').style.display = 'none'; return; }
   $('summary-card').style.display = 'block';
   $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
-  $('download-btn').href = '/midway/api/download?slug=' + encodeURIComponent(s.slug || currentSlug());
+  $('download-btn').href = '/disposition-diligence/api/download?slug=' + encodeURIComponent(s.slug || currentSlug());
   $('kpis').innerHTML = [
     [s.tenants_abstracted, 'Tenants abstracted', false],
     [s.facts, 'Lease facts', false],
@@ -104,7 +104,7 @@ function render(s) {
 
 let pollTimer = null;
 function poll(jobId) {
-  fetch('/midway/api/status/' + jobId).then(r => r.json()).then(j => {
+  fetch('/disposition-diligence/api/status/' + jobId).then(r => r.json()).then(j => {
     if (j.status === 'running') {
       $('progress-text').textContent = j.detail || j.step || 'Working…';
       pollTimer = setTimeout(() => poll(jobId), 1500);
@@ -136,7 +136,7 @@ $('gen-btn').addEventListener('click', () => {
   $('gen-btn').disabled = true;
   $('progress').style.display = 'flex';
   $('progress-text').textContent = 'Starting…';
-  fetch('/midway/api/generate', {
+  fetch('/disposition-diligence/api/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))
