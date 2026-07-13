@@ -12,7 +12,10 @@
   padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
 .mw-card { background:#fff; border:1px solid var(--mw-line); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
 .mw-card h2 { font-size:15px; margin:0 0 14px; }
-.mw-row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+.mw-row { display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
+.mw-field label { font-weight:600; font-size:13px; display:block; margin-bottom:6px; }
+.mw-field select { min-width:340px; padding:9px 11px; font-size:14px; border:1px solid #C7D2E0;
+  border-radius:8px; background:#fff; }
 .mw-check { display:flex; align-items:center; gap:7px; font-size:13px; color:#3A4655; }
 .mw-btn { background:var(--mw-primary); color:#fff; border:none; border-radius:8px; padding:11px 20px;
   font-size:14px; font-weight:600; cursor:pointer; }
@@ -45,13 +48,17 @@
     review</strong>, not legal advice.</div>
 
   <div class="mw-card">
-    <h2>1 · Generate the diligence report</h2>
+    <h2>1 · Select property &amp; generate</h2>
     <div class="mw-row">
+      <div class="mw-field">
+        <label for="prop-select">Property</label>
+        <select id="prop-select"><option>Loading…</option></select>
+      </div>
       <button class="mw-btn" id="gen-btn">Generate Report</button>
-      <label class="mw-check"><input type="checkbox" id="force-check"> Re-run full extraction (OCR — slow)</label>
     </div>
-    <div class="mw-note">The report builds from the existing warehouse in seconds. Tick “re-run
-      full extraction” to OCR and re-abstract every document first (several minutes).</div>
+    <div class="mw-note">Builds the report from the on-device warehouse in seconds. Re-running
+      the full OCR + extraction pipeline is a multi-minute local job — run it from the CLI
+      (see <code>midway_db/README.md</code>), not through the browser.</div>
     <div class="mw-progress" id="progress"><div class="mw-spin"></div><span id="progress-text">Working…</span></div>
     <div class="mw-err" id="error-box"></div>
   </div>
@@ -73,13 +80,16 @@
 </div>
 
 <script>
-const SUMMARY = {{ summary|tojson }};
+const PROPERTIES = {{ properties|tojson }};
+let SUMMARY = {{ summary|tojson }};
 const $ = (id) => document.getElementById(id);
+const currentSlug = () => $('prop-select').value;
 
 function render(s) {
   if (!s || !Object.keys(s).length) { $('summary-card').style.display = 'none'; return; }
   $('summary-card').style.display = 'block';
   $('gen-meta').textContent = s.generated_at ? ('Generated ' + s.generated_at) : '';
+  $('download-btn').href = '/midway/api/download?slug=' + encodeURIComponent(s.slug || currentSlug());
   $('kpis').innerHTML = [
     [s.tenants_abstracted, 'Tenants abstracted', false],
     [s.facts, 'Lease facts', false],
@@ -110,14 +120,32 @@ function poll(jobId) {
   }).catch(() => { pollTimer = setTimeout(() => poll(jobId), 2000); });
 }
 
+// Populate the property dropdown; reload the summary when it changes.
+(function initProps() {
+  const sel = $('prop-select');
+  if (!PROPERTIES.length) { sel.innerHTML = '<option value="">No properties configured</option>'; return; }
+  sel.innerHTML = PROPERTIES.map(p => `<option value="${p.slug}">${p.label}</option>`).join('');
+  sel.addEventListener('change', loadSummary);
+})();
+
+function loadSummary() {
+  const slug = currentSlug();
+  if (!slug) { render(null); return; }
+  fetch('/midway/api/summary?slug=' + encodeURIComponent(slug))
+    .then(r => (r.ok ? r.json() : {})).then(s => { SUMMARY = s; render(s); })
+    .catch(() => render(null));
+}
+
 $('gen-btn').addEventListener('click', () => {
+  const slug = currentSlug();
   $('error-box').style.display = 'none';
+  if (!slug) { const e = $('error-box'); e.style.display = 'block'; e.textContent = 'Select a property first.'; return; }
   $('gen-btn').disabled = true;
   $('progress').style.display = 'flex';
   $('progress-text').textContent = 'Starting…';
   fetch('/midway/api/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ force: $('force-check').checked }),
+    body: JSON.stringify({ slug }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))
     .then(({ ok, j }) => { if (!ok) throw new Error(j.error || 'Failed to start'); poll(j.job_id); })
     .catch(err => {

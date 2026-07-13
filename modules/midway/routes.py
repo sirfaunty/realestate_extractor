@@ -1,19 +1,18 @@
 """
-Midway / Disposition Diligence module routes.
+Midway / Disposition Diligence module routes (deal-aware).
 
-No-code workflow (all local):
-  1. The page shows the diligence summary from the warehouse (data/midway.db).
-  2. POST /midway/api/generate {force} — a background job optionally re-runs the local
-     extraction pipeline (OCR ingest -> abstracts -> missing docs -> PSA -> REA), then
-     builds the Word Disposition Diligence Report.
-  3. GET /midway/api/status/<job_id> — poll progress.
-  4. GET /midway/api/download — download the report.
+Properties come from the shared registry (<repo>/properties.json, module == 'midway').
+Each property's data lives in a per-deal folder: midway_db/data/<slug>/midway.db and
+midway_db/source_docs/<slug>/. The page shows a property selector; reports run against
+the selected deal.
 
-The engine is the standalone `midway_db` project at <repo>/midway_db/; we add it to
-sys.path so its modules can be imported in-process.
+Report generation builds from the (already-extracted) warehouse and is fast. The heavy
+OCR + extraction pipeline is a local CLI job (see midway_db/README.md), not a web
+request — but the background job supports it via force= for completeness.
 """
 import os
 import sys
+import json
 import uuid
 import logging
 import datetime
@@ -26,27 +25,53 @@ logger = logging.getLogger(__name__)
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _MIDWAY_ROOT = os.path.join(_REPO_ROOT, 'midway_db')
-_DATA_DIR = os.path.join(_MIDWAY_ROOT, 'data')
-_WAREHOUSE = os.path.join(_DATA_DIR, 'midway.db')
+_REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
 if _MIDWAY_ROOT not in sys.path:
     sys.path.insert(0, _MIDWAY_ROOT)
 
 midway_bp = Blueprint('midway', __name__, url_prefix='/midway')
 
 _JOBS = {}
-_LATEST = {'docx': None, 'summary': None}
+_LATEST = {}   # slug -> {'docx': path, 'summary': {...}}
 
 
 def register_midway_routes(app):
     app.register_blueprint(midway_bp)
 
 
-def _summary():
-    """Read the warehouse into a compact diligence summary (or None if not built)."""
-    if not os.path.exists(_WAREHOUSE):
+def _properties():
+    try:
+        data = json.load(open(_REGISTRY, encoding='utf-8'))
+        return [{'slug': p['slug'], 'label': p.get('label', p['slug']), 'note': p.get('note', '')}
+                for p in data.get('properties', []) if p.get('module') == 'midway']
+    except Exception:
+        logger.exception('failed to read property registry')
+        return []
+
+
+def _valid_slug(slug):
+    return slug in {p['slug'] for p in _properties()}
+
+
+def _deal_paths(slug):
+    base = os.path.join(_MIDWAY_ROOT, 'data', slug)
+    src = os.path.join(_MIDWAY_ROOT, 'source_docs', slug)
+    return {
+        'db': os.path.join(base, 'midway.db'),
+        'text': os.path.join(base, 'ocr_text'),
+        'tenant_src': os.path.join(src, 'tenant_packages'),
+        'psa_src': os.path.join(src, 'psa'),
+    }
+
+
+def _summary(slug):
+    """Compact diligence summary for a deal's warehouse (or None if not built)."""
+    db = _deal_paths(slug)['db']
+    if not os.path.exists(db):
         return None
     import sqlite3
-    c = sqlite3.connect(_WAREHOUSE)
+    c = sqlite3.connect(db)
+
     def one(q, *a):
         try:
             return c.execute(q, a).fetchone()[0]
@@ -67,15 +92,14 @@ def _summary():
                       "LOWER(prohibited_use) LIKE '%grocery%' OR "
                       "LOWER(prohibited_use) LIKE '%supermarket%'")
     c.close()
-    return {
-        'tenants_abstracted': tenants_abstracted, 'facts': facts,
-        'deals': deals, 'missing': missing,
-        'rea_prohibited': rea_total, 'rea_grocery_flag': rea_grocery,
-    }
+    return {'slug': slug, 'tenants_abstracted': tenants_abstracted, 'facts': facts,
+            'deals': deals, 'missing': missing,
+            'rea_prohibited': rea_total, 'rea_grocery_flag': rea_grocery}
 
 
-def _run_generate(job_id, force):
+def _run_generate(job_id, slug, force):
     job = _JOBS[job_id]
+    paths = _deal_paths(slug)
 
     def step(s, detail=''):
         job['step'] = s
@@ -84,43 +108,45 @@ def _run_generate(job_id, force):
     try:
         import diligence_report
         warnings = []
-        if force or not os.path.exists(_WAREHOUSE):
+        if force or not os.path.exists(paths['db']):
             import ingest, abstract_facts, missing_docs, extract_psa, extract_rea
             step('ingesting', 'OCR + registering tenant documents (this can take minutes)…')
-            ingest.run()   # foundation — a failure here is fatal
-            # The rest each add to the warehouse; degrade gracefully if one fails so the
-            # report still builds from what succeeded.
-            for label, detail, fn in [
+            ingest.run(src=paths['tenant_src'], db_path=paths['db'], text_dir=paths['text'])
+            for label, detail, fn, kw in [
                 ('abstracting', 'Extracting lease-abstract facts with the local model…',
-                 abstract_facts.run),
-                ('diligence', 'Detecting missing documents…', missing_docs.run),
-                ('psa', 'Extracting PSA deal economics…', extract_psa.run),
-                ('rea', 'Extracting REA prohibited uses…', extract_rea.run),
+                 abstract_facts.run, {'db_path': paths['db']}),
+                ('diligence', 'Detecting missing documents…', missing_docs.run,
+                 {'db_path': paths['db']}),
+                ('psa', 'Extracting PSA deal economics…', extract_psa.run,
+                 {'db_path': paths['db'], 'src': paths['psa_src']}),
+                ('rea', 'Extracting REA prohibited uses…', extract_rea.run,
+                 {'db_path': paths['db'], 'src': paths['psa_src']}),
             ]:
                 step(label, detail)
                 try:
-                    fn()
+                    fn(**kw)
                 except Exception as e:      # noqa: BLE001
                     logger.exception('Midway %s step failed', label)
                     warnings.append(f'{label}: {str(e)[:100]}')
 
-        if not os.path.exists(_WAREHOUSE):
-            raise RuntimeError('No warehouse found. Run the extraction pipeline first '
-                               '(tick “re-run extraction”).')
+        if not os.path.exists(paths['db']):
+            raise RuntimeError('No warehouse for this property yet. Run the extraction '
+                               'pipeline locally first (see midway_db/README.md).')
 
         step('reporting', 'Generating the Disposition Diligence Report…')
+        os.makedirs(os.path.dirname(paths['db']), exist_ok=True)
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        out = os.path.join(_DATA_DIR, f'Midway_Disposition_Diligence_{ts}.docx')
-        diligence_report.build(_WAREHOUSE, out)
+        out = os.path.join(os.path.dirname(paths['db']),
+                           f'Midway_Disposition_Diligence_{slug}_{ts}.docx')
+        diligence_report.build(paths['db'], out)
 
-        summary = _summary() or {}
+        summary = _summary(slug) or {}
         summary['generated_at'] = datetime.datetime.now().isoformat(timespec='seconds')
         summary['docx_name'] = os.path.basename(out)
         if warnings:
             summary['warnings'] = warnings
         job.update(status='done', step='complete', detail='Report ready.', summary=summary)
-        _LATEST['docx'] = out
-        _LATEST['summary'] = summary
+        _LATEST[slug] = {'docx': out, 'summary': summary}
     except Exception as e:
         logger.exception('Midway generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
@@ -129,18 +155,32 @@ def _run_generate(job_id, force):
 # ── Page ──────────────────────────────────────────────────────────────────
 @midway_bp.route('/')
 def midway_index():
-    return render_template('midway.html', summary=_LATEST.get('summary') or _summary())
+    props = _properties()
+    first = props[0]['slug'] if props else None
+    summary = _summary(first) if first else None
+    return render_template('midway.html', properties=props, summary=summary)
 
 
 # ── API ───────────────────────────────────────────────────────────────────
+@midway_bp.route('/api/properties')
+def api_properties():
+    return jsonify(_properties())
+
+
 @midway_bp.route('/api/summary')
 def api_summary():
-    return jsonify(_summary() or {})
+    slug = request.args.get('slug', '')
+    if not _valid_slug(slug):
+        return jsonify({}), 404
+    return jsonify(_summary(slug) or {})
 
 
 @midway_bp.route('/api/generate', methods=['POST'])
 def api_generate():
     data = request.get_json(silent=True) or request.form
+    slug = (data.get('slug') or '').strip()
+    if not _valid_slug(slug):
+        return jsonify({'error': 'Select a property first.'}), 400
     force = str(data.get('force') or '').lower() in ('1', 'true', 'yes', 'on')
     for jid, j in _JOBS.items():
         if j.get('status') == 'running':
@@ -148,10 +188,10 @@ def api_generate():
     job_id = uuid.uuid4().hex[:8]
     _JOBS[job_id] = {
         'id': job_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting…',
-        'error': None, 'force': force,
+        'error': None, 'slug': slug, 'force': force,
         'started': datetime.datetime.now().isoformat(timespec='seconds'),
     }
-    threading.Thread(target=_run_generate, args=(job_id, force), daemon=True).start()
+    threading.Thread(target=_run_generate, args=(job_id, slug, force), daemon=True).start()
     return jsonify({'job_id': job_id})
 
 
@@ -165,7 +205,9 @@ def api_status(job_id):
 
 @midway_bp.route('/api/download')
 def api_download():
-    path = _LATEST.get('docx')
-    if not path or not os.path.exists(path):
+    slug = request.args.get('slug', '')
+    latest = _LATEST.get(slug)
+    if not latest or not latest.get('docx') or not os.path.exists(latest['docx']):
         abort(404)
-    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+    return send_file(latest['docx'], as_attachment=True,
+                     download_name=os.path.basename(latest['docx']))

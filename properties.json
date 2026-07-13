@@ -1,0 +1,19 @@
+{
+  "_comment": "Shared property/deal registry for the retail modules. Each module shows a selector populated from the entries whose 'module' matches, and runs reports against the selected deal's per-deal data folder (<engine>/data/<slug>/ and source_docs/<slug>/). Add a property here + drop its source docs in its folder + run the pipeline to onboard it.",
+  "properties": [
+    {
+      "slug": "midway_marketplace",
+      "label": "Midway Marketplace — St. Paul, MN",
+      "type": "disposition",
+      "module": "midway",
+      "note": "Partial sale to GSC RE Holdings (H Mart affiliate), closed 6/18/2026"
+    },
+    {
+      "slug": "southtown_dhos",
+      "label": "Southtown / Dick's House of Sport — Bloomington, MN",
+      "type": "lease",
+      "module": "southtown",
+      "note": "DHOS build-to-suit lease + co-tenancy/returns"
+    }
+  ]
+}
