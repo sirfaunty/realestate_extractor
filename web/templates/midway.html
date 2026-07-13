@@ -63,7 +63,7 @@
     <div class="mw-err" id="error-box"></div>
   </div>
 
-  <div class="mw-card" id="summary-card">
+  <div class="mw-card" id="summary-card" style="display:none;">
     <h2>2 · Diligence summary</h2>
     <div class="mw-row" style="margin-bottom:14px;">
       <a class="mw-btn" id="download-btn" href="/midway/api/download">⬇ Download Word report</a>
@@ -120,21 +120,14 @@ function poll(jobId) {
   }).catch(() => { pollTimer = setTimeout(() => poll(jobId), 2000); });
 }
 
-// Populate the property dropdown; reload the summary when it changes.
+// Populate the property dropdown. The summary/report stays hidden until the user
+// generates a report; switching property clears any report already shown.
 (function initProps() {
   const sel = $('prop-select');
   if (!PROPERTIES.length) { sel.innerHTML = '<option value="">No properties configured</option>'; return; }
   sel.innerHTML = PROPERTIES.map(p => `<option value="${p.slug}">${p.label}</option>`).join('');
-  sel.addEventListener('change', loadSummary);
+  sel.addEventListener('change', () => render(null));
 })();
-
-function loadSummary() {
-  const slug = currentSlug();
-  if (!slug) { render(null); return; }
-  fetch('/midway/api/summary?slug=' + encodeURIComponent(slug))
-    .then(r => (r.ok ? r.json() : {})).then(s => { SUMMARY = s; render(s); })
-    .catch(() => render(null));
-}
 
 $('gen-btn').addEventListener('click', () => {
   const slug = currentSlug();
@@ -153,7 +146,6 @@ $('gen-btn').addEventListener('click', () => {
       const e = $('error-box'); e.style.display = 'block'; e.textContent = err.message;
     });
 });
-
-render(SUMMARY);
+// Summary stays hidden on load — it appears only after a report is generated.
 </script>
 {% endblock %}
