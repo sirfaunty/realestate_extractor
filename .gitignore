@@ -85,3 +85,5 @@ lease_abstraction_db/_rpv*
 disposition_diligence_db/data/
 disposition_diligence_db/source_docs/
 disposition_diligence_db/**/*.db
+disposition_diligence_db/**/*.docx
+disposition_diligence_db/_*
