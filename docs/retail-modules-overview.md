@@ -28,9 +28,40 @@ single-document facts and flag the rest.
 
 ---
 
+## Multi-property architecture (property selector)
+
+Modules are **deal-aware**: each handles many properties, not one. A shared registry
+defines them and a selector on each page picks which one a report runs against.
+
+- **Registry** — `properties.json` at the repo root. Each entry: `slug`, `label`,
+  `type` (portfolio / lease / disposition), `module`. A module lists the entries whose
+  `module` matches and shows them in its **Property** dropdown.
+- **Per-deal folders** — each engine keeps a property's data + source docs under its
+  slug: `<engine>/data/<slug>/…` and `<engine>/source_docs/<slug>/…`. Reports/warehouses
+  are keyed to the selected property.
+- **UI flow** — pick a property → generate; results stay hidden until generated and
+  clear when you switch property.
+
+**Onboard a new property:**
+1. Add an entry to `properties.json` (slug, label, type, module).
+2. Create `<engine>/source_docs/<slug>/…` and drop the source docs in
+   (Midway: `tenant_packages/` + `psa/`; Southtown: `lease_and_exhibits/` + `returns/`).
+3. Run the engine's local CLI pipeline to build `<engine>/data/<slug>/…`.
+4. The property appears in the module's selector automatically.
+
+**URLs** are function-based (not property-based): Lease Abstraction =
+`/lease-abstraction`, Disposition Diligence = `/disposition-diligence`, Portfolio Cash
+Flow = `/barrington`. (Internal blueprint names remain `southtown` / `midway`.)
+
+Status: Midway and Southtown are fully deal-aware. Barrington already has its own
+portfolio selector (from the app database); aligning it to this shared registry is a
+small open consistency item.
+
+---
+
 ## Module 1 — Barrington (Portfolio Cash Flow)
 
-- **Engine:** `barrington_db/` · **Module:** `modules/barrington/` · **Nav:** Portfolio Cash Flow
+- **Engine:** `barrington_db/` · **Module:** `modules/barrington/` · **Nav:** Portfolio Cash Flow (`/barrington`)
 - **What:** ingest a portfolio's stored cash-flow + rent-roll documents → build a
   cash-flow / capital / lease-rollover model → export an Excel workbook, with NOI tied
   out to source.
@@ -40,7 +71,7 @@ single-document facts and flag the rest.
 
 ## Module 2 — Southtown (Lease Abstraction + Co-Tenancy/Returns)
 
-- **Engine:** `southtown_db/` · **Module:** `modules/southtown/` · **Nav:** Lease Abstraction
+- **Engine:** `southtown_db/` · **Module:** `modules/southtown/` · **Nav:** Lease Abstraction (`/lease-abstraction`)
 - **What:** (a) segment a lease `.docx` into provisions (deterministic, ties out
   113/113) and abstract each into 3 tiers via the local model (85–89% figure recall);
   (b) a co-tenancy + development-returns engine driven by the rent-roll PDF and Brama's
@@ -53,7 +84,7 @@ single-document facts and flag the rest.
 
 ## Module 3 — Midway (Disposition Diligence)
 
-- **Engine:** `midway_db/` · **Module:** `modules/midway/` · **Nav:** Disposition Diligence
+- **Engine:** `midway_db/` · **Module:** `modules/midway/` · **Nav:** Disposition Diligence (`/disposition-diligence`)
 - **What:** OCR a shopping-center disposition's tenant certification docs (PyMuPDF +
   RapidOCR, per-page) → structured lease-abstract warehouse (local model) → missing-
   document gap detection + PSA deal-economics extraction + REA prohibited-use schedule
@@ -88,6 +119,11 @@ single-document facts and flag the rest.
   only).
 - **Not yet touched:** T-Mobile / UPS Store tenants (no docs provided); the fuller REA
   cross-parcel / no-change-area analysis.
+- **Barrington registry alignment:** it uses the app database's `portfolios` for its
+  selector; aligning it to the shared `properties.json` registry is a small consistency
+  item (functional today, just a different mechanism).
+- **Midway `instrument_type`:** the 8B model can over-apply "Ground Lease" to in-line
+  retail; tightened the prompt, but spot-check the labels.
 
 ## Repo map (retail work)
 

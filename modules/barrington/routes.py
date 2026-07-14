@@ -16,6 +16,7 @@ sibling export_excel.py) can be imported in-process. All work runs locally.
 
 import os
 import sys
+import json
 import uuid
 import shutil
 import logging
@@ -28,6 +29,7 @@ from flask import Blueprint, render_template, request, jsonify, send_file, abort
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
 _BARR_ROOT = os.path.join(_REPO_ROOT, 'barrington_db')
 _DATA_DIR = os.path.join(_BARR_ROOT, 'data')
 _STAGE_ROOT = os.path.join(_BARR_ROOT, 'source_docs')
@@ -53,6 +55,53 @@ def _org_db():
     if wa is None:                      # last resort (should already be loaded)
         import webapp as wa  # noqa
     return wa.get_org_db(org_id)
+
+
+def _registry_props():
+    try:
+        data = json.load(open(_REGISTRY, encoding='utf-8'))
+        return [p for p in data.get('properties', []) if p.get('module') == 'barrington']
+    except Exception:
+        logger.exception('failed to read property registry')
+        return []
+
+
+def _org_portfolios():
+    db = _org_db()
+    try:
+        rows = db.conn.execute("""
+            SELECT pf.id, pf.name,
+                   (SELECT COUNT(*) FROM documents d JOIN properties p ON d.property_id = p.id
+                     WHERE p.portfolio_id = pf.id) AS n_docs,
+                   (SELECT COUNT(*) FROM properties p WHERE p.portfolio_id = pf.id) AS n_props
+            FROM portfolios pf ORDER BY pf.name
+        """).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _properties():
+    """Registry-driven property list, each resolved to its app-DB portfolio by name.
+    Falls back to listing the DB portfolios directly if the registry has no barrington
+    entries — so the selector keeps working even if the registry isn't configured."""
+    reg = _registry_props()
+    org = _org_portfolios()
+    if not reg:
+        return [{'slug': f'pf_{p["id"]}', 'label': p['name'], 'portfolio_id': p['id'],
+                 'n_props': p['n_props'], 'n_docs': p['n_docs']} for p in org]
+    out = []
+    for e in reg:
+        m = (e.get('portfolio_match') or e.get('label', '')).lower()
+        found = next((p for p in org if m and m in (p['name'] or '').lower()), None)
+        out.append({'slug': e['slug'], 'label': e.get('label', e['slug']),
+                    'portfolio_id': found['id'] if found else None,
+                    'n_props': found['n_props'] if found else 0,
+                    'n_docs': found['n_docs'] if found else 0})
+    return out
 
 
 def _stage_documents(rows):
@@ -195,6 +244,11 @@ def api_portfolios():
             db.close()
         except Exception:
             pass
+
+
+@barrington_bp.route('/api/properties')
+def api_properties():
+    return jsonify(_properties())
 
 
 @barrington_bp.route('/api/generate', methods=['POST'])

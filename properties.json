@@ -14,6 +14,14 @@
       "type": "lease",
       "module": "southtown",
       "note": "DHOS build-to-suit lease + co-tenancy/returns"
+    },
+    {
+      "slug": "barrington_portfolio",
+      "label": "Barrington Portfolio",
+      "type": "portfolio",
+      "module": "barrington",
+      "portfolio_match": "barrington",
+      "note": "10-property office portfolio; data lives in the app database (portfolios table)"
     }
   ]
 }

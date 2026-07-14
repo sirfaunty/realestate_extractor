@@ -110,18 +110,16 @@ function renderSummary(s) {
      <td class="num">${money(p.capital_2026)}</td></tr>`).join('');
 }
 
-// Load portfolios into the selector
-fetch('/barrington/api/portfolios').then(r => r.json()).then(list => {
+// Load properties into the selector (registry-driven; each resolves to its DB portfolio)
+fetch('/barrington/api/properties').then(r => r.json()).then(list => {
   const sel = $('pf-select');
   if (!Array.isArray(list) || !list.length) {
-    sel.innerHTML = '<option value="">No portfolios found</option>';
+    sel.innerHTML = '<option value="">No properties found</option>';
     return;
   }
   sel.innerHTML = list.map(p =>
-    `<option value="${p.id}">${p.name} — ${p.n_props} properties, ${p.n_docs} docs</option>`).join('');
-  const barr = list.find(p => /barrington/i.test(p.name));
-  if (barr) sel.value = barr.id;
-}).catch(() => { $('pf-select').innerHTML = '<option value="">Error loading portfolios</option>'; });
+    `<option value="${p.portfolio_id || ''}">${p.label} — ${p.n_props} properties, ${p.n_docs} docs</option>`).join('');
+}).catch(() => { $('pf-select').innerHTML = '<option value="">Error loading properties</option>'; });
 
 let pollTimer = null;
 function poll(jobId) {
