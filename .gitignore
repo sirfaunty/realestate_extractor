@@ -85,3 +85,5 @@ southtown_db/_rpv*
 midway_db/data/
 midway_db/source_docs/
 midway_db/**/*.db
+midway_db/**/*.docx
+midway_db/_*

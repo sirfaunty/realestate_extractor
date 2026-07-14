@@ -40,6 +40,8 @@ _CATEGORY = {
     "Clear Channel": "media", "Comcast": "telecom", "CenturyLink": "telecom",
 }
 _TEXT_LAYER_MIN = 100   # chars over first pages => has a real text layer
+_MIN_PAGE_TEXT = 200    # per-page: below this a page is treated as scanned (OCR it).
+                        # Guards against DocuSign-stamped scanned pages (~59 chars/page).
 
 _OCR = None
 
@@ -86,7 +88,7 @@ def extract_pdf(path, limit_pages=None, ocr=True):
     for i in range(n):
         page = doc[i]
         t = page.get_text().strip()
-        if len(t) >= 20:
+        if len(t) >= _MIN_PAGE_TEXT:      # real text layer, not just a DocuSign stamp
             out.append(t); any_text = True
         elif ocr:
             out.append(_ocr_page(page)); any_ocr = True

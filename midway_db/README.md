@@ -90,17 +90,36 @@ instrument — validated against the 73 gold facts.
     certification layer but no executed instrument), writing rows into
     `missing_document`. Validated against gold (same core tenants flagged); the
     operative-instrument exception (parking services agreement) is handled.
-  - **PSA + REA extraction** — *next*. Local-model extraction of the Cub/At Home
-    purchase agreements (financial terms, key dates, closing conditions) and the REA
-    (prohibited uses, cross-parcel provisions), same pattern as P2. The bespoke
-    analytical confirmations in the gold tracker stay human-judgment.
+  - **PSA extraction** (`extract_psa.py`) — *done*. OCRs each Purchase & Sale
+    Agreement (scanned/DocuSigned) and extracts the deal economics into `agreement`,
+    `financial_term`, `key_date_deadline`, `broker`. Validated: purchase prices and
+    earnest money tie out to gold exactly (At Home $6M/$120K, Cub $10.5M/$200K,
+    inspection 60 days). Broker/closing detail is partial (8B limit on long OCR text)
+    and left to review. Note: OCR uses a 200-char/page threshold so DocuSign-stamped
+    scanned pages are OCR'd rather than mistaken for digital.
+  - **REA extraction** (`extract_rea.py`) — *done*. Locates the Exhibit F prohibited-
+    use schedule (scores pages by numbered-list density to skip the table of contents)
+    and extracts the ~28-31 prohibited uses into `rea_prohibited_use`, with the model
+    cleaning the noisy scan. Surfaces the deal-critical flag that **grocery/supermarket
+    use is prohibited** under the REA — directly relevant to the buyer's Asian-grocery
+    plan. Broader cross-parcel / no-change-area synthesis stays human diligence.
 
     ```bash
     python missing_docs.py     # detect + record missing executed instruments
+    python extract_psa.py      # OCR + extract the PSA deal economics
+    python extract_rea.py      # extract the REA prohibited-use schedule
     ```
-- **P4 — no-code module + deliverables.** A "Disposition Diligence" Capactic page:
-  ingest a center's tenant docs → extract locally → lease-abstract dump + missing-doc
-  report.
+
+  **P3 complete** — all three diligence sub-layers built and validated.
+- **P4 (in progress) — deliverable + no-code module.**
+  - **Disposition Diligence Report** (`diligence_report.py`) — *done*. One Word
+    deliverable from the warehouse: the sale (PSA economics), tenant lease abstracts,
+    missing-document tracker, and the REA prohibited-use schedule with the
+    grocery/supermarket prohibition flagged in red. Labeled an automated draft for
+    review. (Correspondence-only tenants are triaged, not abstracted — `abstract_facts`
+    now requires a substantive instrument, preventing hallucinated lease facts.)
+  - **No-code module** — *next*. A "Disposition Diligence" Capactic page mirroring
+    Southtown/Barrington: run the pipeline locally, view the summary, download the report.
 
 ## Security posture
 
