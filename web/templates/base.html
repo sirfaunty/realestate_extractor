@@ -193,6 +193,25 @@
         {% endif %}
         {% endwith %}
 
+        <!-- Deal picker (deal-analytics modules only; populated + shown by JS) -->
+        <style>
+          .deal-bar { display: flex; align-items: center; gap: 10px;
+            margin: 0 0 18px; padding: 8px 14px; background: var(--bg-card, #fff);
+            border: 1px solid var(--border, #E2E4E8); border-radius: 10px; }
+          .deal-bar-label { font-size: 11px; font-weight: 600; letter-spacing: .04em;
+            text-transform: uppercase; color: var(--text-muted, #8E8E9A); }
+          .deal-bar-select { font-size: 14px; font-weight: 600; color: var(--text, #1A1A2E);
+            border: 1px solid var(--border, #E2E4E8); border-radius: 8px;
+            padding: 6px 28px 6px 10px; background: var(--bg, #fff); cursor: pointer; }
+          .deal-bar-path { font-size: 12px; color: var(--text-muted, #8E8E9A); }
+        </style>
+        <div class="deal-bar" id="deal-bar" style="display:none;">
+            <span class="deal-bar-label">Deal</span>
+            <select class="deal-bar-select" id="deal-bar-select"
+                    onchange="capactive.setDeal(this.value)"></select>
+            <span class="deal-bar-path" id="deal-bar-path"></span>
+        </div>
+
         <!-- Active Job Banner -->
         <div class="active-job-banner" id="active-job-banner" style="display: none;">
             <div class="active-job-inner">
@@ -214,6 +233,10 @@
         capactive.getTif = function() {
           return new URLSearchParams(window.location.search).get('tif') || 'baseline';
         };
+        capactive.getDeal = function() {
+          // Selected deal-analytics deal from ?deal=; empty means the server default.
+          return new URLSearchParams(window.location.search).get('deal') || '';
+        };
         capactive.setTif = function(scenario) {
           const url = new URL(window.location);
           if (scenario && scenario !== 'baseline') {
@@ -232,18 +255,61 @@
         };
         capactive.moduleLink = function(path, extraParams) {
           const tif = capactive.getTif();
+          const deal = capactive.getDeal();
           const url = new URL(path, window.location.origin);
           if (tif && tif !== 'baseline') url.searchParams.set('tif', tif);
+          if (deal) url.searchParams.set('deal', deal);
           if (extraParams) {
             for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
           }
           return url.pathname + url.search;
         };
+        // Navigate to the current page under a different deal, preserving ?tif.
+        capactive.setDeal = function(dealId) {
+          const url = new URL(window.location.href);
+          if (dealId) url.searchParams.set('deal', dealId);
+          else url.searchParams.delete('deal');
+          window.location.href = url.pathname + url.search;
+        };
+
+        // Populate + show the deal picker on deal-analytics pages only.
+        (function() {
+          var DEAL_PAGES = ['/tif-analysis', '/distribution', '/debt',
+                            '/partnership', '/proforma'];
+          var path = window.location.pathname;
+          if (!DEAL_PAGES.some(function(p) { return path.indexOf(p) === 0; })) return;
+          var bar = document.getElementById('deal-bar');
+          var sel = document.getElementById('deal-bar-select');
+          var pathEl = document.getElementById('deal-bar-path');
+          if (!bar || !sel) return;
+          fetch('/api/registry/deals')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              var deals = data.deals || [];
+              if (!deals.length) return;
+              var current = capactive.getDeal() || data.default || deals[0].id;
+              sel.innerHTML = deals.map(function(d) {
+                return '<option value="' + d.id + '"' +
+                       (d.id === current ? ' selected' : '') + '>' +
+                       d.label + '</option>';
+              }).join('');
+              var cur = deals.filter(function(d) { return d.id === current; })[0];
+              if (pathEl && cur && cur.path && cur.path.length) {
+                pathEl.textContent = cur.path.join(' › ');
+              }
+              bar.style.display = '';
+            })
+            .catch(function() {});
+        })();
         </script>
 
         {% block content %}{% endblock %}
     </main>
 </div>
+
+{# Child templates put page JS in `{% block scripts %}`; base must render it or the
+   entire script block is silently dropped (page loads but nothing runs). #}
+{% block scripts %}{% endblock %}
 
 <!-- Modal System -->
 <div class="cap-modal-overlay" id="cap-modal-overlay">

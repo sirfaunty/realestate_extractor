@@ -307,15 +307,29 @@ class DebtAnalysisResult:
 
 # ─── Engine ───────────────────────────────────────────────────────
 
+def default_debt_config() -> dict:
+    """The Deal A loan structure as an editable per-deal config dict.
+    Seeding this and constructing DebtAnalysisEngine(config) reproduces the
+    hardcoded behavior exactly."""
+    return {
+        'loan': dict(DEAL_A_LOAN),
+        'mip': dict(DEAL_A_MIP),
+        'capex': dict(DEAL_A_CAPEX_LOAN),
+        'surplus': dict(DEAL_A_SURPLUS_NOTE),
+        'property': dict(DEAL_A_PROPERTY),
+    }
+
+
 class DebtAnalysisEngine:
     """Runs all debt analysis computations."""
 
-    def __init__(self):
-        self.loan = dict(DEAL_A_LOAN)
-        self.mip = dict(DEAL_A_MIP)
-        self.capex = dict(DEAL_A_CAPEX_LOAN)
-        self.surplus = dict(DEAL_A_SURPLUS_NOTE)
-        self.prop = dict(DEAL_A_PROPERTY)
+    def __init__(self, config: dict | None = None):
+        config = config or {}
+        self.loan = dict(config.get('loan', DEAL_A_LOAN))
+        self.mip = dict(config.get('mip', DEAL_A_MIP))
+        self.capex = dict(config.get('capex', DEAL_A_CAPEX_LOAN))
+        self.surplus = dict(config.get('surplus', DEAL_A_SURPLUS_NOTE))
+        self.prop = dict(config.get('property', DEAL_A_PROPERTY))
 
     # ── PMT helper ────────────────────────────────────────────────
 

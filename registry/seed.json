@@ -1,0 +1,42 @@
+{
+  "_comment": "Initial registry seed. Loaded once into data/registry.db on first boot when the entity table is empty. After that, the DB is the mutable source of truth (edit/re-parent via the registry API, not this file). Entities seed at top level with no parent; create funds/sub-funds and re-parent as the structure firms up.",
+  "entities": [
+    {
+      "id": "proforma_engine",
+      "type": "deal",
+      "label": "Deal A",
+      "parent_id": null,
+      "modules": ["tif", "distribution", "debt", "partnership", "proforma"],
+      "warehouse_deal_id": "proforma_engine",
+      "sort_order": 0,
+      "meta": {"note": "Deal A — original single deal; assumptions currently sourced from engine defaults until migrated into deal_config."}
+    },
+    {
+      "id": "portfolio_cashflow_portfolio",
+      "type": "portfolio",
+      "label": "Portfolio B Portfolio",
+      "parent_id": null,
+      "module": "portfolio_cashflow",
+      "sort_order": 10,
+      "meta": {"portfolio_match": "portfolio_cashflow", "note": "10-property office portfolio; data in the app database (portfolios table)."}
+    },
+    {
+      "id": "lease_abstraction_anchor",
+      "type": "lease",
+      "label": "Center C / Anchor Tenant — Bloomington, MN",
+      "parent_id": null,
+      "module": "lease_abstraction",
+      "sort_order": 20,
+      "meta": {"note": "ANCHOR build-to-suit lease + co-tenancy/returns."}
+    },
+    {
+      "id": "disposition_diligence_marketplace",
+      "type": "disposition",
+      "label": "Center D — St. Paul, MN",
+      "parent_id": null,
+      "module": "disposition_diligence",
+      "sort_order": 30,
+      "meta": {"note": "Partial sale to Buyer LLC (buyer affiliate affiliate), closed 6/18/2026."}
+    }
+  ]
+}
