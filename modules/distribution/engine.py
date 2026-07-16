@@ -18,7 +18,7 @@ future multi-deal use.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 
@@ -179,6 +179,32 @@ class DistributionAssumptions:
             hold_years=10,
             first_year=2026,
             escrow_amount=0.0,
+        )
+
+    def to_config(self) -> dict:
+        """Serialize the full assumptions (partners, tiers, surplus note, scalars)
+        for the editable per-deal config store."""
+        return asdict(self)
+
+    @classmethod
+    def from_config(cls, config: dict | None) -> 'DistributionAssumptions':
+        """Rebuild assumptions from an editable per-deal config. A missing/None
+        config returns the Chamberlain defaults unchanged, so the default deal is
+        identical to the hardcoded behavior."""
+        if not config:
+            return cls.chamberlain_defaults()
+        partners = [PartnerConfig(**p) for p in config.get('partners', [])]
+        tiers = [WaterfallTierConfig(**t) for t in config.get('waterfall_tiers', [])]
+        scn = config.get('surplus_cash_note')
+        surplus = SurplusCashNoteConfig(**scn) if scn else None
+        return cls(
+            partners=partners,
+            waterfall_tiers=tiers,
+            surplus_cash_note=surplus,
+            entity_name=config.get('entity_name', 'Chamberlain Apartments LLC'),
+            hold_years=config.get('hold_years', 10),
+            first_year=config.get('first_year', 2026),
+            escrow_amount=config.get('escrow_amount', 0.0),
         )
 
 

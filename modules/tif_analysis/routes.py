@@ -18,14 +18,27 @@ logger = logging.getLogger(__name__)
 
 tif_bp = Blueprint('tif_analysis', __name__, url_prefix='/tif-analysis')
 
-_engine = None
+
+from registry.deal_context import (
+    deal_id_from_request as _deal_id,
+    warehouse_deal_id as _warehouse_deal_id,
+    deal_config as _deal_config,
+)
 
 
-def _get_engine():
-    global _engine
-    if _engine is None:
-        _engine = TIFEngine()
-    return _engine
+def _get_engine(deal_id=None):
+    """Build a TIF engine for the given deal. Config-driven; None config (or an
+    unknown deal) yields the Chamberlain defaults, so behavior is unchanged."""
+    cfg = _deal_config(deal_id, 'tif') if deal_id else None
+    return TIFEngine(TIFAssumptions.from_config(cfg))
+
+
+def _scenario_tmvs(deal_id):
+    """Base scenario TMVs for the deal: from config if present, else the
+    Chamberlain defaults."""
+    cfg = _deal_config(deal_id, 'tif')
+    base = (cfg or {}).get('scenarios') if cfg else None
+    return base or CHAMBERLAIN_SCENARIOS
 
 
 def register_tif_routes(app):
@@ -34,6 +47,70 @@ def register_tif_routes(app):
 
 
 # ─── Pages ─────────────────────────────────────────────────────────
+
+# Engine scenario names -> stable UI slugs the template renders against.
+_NAME_TO_SLUG = {
+    'Current': 'current',
+    'Mid': 'mid',
+    'Aggressive': 'aggressive',
+    'MAA Floor': 'maa_floor',
+}
+
+
+def _shape_scenarios_for_ui(result):
+    """Reshape compare_scenarios() output into the `scenarios` object the
+    dashboard consumes: keyed by UI slug, one flat record per scenario with the
+    totals, deltas-vs-current, and a note-amortization series for the chart.
+
+    The engine returns {baseline, results, comparison}; the template reads
+    data.scenarios[slug]. Without this bridge the table and chart render empty.
+    """
+    results = result.get('results', {})
+    scenarios = {}
+    for comp in result.get('comparison', []):
+        name = comp.get('name')
+        slug = _NAME_TO_SLUG.get(name)
+        if slug is None:
+            continue
+        res = results.get(name, {})
+        years = res.get('years', []) or []
+        totals = res.get('totals', {}) or {}
+        nominal_net_benefit = comp.get('nominal_net_benefit', 0.0) or 0.0
+        attorney_fees = comp.get('attorney_fees', 0.0) or 0.0
+        scenarios[slug] = {
+            'starting_tmv': years[0].get('tmv') if years else None,
+            'payoff_year': comp.get('payoff_year'),
+            'total_net_tif': comp.get('total_net_tif'),
+            'total_note_interest': comp.get('total_note_interest'),
+            'total_property_tax': totals.get('total_property_tax'),
+            'tax_savings_nominal': comp.get('nominal_tax_savings'),
+            'tax_savings_npv': comp.get('npv_tax_savings'),
+            'tif_reduction_nominal': comp.get('nominal_tif_reduction'),
+            'net_benefit_nominal': nominal_net_benefit,
+            'net_benefit_npv': comp.get('npv_net_benefit'),
+            'attorney_fees': attorney_fees,
+            'net_benefit_after_fees': round(nominal_net_benefit - attorney_fees, 2),
+            'amortization': [
+                {'year': y.get('year'), 'end_balance': y.get('note_end_bal')}
+                for y in years
+            ],
+        }
+    return scenarios
+
+
+def _persist_bg(func_name, *args):
+    """Best-effort warehouse write, run OFF the request thread. DuckDB is single-writer
+    across processes, so a warehouse held open elsewhere (e.g. an export) would block a
+    write indefinitely — a try/except can't catch a hang, so we never do it inline."""
+    def _run():
+        try:
+            import importlib
+            getattr(importlib.import_module('warehouse.deal_analytics'), func_name)(*args)
+        except Exception:
+            pass
+    import threading
+    threading.Thread(target=_run, daemon=True).start()
+
 
 @tif_bp.route('/')
 def tif_index():
@@ -46,7 +123,7 @@ def tif_index():
 @tif_bp.route('/api/assumptions')
 def api_assumptions():
     """Return current model assumptions."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     a = eng.a
     return jsonify({
         'class_rate': a.class_rate,
@@ -76,23 +153,26 @@ def api_scenarios():
       current, mid, aggressive, floor — override TMV values (flat)
       discount_rate — override NPV rate (default 0.05)
     """
-    eng = _get_engine()
+    deal_id = _deal_id()
+    eng = _get_engine(deal_id)
 
-    # Allow overrides via query params
+    # Base scenario TMVs come from the deal's config (Chamberlain defaults if none);
+    # each is still overridable via query params.
     scenarios = {}
-    for key, default_tmv in CHAMBERLAIN_SCENARIOS.items():
+    for key, default_tmv in _scenario_tmvs(deal_id).items():
         param = request.args.get(key.lower().replace(' ', '_'))
         tmv = float(param) if param else default_tmv
         scenarios[key] = eng._make_flat_schedule(tmv)
 
     result = eng.compare_scenarios(scenarios)
 
-    # Persist TIF comparison to analytical warehouse (fire-and-forget)
-    try:
-        from warehouse.deal_analytics import persist_tif_comparison
-        persist_tif_comparison('chamberlain', result.get('scenarios', []))
-    except Exception:
-        pass
+    # Bridge the engine output to the shape the dashboard table + chart read.
+    result['scenarios'] = _shape_scenarios_for_ui(result)
+
+    # Persist to the analytical warehouse off-thread so a locked/slow DuckDB warehouse
+    # can never hang the page (genuinely fire-and-forget).
+    _persist_bg('persist_tif_comparison', _warehouse_deal_id(deal_id),
+                result.get('comparison', []))
 
     return jsonify(result)
 
@@ -100,7 +180,7 @@ def api_scenarios():
 @tif_bp.route('/api/breakeven')
 def api_breakeven():
     """Run breakeven analysis."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     result = eng.breakeven_analysis()
     return jsonify(result)
 
@@ -113,7 +193,7 @@ def api_sensitivity():
       steps — number of sweep points (default 12)
       baseline — baseline TMV (default 54866000)
     """
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     steps = int(request.args.get('steps', 12))
     baseline = request.args.get('baseline')
     baseline_tmv = float(baseline) if baseline else None
@@ -130,7 +210,8 @@ def api_scenario_detail(name):
       tmv — flat TMV value (required)
       growth — annual growth rate (default 0, overrides flat tmv)
     """
-    eng = _get_engine()
+    deal_id = _deal_id()
+    eng = _get_engine(deal_id)
     tmv = request.args.get('tmv')
     growth = request.args.get('growth')
 
@@ -143,11 +224,7 @@ def api_scenario_detail(name):
     else:
         result = eng.run_scenario(name, eng._make_flat_schedule(tmv_val))
 
-    # Persist TIF annual to analytical warehouse (fire-and-forget)
-    try:
-        from warehouse.deal_analytics import persist_tif
-        persist_tif('chamberlain', result.to_dict(), name)
-    except Exception:
-        pass
+    # Persist off-thread (see api_scenarios) so a locked warehouse can't hang the page.
+    _persist_bg('persist_tif', _warehouse_deal_id(deal_id), result.to_dict(), name)
 
     return jsonify(result.to_dict())

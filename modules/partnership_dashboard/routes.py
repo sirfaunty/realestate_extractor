@@ -23,14 +23,18 @@ logger = logging.getLogger(__name__)
 partnership_bp = Blueprint('partnership_dashboard', __name__,
                            url_prefix='/partnership')
 
-_engine = None
+
+from registry.deal_context import (
+    deal_id_from_request as _deal_id,
+    deal_label as _deal_label,
+)
 
 
-def _get_engine():
-    global _engine
-    if _engine is None:
-        _engine = PartnershipDashboardEngine()
-    return _engine
+def _get_engine(deal_id=None):
+    """Build a partnership dashboard engine bound to the selected deal. The engine
+    threads the deal's config into its distribution/debt sub-engines; an unknown
+    deal or missing config yields the Chamberlain defaults."""
+    return PartnershipDashboardEngine(deal_id)
 
 
 def register_partnership_routes(app):
@@ -51,7 +55,7 @@ def partnership_index():
 @partnership_bp.route('/api/dashboard')
 def api_dashboard():
     """Return the full dashboard across all TIF scenarios."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     result = eng.build_dashboard()
     return jsonify(result.to_dict())
 
@@ -63,7 +67,7 @@ def api_scenario(name):
     Args:
         name: TIF scenario id (baseline, mid_appeal, aggressive_appeal, maa_floor)
     """
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
 
     # Map common names to labels
     label_map = {
@@ -85,7 +89,7 @@ def api_scenario(name):
 @partnership_bp.route('/api/comparison')
 def api_comparison():
     """Return just the cross-scenario comparison table."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     result = eng.build_dashboard()
     return jsonify({
         'comparison': result.comparison,
@@ -96,7 +100,7 @@ def api_comparison():
 @partnership_bp.route('/api/market-context')
 def api_market_context():
     """Return market cap rates and rent benchmarks for deal validation."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     market = request.args.get('market', 'Minneapolis')
     context = eng.get_market_context(market)
     return jsonify(context)
@@ -110,7 +114,7 @@ def api_export_docx():
       scenario — primary TIF scenario to feature (default: baseline)
     """
     primary = request.args.get('scenario', 'baseline')
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     result = eng.build_dashboard()
     data = result.to_dict()
 
@@ -156,8 +160,10 @@ def api_export_docx():
         logger.info(f'Report generated: {proc.stdout.strip()}')
 
         from datetime import datetime
+        import re
         timestamp = datetime.now().strftime('%Y%m%d')
-        filename = f'Chamberlain_Investor_Report_{timestamp}.docx'
+        safe_label = re.sub(r'[^A-Za-z0-9]+', '_', _deal_label(_deal_id())).strip('_') or 'Deal'
+        filename = f'{safe_label}_Investor_Report_{timestamp}.docx'
 
         return send_file(
             output_path,

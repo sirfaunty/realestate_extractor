@@ -23,14 +23,19 @@ logger = logging.getLogger(__name__)
 
 debt_bp = Blueprint('debt_analysis', __name__, url_prefix='/debt')
 
-_engine = None
+
+from registry.deal_context import (
+    deal_id_from_request as _deal_id,
+    warehouse_deal_id as _warehouse_deal_id,
+    deal_config as _deal_config,
+)
 
 
-def _get_engine():
-    global _engine
-    if _engine is None:
-        _engine = DebtAnalysisEngine()
-    return _engine
+def _get_engine(deal_id=None):
+    """Build a debt engine for the deal. None config (or unknown deal) yields the
+    Chamberlain defaults, so behavior is unchanged."""
+    cfg = _deal_config(deal_id, 'debt') if deal_id else None
+    return DebtAnalysisEngine(cfg)
 
 
 def _get_proforma_data(tif_scenario='baseline'):
@@ -52,8 +57,12 @@ def _get_proforma_data(tif_scenario='baseline'):
 
 
 def _run_full_analysis(tif_scenario='baseline'):
-    """Run debt analysis with live proforma data if available."""
-    eng = _get_engine()
+    """Run debt analysis with live proforma data if available.
+
+    Resolves the selected deal from the request (?deal=), so every endpoint that
+    funnels through here becomes deal-aware without changing its call site."""
+    deal_id = _deal_id()
+    eng = _get_engine(deal_id)
     pf = _get_proforma_data(tif_scenario)
 
     if pf:
@@ -70,7 +79,7 @@ def _run_full_analysis(tif_scenario='baseline'):
         # Persist to analytical warehouse (fire-and-forget)
         try:
             from warehouse.deal_analytics import persist_debt
-            persist_debt('chamberlain', result, tif_scenario)
+            persist_debt(_warehouse_deal_id(deal_id), result, tif_scenario)
         except Exception:
             pass
     else:
@@ -227,7 +236,7 @@ def api_refi_scenario():
     new_amort = request.args.get('new_amort', 360, type=int)
     new_io = request.args.get('new_io', 24, type=int)
 
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     pf = _get_proforma_data(tif)
 
     noi = pf['noi_by_year'] if pf else None

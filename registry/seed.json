@@ -1,0 +1,42 @@
+{
+  "_comment": "Initial registry seed. Loaded once into data/registry.db on first boot when the entity table is empty. After that, the DB is the mutable source of truth (edit/re-parent via the registry API, not this file). Entities seed at top level with no parent; create funds/sub-funds and re-parent as the structure firms up.",
+  "entities": [
+    {
+      "id": "chamberlain",
+      "type": "deal",
+      "label": "Chamberlain",
+      "parent_id": null,
+      "modules": ["tif", "distribution", "debt", "partnership", "proforma"],
+      "warehouse_deal_id": "chamberlain",
+      "sort_order": 0,
+      "meta": {"note": "Chamberlain — original single deal; assumptions currently sourced from engine defaults until migrated into deal_config."}
+    },
+    {
+      "id": "barrington_portfolio",
+      "type": "portfolio",
+      "label": "Barrington Portfolio",
+      "parent_id": null,
+      "module": "barrington",
+      "sort_order": 10,
+      "meta": {"portfolio_match": "barrington", "note": "10-property office portfolio; data in the app database (portfolios table)."}
+    },
+    {
+      "id": "southtown_dhos",
+      "type": "lease",
+      "label": "Southtown / Dick's House of Sport — Bloomington, MN",
+      "parent_id": null,
+      "module": "southtown",
+      "sort_order": 20,
+      "meta": {"note": "DHOS build-to-suit lease + co-tenancy/returns."}
+    },
+    {
+      "id": "midway_marketplace",
+      "type": "disposition",
+      "label": "Midway Marketplace — St. Paul, MN",
+      "parent_id": null,
+      "module": "midway",
+      "sort_order": 30,
+      "meta": {"note": "Partial sale to GSC RE Holdings (H Mart affiliate), closed 6/18/2026."}
+    }
+  ]
+}

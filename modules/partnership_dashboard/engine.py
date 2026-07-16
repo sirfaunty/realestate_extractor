@@ -268,20 +268,35 @@ class DashboardResult:
 class PartnershipDashboardEngine:
     """Aggregation engine that combines proforma, distribution, and debt data."""
 
-    def __init__(self):
+    def __init__(self, deal_id=None):
+        self._deal_id = deal_id
         self._dist_engine = None
         self._debt_engine = None
 
+    def _deal_cfg(self, module):
+        """Editable per-deal config for a sub-module, or None (engine defaults)."""
+        if not self._deal_id:
+            return None
+        try:
+            from registry import get_registry, resolve_deal
+            wh_id = resolve_deal(self._deal_id)['warehouse_deal_id']
+            return get_registry().get_deal_config(wh_id, module)
+        except Exception:
+            return None
+
     def _get_dist_engine(self):
         if self._dist_engine is None:
-            from modules.distribution.engine import DistributionEngine
-            self._dist_engine = DistributionEngine()
+            from modules.distribution.engine import (
+                DistributionEngine, DistributionAssumptions)
+            cfg = self._deal_cfg('distribution')
+            self._dist_engine = DistributionEngine(
+                DistributionAssumptions.from_config(cfg) if cfg else None)
         return self._dist_engine
 
     def _get_debt_engine(self):
         if self._debt_engine is None:
             from modules.debt_analysis.engine import DebtAnalysisEngine
-            self._debt_engine = DebtAnalysisEngine()
+            self._debt_engine = DebtAnalysisEngine(self._deal_cfg('debt'))
         return self._debt_engine
 
     def _get_proforma_snapshot(self, tif_scenario: str = 'baseline'):

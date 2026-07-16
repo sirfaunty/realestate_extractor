@@ -307,15 +307,29 @@ class DebtAnalysisResult:
 
 # ─── Engine ───────────────────────────────────────────────────────
 
+def default_debt_config() -> dict:
+    """The Chamberlain loan structure as an editable per-deal config dict.
+    Seeding this and constructing DebtAnalysisEngine(config) reproduces the
+    hardcoded behavior exactly."""
+    return {
+        'loan': dict(CHAMBERLAIN_LOAN),
+        'mip': dict(CHAMBERLAIN_MIP),
+        'capex': dict(CHAMBERLAIN_CAPEX_LOAN),
+        'surplus': dict(CHAMBERLAIN_SURPLUS_NOTE),
+        'property': dict(CHAMBERLAIN_PROPERTY),
+    }
+
+
 class DebtAnalysisEngine:
     """Runs all debt analysis computations."""
 
-    def __init__(self):
-        self.loan = dict(CHAMBERLAIN_LOAN)
-        self.mip = dict(CHAMBERLAIN_MIP)
-        self.capex = dict(CHAMBERLAIN_CAPEX_LOAN)
-        self.surplus = dict(CHAMBERLAIN_SURPLUS_NOTE)
-        self.prop = dict(CHAMBERLAIN_PROPERTY)
+    def __init__(self, config: dict | None = None):
+        config = config or {}
+        self.loan = dict(config.get('loan', CHAMBERLAIN_LOAN))
+        self.mip = dict(config.get('mip', CHAMBERLAIN_MIP))
+        self.capex = dict(config.get('capex', CHAMBERLAIN_CAPEX_LOAN))
+        self.surplus = dict(config.get('surplus', CHAMBERLAIN_SURPLUS_NOTE))
+        self.prop = dict(config.get('property', CHAMBERLAIN_PROPERTY))
 
     # ── PMT helper ────────────────────────────────────────────────
 

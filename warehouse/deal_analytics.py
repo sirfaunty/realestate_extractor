@@ -19,6 +19,7 @@ Usage in a module:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,23 +31,34 @@ logger = logging.getLogger(__name__)
 
 _wh: Optional['WarehouseEngine'] = None
 
-DEAL_ID = 'chamberlain'   # default deal; parameterize when multi-deal
+# DuckDB is single-writer; the warehouse engine + its connection are shared state.
+# `_init_lock` guards one-time creation (double-checked) so parallel requests can't
+# create two engines; `_write_lock` serializes every persist so concurrent writers
+# can't race on the shared connection (which produced intermittent
+# "'NoneType' object is not subscriptable" and duplicate ingestion counters).
+_init_lock = threading.Lock()
+_write_lock = threading.Lock()
 
 
 def _get_wh() -> 'WarehouseEngine':
     global _wh
     if _wh is None:
-        from .engine import WarehouseEngine
-        _wh = WarehouseEngine()
-        _wh.connect()
+        with _init_lock:
+            if _wh is None:
+                from .engine import WarehouseEngine
+                wh = WarehouseEngine()
+                wh.connect()
+                _wh = wh
     return _wh
 
 
 def _safe(fn):
-    """Decorator: catch warehouse errors so deal modules never break."""
+    """Decorator: serialize the write and catch warehouse errors so deal modules
+    never break (fire-and-forget semantics)."""
     def wrapper(*args, **kwargs):
         try:
-            return fn(*args, **kwargs)
+            with _write_lock:
+                return fn(*args, **kwargs)
         except Exception as e:
             logger.warning(f'Warehouse write failed ({fn.__name__}): {e}')
             return None

@@ -18,7 +18,7 @@ Key concepts
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from typing import Any
 
 
@@ -91,6 +91,26 @@ class TIFAssumptions:
     def chamberlain_defaults(cls) -> TIFAssumptions:
         """Factory for Chamberlain-specific assumptions (the defaults)."""
         return cls()
+
+    @classmethod
+    def from_config(cls, config: dict | None) -> "TIFAssumptions":
+        """Build assumptions from an editable per-deal config, overlaying only
+        recognized fields onto the Chamberlain defaults. A missing/None config
+        returns the defaults unchanged, so the default deal is byte-for-byte
+        identical to the hardcoded behavior. Non-field keys (e.g. 'scenarios')
+        are ignored here and handled by the caller."""
+        base = cls()
+        if not config:
+            return base
+        valid = {f.name for f in fields(cls)}
+        for key, value in config.items():
+            if key in valid:
+                setattr(base, key, value)
+        return base
+
+    def to_config(self) -> dict:
+        """Serialize the stored (non-derived) fields for the editable config store."""
+        return asdict(self)
 
 
 # ---------------------------------------------------------------------------

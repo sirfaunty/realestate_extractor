@@ -14,20 +14,26 @@ Routes:
 import logging
 from flask import Blueprint, jsonify, request, render_template
 
-from .engine import DistributionEngine, CHAMBERLAIN_DEFAULT_CF
+from .engine import DistributionEngine, DistributionAssumptions, CHAMBERLAIN_DEFAULT_CF
 
 logger = logging.getLogger(__name__)
 
 distribution_bp = Blueprint('distribution', __name__, url_prefix='/distribution')
 
-_engine = None
+
+from registry.deal_context import (
+    deal_id_from_request as _deal_id,
+    warehouse_deal_id as _warehouse_deal_id,
+    deal_config as _deal_config,
+)
 
 
-def _get_engine():
-    global _engine
-    if _engine is None:
-        _engine = DistributionEngine()
-    return _engine
+def _get_engine(deal_id=None):
+    """Build a distribution engine for the deal. None config (or unknown deal)
+    yields the Chamberlain defaults, so behavior is unchanged."""
+    cfg = _deal_config(deal_id, 'distribution') if deal_id else None
+    assumptions = DistributionAssumptions.from_config(cfg) if cfg else None
+    return DistributionEngine(assumptions)
 
 
 def _get_proforma_snapshot(tif_scenario='baseline'):
@@ -40,12 +46,12 @@ def _get_proforma_snapshot(tif_scenario='baseline'):
         return None
 
 
-def _run_with_proforma(tif_scenario='baseline', include_sale=True):
+def _run_with_proforma(tif_scenario='baseline', include_sale=True, deal_id=None):
     """Run distribution with live proforma data if available.
 
     Returns (DistributionResult, proforma_source_label).
     """
-    eng = _get_engine()
+    eng = _get_engine(deal_id)
     snap = _get_proforma_snapshot(tif_scenario)
 
     if snap:
@@ -82,7 +88,7 @@ def _run_with_proforma(tif_scenario='baseline', include_sale=True):
         # Persist distribution to analytical warehouse (fire-and-forget)
         try:
             from warehouse.deal_analytics import persist_distribution
-            persist_distribution('chamberlain', result, tif_scenario)
+            persist_distribution(_warehouse_deal_id(deal_id), result, tif_scenario)
         except Exception:
             pass
         return result
@@ -111,7 +117,7 @@ def distribution_index():
 @distribution_bp.route('/api/assumptions')
 def api_assumptions():
     """Return current model assumptions."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     data = eng.get_assumptions()
 
     # Add available TIF scenarios
@@ -137,7 +143,7 @@ def api_waterfall():
     tif = request.args.get('tif_scenario', 'baseline')
     include_sale = request.args.get('include_sale', 'true').lower() != 'false'
 
-    result = _run_with_proforma(tif, include_sale)
+    result = _run_with_proforma(tif, include_sale, _deal_id())
     return jsonify(result.to_dict())
 
 
@@ -149,13 +155,14 @@ def api_scenarios():
     aggressive_appeal, maa_floor) using live proforma data.
     """
     include_sale = request.args.get('include_sale', 'true').lower() != 'false'
+    deal_id = _deal_id()
 
     try:
         from .proforma_bridge import get_available_tif_scenarios
         tif_scenarios = get_available_tif_scenarios()
     except Exception:
         # Fallback: single default scenario
-        result = _run_with_proforma('baseline', include_sale)
+        result = _run_with_proforma('baseline', include_sale, deal_id)
         return jsonify({
             'scenarios': {'Base Case': result.to_dict()},
             'scenario_names': ['Base Case'],
@@ -165,7 +172,7 @@ def api_scenarios():
     results = {}
     for sc in tif_scenarios:
         tif_name = sc['id']
-        result = _run_with_proforma(tif_name, include_sale)
+        result = _run_with_proforma(tif_name, include_sale, deal_id)
         results[sc['label']] = {
             'tif_scenario': tif_name,
             'partner_summary': result.partner_summary,
@@ -193,7 +200,7 @@ def api_sensitivity():
     steps = int(request.args.get('steps', 7))
 
     snap = _get_proforma_snapshot(tif)
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
 
     if snap:
         base_cf = dict(snap.levered_cf_by_year)
@@ -240,7 +247,7 @@ def api_sensitivity():
 @distribution_bp.route('/api/surplus-note')
 def api_surplus_note():
     """Return surplus cash note amortization schedule."""
-    eng = _get_engine()
+    eng = _get_engine(_deal_id())
     result = eng.run_distribution()
     return jsonify({
         'schedule': [s.to_dict() for s in result.surplus_note_schedule],

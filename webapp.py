@@ -3349,6 +3349,22 @@ except Exception as e:
     import logging
     logging.getLogger(__name__).warning(f'Warehouse registration failed: {e}')
 
+# ─── Registry Registration ─────────────────────────────────────────
+# Shared entity registry (funds / sub-funds / portfolios / deals) + deal picker
+# API. Also seeds Chamberlain's editable per-deal config from the engine defaults
+# (idempotent) so the config path is populated for editing. Absolute imports keep
+# a single registry singleton shared with the deal-analytics route helpers.
+
+try:
+    from registry.routes import register_registry_routes
+    from registry import get_registry
+    from registry.deal_config_seed import seed_chamberlain_configs
+    register_registry_routes(app)
+    seed_chamberlain_configs(get_registry())
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(f'Registry registration failed: {e}')
+
 
 # ─── App Runner ──────────────────────────────────────────────────────
 
@@ -3361,7 +3377,9 @@ def run_webapp(host='127.0.0.1', port=5000, debug=False):
     print(f"  Running locally at http://{host}:{port}")
     print(f"  All data stays on this device.")
     print(f"{'='*50}\n")
-    app.run(host=host, port=port, debug=debug)
+    # threaded=True so one slow request (e.g. a heavy DuckDB warehouse query) doesn't
+    # block every other page — the dev server otherwise handles one request at a time.
+    app.run(host=host, port=port, debug=debug, threaded=True)
 
 
 if __name__ == '__main__':
