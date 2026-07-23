@@ -319,7 +319,11 @@ INDEX_HTML = """
             if (markets.length > 10) {
                 var toggle = document.createElement('div');
                 toggle.style.cssText = 'text-align:center;padding:12px;';
-                toggle.innerHTML = '<a href="#" onclick="document.querySelectorAll(\'.inv-extra-row\').forEach(function(r){r.style.display=r.style.display===\'none\'?\'\':\'none\';}); this.textContent=this.textContent.indexOf(\'Show all\')!==-1?\'Show fewer\':\'Show all ' + markets.length + ' markets\'; return false;" style="color:var(--accent);font-size:13px;">Show all ' + markets.length + ' markets</a>';
+                var _lnk = document.createElement('a');
+                _lnk.href = '#'; _lnk.style.cssText = 'color:var(--accent);font-size:13px;';
+                _lnk.textContent = 'Show all ' + markets.length + ' markets';
+                _lnk.onclick = function() { var hidden=false; document.querySelectorAll('.inv-extra-row').forEach(function(r){ r.style.display=(r.style.display==='none')?'':'none'; hidden=(r.style.display==='none'); }); _lnk.textContent = hidden ? ('Show all ' + markets.length + ' markets') : 'Show fewer'; return false; };
+                toggle.appendChild(_lnk);
                 document.getElementById('markets-table').appendChild(toggle);
             }
         })
