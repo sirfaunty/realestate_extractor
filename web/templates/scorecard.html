@@ -59,6 +59,8 @@
   color: var(--text);
   padding: 20px 28px;
 }
+.scorecard-root, .scorecard-root * { box-sizing: border-box; }
+.scorecard-root input, .scorecard-root select { max-width: 100%; }
 
 /* ── Module Bar (MF / Demographics toggle) ── */
 .scorecard-root .module-bar {
@@ -104,10 +106,8 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
-  overflow-y: auto;
-  max-height: calc(100vh - 120px);
-  position: sticky;
-  top: 20px;
+  overflow-x: hidden;
+  align-self: flex-start;
   font-size: 12px;
 }
 .scorecard-root .main-content {
@@ -354,6 +354,7 @@
 /* Momentum table */
 .scorecard-root .momentum-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -371,6 +372,14 @@
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   color: var(--text);
+  font-family: var(--font);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.scorecard-root .momentum-table th:last-child,
+.scorecard-root .momentum-table td:last-child {
+  width: 78px;
+  text-align: right;
 }
 .scorecard-root .momentum-table input {
   width: 60px;
@@ -385,7 +394,7 @@
 
 .scorecard-root .subcat-weights-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 
