@@ -87,3 +87,8 @@ midway_db/source_docs/
 midway_db/**/*.db
 midway_db/**/*.docx
 midway_db/_*
+
+# Data export bundle for mirroring to another machine (local-only)
+capactive_data_export.zip
+data/warehouse_export/
+_import/

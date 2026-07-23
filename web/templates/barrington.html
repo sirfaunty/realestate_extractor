@@ -70,7 +70,7 @@
   <div class="barr-card barr-results" id="results">
     <h2>2 · Deliverable</h2>
     <div class="barr-row" style="margin-bottom:16px;">
-      <a class="barr-btn" id="download-btn" href="/barrington/api/download">⬇ Download Excel workbook</a>
+      <a class="barr-btn" id="download-btn" href="/portfolio-cashflow/api/download">⬇ Download Excel workbook</a>
       <span style="font-size:12px;color:#5B6472;" id="gen-meta"></span>
     </div>
     <div class="barr-kpis" id="kpis"></div>
@@ -111,7 +111,7 @@ function renderSummary(s) {
 }
 
 // Load properties into the selector (registry-driven; each resolves to its DB portfolio)
-fetch('/barrington/api/properties').then(r => r.json()).then(list => {
+fetch('/portfolio-cashflow/api/properties').then(r => r.json()).then(list => {
   const sel = $('pf-select');
   if (!Array.isArray(list) || !list.length) {
     sel.innerHTML = '<option value="">No properties found</option>';
@@ -123,7 +123,7 @@ fetch('/barrington/api/properties').then(r => r.json()).then(list => {
 
 let pollTimer = null;
 function poll(jobId) {
-  fetch('/barrington/api/status/' + jobId).then(r => r.json()).then(j => {
+  fetch('/portfolio-cashflow/api/status/' + jobId).then(r => r.json()).then(j => {
     if (j.status === 'running') {
       $('progress-text').textContent = j.detail || j.step || 'Working…';
       pollTimer = setTimeout(() => poll(jobId), 1500);
@@ -151,7 +151,7 @@ $('gen-btn').addEventListener('click', () => {
   $('gen-btn').disabled = true;
   $('progress').style.display = 'flex';
   $('progress-text').textContent = 'Starting…';
-  fetch('/barrington/api/generate', {
+  fetch('/portfolio-cashflow/api/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ portfolio_id: pid, style: $('style-select').value }),
   }).then(r => r.json().then(j => ({ ok: r.ok, j })))
