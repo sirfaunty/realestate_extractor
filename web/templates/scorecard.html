@@ -1,9 +1,14 @@
-{% extends "base.html" %}
-
-{% block title %}Market Scorecard — capactive{% endblock %}
-
-{% block content %}
-<script>document.querySelector('.main').classList.add('main-wide');</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Scorecard — capactive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>html,body{background:#F7F8FA;margin:0}</style>
+</head>
+<body>
 {# Google Fonts for scorecard (JetBrains Mono not in base) #}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -52,6 +57,7 @@
   font-size: 13px;
   line-height: 1.4;
   color: var(--text);
+  padding: 20px 28px;
 }
 
 /* ── Module Bar (MF / Demographics toggle) ── */
@@ -1589,9 +1595,6 @@
 </div>
 
 </div><!-- /scorecard-root -->
-{% endblock %}
-
-{% block scripts %}
 <script>
 // Auto-wrap percentage inputs with % suffix
 (function() {
@@ -2927,4 +2930,5 @@ document.addEventListener('mouseover', function(e) {
   tt.style.display = '';
 }, true);
 </script>
-{% endblock %}
+</body>
+</html>

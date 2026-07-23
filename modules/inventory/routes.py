@@ -184,9 +184,10 @@ def api_bridge():
 _STYLE = """
 <style>
 :root {
-    --bg: #0d1117; --surface: #161b22; --border: #30363d;
-    --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff;
-    --green: #3fb950; --orange: #d29922; --red: #f85149;
+  --cap-primary: #3A8FD4; --text-muted: #8b949e; --text-secondary: #c9d1d9;
+    --bg: #0f1419; --surface: #1a1f2e; --border: #2d3548;
+    --text: #e6edf3; --text2: #8b949e; --accent: #3A8FD4;
+    --green: #10B981; --orange: #d29922; --red: #f85149;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; }
