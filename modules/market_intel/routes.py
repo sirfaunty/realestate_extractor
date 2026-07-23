@@ -237,13 +237,14 @@ def api_compare():
 _STYLE = """
 <style>
 :root {
+  --cap-primary: #3A8FD4; --text-muted: #8b949e; --text-secondary: #c9d1d9;
   --bg:      #0f1419;
   --surface: #1a1f2e;
   --border:  #2d3548;
   --text:    #e6edf3;
   --muted:   #8b949e;
-  --accent:  #58a6ff;
-  --green:   #3fb950;
+  --accent:  #3A8FD4;
+  --green:   #10B981;
   --red:     #f85149;
   --yellow:  #d29922;
   --orange:  #db6d28;
