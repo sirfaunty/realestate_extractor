@@ -253,13 +253,7 @@ INDEX_HTML = """
 </style>
 </head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/warehouse">Warehouse</a>
-        <a href="/inventory">Inventory</a>
-        <a href="/inventory/search">Search</a>
-    </div>
-    <div style="font-size: 13px; margin-bottom: 16px;">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
         <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
         <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
         <span style="color: var(--text-secondary, #5A5A6E);">Inventory</span>
@@ -339,10 +333,12 @@ INDEX_HTML = """
 MARKET_HTML = """
 <!DOCTYPE html><html><head><title>{{ stats.market }} — Inventory</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/inventory">← Inventory</a>
-        <a href="/inventory/search?market={{ stats.market }}">Search This Market</a>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/inventory" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Inventory</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">{{ stats.market }}</span>
     </div>
     <h1>{{ stats.market }}</h1>
     <div class="grid">
@@ -381,10 +377,12 @@ MARKET_HTML = """
 PROPERTY_HTML = """
 <!DOCTYPE html><html><head><title>{{ profile.property_name or profile.property_id }} — Z-Scores</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/inventory">← Inventory</a>
-        {% if profile.market %}<a href="/inventory/market/{{ profile.market }}">← {{ profile.market }}</a>{% endif %}
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/inventory" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Inventory</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">{{ profile.property_name or profile.property_id }}</span>
     </div>
     <div class="prop-header">
         <div class="info">
@@ -489,9 +487,12 @@ PROPERTY_HTML = """
 SEARCH_HTML = """
 <!DOCTYPE html><html><head><title>Search — Inventory</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/inventory">← Inventory</a>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/inventory" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Inventory</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Search</span>
     </div>
     <h1>Property Search</h1>
     <form class="search-bar" method="GET" action="/inventory/search">
@@ -525,7 +526,13 @@ SEARCH_HTML = """
 NOT_FOUND_HTML = """
 <!DOCTYPE html><html><head><title>Not Found — Inventory</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav"><a href="/inventory">← Inventory</a></div>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/inventory" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Inventory</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Not Found</span>
+    </div>
     <h1>Property Not Found</h1>
     <p class="subtitle">No property with ID {{ property_id }} in the warehouse.</p>
     <p><a href="/inventory/search?q={{ property_id }}">Search for it →</a></p>

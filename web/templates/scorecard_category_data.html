@@ -238,10 +238,13 @@
 </style>
 
 <div class="catdata-root">
-  <a href="{{ url_for('scorecard.scorecard_index') }}" class="cd-back-link">
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Back to Scorecard
-  </a>
+  <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+    <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+    <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+    <a href="/scorecard" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Scorecard</a>
+    <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+    <span style="color: var(--text-secondary, #5A5A6E);">Category Data</span>
+  </div>
 
   <div class="cd-header">
     <div>

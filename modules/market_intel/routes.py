@@ -304,13 +304,12 @@ function filterTable() {
 </head><body>
 <div class="topbar">
     <h1>Market Intelligence</h1>
-    <span class="breadcrumb">{{ markets|length }} markets</span>
 </div>
 <div class="container">
-    <div style="font-size: 13px; margin-bottom: 16px;">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
         <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
         <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
-        <span style="color: var(--text-secondary, #5A5A6E);">Market Intelligence</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Market Intel</span>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <h2 style="margin:0">Markets</h2>
@@ -353,10 +352,16 @@ _MARKET_DETAIL_HTML = """
 <html><head><title>{{ brief.market }} — Market Intelligence</title>""" + _STYLE + """
 </head><body>
 <div class="topbar">
-    <h1><a href="/market-intel" style="color:var(--muted)">Market Intelligence</a></h1>
-    <span class="breadcrumb">/ {{ brief.market }}</span>
+    <h1>Market Intelligence</h1>
 </div>
 <div class="container">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/market-intel" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Intel</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">{{ brief.market }}</span>
+    </div>
 
 <!-- Signals -->
 {% if brief.signals %}
@@ -691,10 +696,16 @@ function goCompare() {
 </script>
 </head><body>
 <div class="topbar">
-    <h1><a href="/market-intel" style="color:var(--muted)">Market Intelligence</a></h1>
-    <span class="breadcrumb">/ Compare</span>
+    <h1>Market Intelligence</h1>
 </div>
 <div class="container">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/market-intel" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Intel</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Compare</span>
+    </div>
 <h2>Select Markets to Compare</h2>
 <p class="subtitle">Choose 2-5 markets for side-by-side analysis</p>
 <div style="max-height:500px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface)">
@@ -716,10 +727,16 @@ _COMPARE_HTML = """
 <html><head><title>Market Comparison — Capactive</title>""" + _STYLE + """
 </head><body>
 <div class="topbar">
-    <h1><a href="/market-intel" style="color:var(--muted)">Market Intelligence</a></h1>
-    <span class="breadcrumb">/ Compare: {{ market_names|join(', ') }}</span>
+    <h1>Market Intelligence</h1>
 </div>
 <div class="container">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/market-intel" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Intel</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Compare</span>
+    </div>
 <h2>Market Comparison</h2>
 <table>
 <thead><tr>
@@ -757,10 +774,16 @@ _ERROR_HTML = """
 <html><head><title>Error — Market Intelligence</title>""" + _STYLE + """
 </head><body>
 <div class="topbar">
-    <h1><a href="/market-intel" style="color:var(--muted)">Market Intelligence</a></h1>
-    <span class="breadcrumb">/ Error</span>
+    <h1>Market Intelligence</h1>
 </div>
 <div class="container">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/market-intel" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Intel</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Error</span>
+    </div>
     <div class="card" style="border-color:var(--red)">
         <h3 style="color:var(--red)">Error loading market data</h3>
         <p style="color:var(--muted);margin-top:8px">{{ error }}</p>

@@ -300,7 +300,11 @@ tr:hover td{background:rgba(255,255,255,.03)}
 _NAV = """
 <div class="topbar">
   <div>
-    <span class="breadcrumb"><a href="/">Home</a> / <a href="/leases">Lease Analysis</a>{extra}</span>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        {extra}
+    </div>
     <h1 style="margin-top:2px">{title}</h1>
   </div>
 </div>
@@ -312,13 +316,8 @@ _DASHBOARD_HTML = _STYLE + """
 .loading-msg .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
-""" + _NAV.replace('{extra}', '').replace('{title}', 'Lease Analysis') + """
+""" + _NAV.replace('{extra}', '<span style="color: var(--text-secondary, #5A5A6E);">Lease Analysis</span>').replace('{title}', 'Lease Analysis') + """
 <div class="container">
-  <div style="font-size: 13px; margin-bottom: 16px;">
-      <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
-      <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
-      <span style="color: var(--text-secondary, #5A5A6E);">Lease Analysis</span>
-  </div>
   <p class="subtitle">Properties with extracted rent-roll or lease documents</p>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;" id="kpi-cards">
     <!-- JS will populate -->
@@ -391,7 +390,7 @@ _DASHBOARD_HTML = _STYLE + """
 """
 
 _PROPERTY_HTML = _STYLE + _NAV.replace(
-    '{extra}', ' / {{ prop.name }}'
+    '{extra}', '<a href="/leases" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Lease Analysis</a><span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span><span style="color: var(--text-secondary, #5A5A6E);">{{ prop.name }}</span>'
 ).replace('{title}', '{{ prop.name }} — Lease Overview') + """
 <div class="container">
 
@@ -490,7 +489,7 @@ _PROPERTY_HTML = _STYLE + _NAV.replace(
 """
 
 _ANALYSIS_HTML = _STYLE + _NAV.replace(
-    '{extra}', ' / <a href="/leases/property/{{ prop.id }}">{{ prop.name }}</a> / Analysis'
+    '{extra}', '<a href="/leases" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Lease Analysis</a><span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span><a href="/leases/property/{{ prop.id }}" style="color: var(--cap-primary, #185FA5); text-decoration: none;">{{ prop.name }}</a><span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span><span style="color: var(--text-secondary, #5A5A6E);">Analysis</span>'
 ).replace('{title}', '{{ prop.name }} — Pricing Analysis') + """
 <div class="container">
 
