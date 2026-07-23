@@ -39,7 +39,7 @@ class Portfolio BModule(AbstractModule):
     def get_nav_items(self):
         return [{
             'label': 'Portfolio Cash Flow',
-            'url': '/portfolio_cashflow',
+            'url': '/portfolio-cashflow',
             'icon': 'cash-flow',
             'section': 'analytics',
         }]

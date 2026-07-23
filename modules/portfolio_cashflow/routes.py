@@ -38,7 +38,7 @@ _RR_DIR = os.path.join(_STAGE_ROOT, 'staged_rent_rolls')
 if _BARR_ROOT not in sys.path:
     sys.path.insert(0, _BARR_ROOT)
 
-portfolio_cashflow_bp = Blueprint('portfolio_cashflow', __name__, url_prefix='/portfolio_cashflow')
+portfolio_cashflow_bp = Blueprint('portfolio_cashflow', __name__, url_prefix='/portfolio-cashflow')
 
 _JOBS = {}
 _LATEST = {'xlsx': None, 'summary': None}

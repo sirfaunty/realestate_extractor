@@ -87,3 +87,8 @@ disposition_diligence_db/source_docs/
 disposition_diligence_db/**/*.db
 disposition_diligence_db/**/*.docx
 disposition_diligence_db/_*
+
+# Data export bundle for mirroring to another machine (local-only)
+capactive_data_export.zip
+data/warehouse_export/
+_import/
