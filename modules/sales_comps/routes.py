@@ -270,15 +270,7 @@ INDEX_HTML = """
 </style>
 </head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/warehouse">Warehouse</a>
-        <a href="/inventory">Inventory</a>
-        <a href="/comps">Sales Comps</a>
-        <a href="/comps/search">Search</a>
-        <a href="/comps/cap-rates">Cap Rates</a>
-    </div>
-    <div style="font-size: 13px; margin-bottom: 16px;">
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
         <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
         <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
         <span style="color: var(--text-secondary, #5A5A6E);">Sales Comps</span>
@@ -338,9 +330,12 @@ INDEX_HTML = """
 SEARCH_HTML = """
 <!DOCTYPE html><html><head><title>Search — Sales Comps</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/comps">← Sales Comps</a>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/comps" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Sales Comps</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Search</span>
     </div>
     <h1>Transaction Search</h1>
     <form class="filters" method="GET" action="/comps/search">
@@ -379,10 +374,12 @@ SEARCH_HTML = """
 MARKET_HTML = """
 <!DOCTYPE html><html><head><title>{{ summary.market }} — Sales Comps</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/">← Platform</a>
-        <a href="/comps">← Sales Comps</a>
-        <a href="/comps/search?market={{ summary.market }}">Search This Market</a>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/comps" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Sales Comps</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">{{ summary.market }}</span>
     </div>
     <h1>{{ summary.market }}</h1>
     <div class="grid">
@@ -462,9 +459,12 @@ MARKET_HTML = """
 TRANSACTION_HTML = """
 <!DOCTYPE html><html><head><title>{{ txn.property_name or 'Transaction' }} — Sales Comps</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/comps">← Sales Comps</a>
-        {% if txn.market %}<a href="/comps/market/{{ txn.market }}">← {{ txn.market }}</a>{% endif %}
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/comps" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Sales Comps</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">{{ txn.property_name or 'Transaction ' + txn.transaction_id }}</span>
     </div>
     <h1>{{ txn.property_name or 'Transaction ' + txn.transaction_id }}</h1>
     <p class="subtitle">{{ txn.property_address }}, {{ txn.city }}, {{ txn.state }}</p>
@@ -512,7 +512,13 @@ TRANSACTION_HTML = """
 OWNER_HTML = """
 <!DOCTYPE html><html><head><title>{{ owner }} — Sales Comps</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav"><a href="/comps">← Sales Comps</a></div>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/comps" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Sales Comps</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">{{ owner }}</span>
+    </div>
     <h1>{{ owner }}</h1>
     <p class="subtitle">{{ portfolio|length }} properties</p>
     {% if portfolio %}
@@ -539,8 +545,12 @@ OWNER_HTML = """
 CAP_RATES_HTML = """
 <!DOCTYPE html><html><head><title>Cap Rates — Sales Comps</title>""" + _STYLE + """</head><body>
 <div class="container">
-    <div class="nav">
-        <a href="/comps">← Sales Comps</a>
+    <div class="ma-crumb" style="font-size: 13px; margin-bottom: 16px;">
+        <a href="/market-analytics" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Market Analytics</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <a href="/comps" style="color: var(--cap-primary, #185FA5); text-decoration: none;">Sales Comps</a>
+        <span style="color: var(--text-muted, #8E8E9A); margin: 0 6px;">&#8250;</span>
+        <span style="color: var(--text-secondary, #5A5A6E);">Cap Rates</span>
     </div>
     <h1>Cap Rate Trends{{ ' — ' + selected_market if selected_market else ' — National' }}</h1>
     {% if trend %}
