@@ -640,4 +640,19 @@ fetch('/api/status')
                 }
 
                 if (queued.length > 0 && processing.length > 0) {
-                    detail
+                    detail.textContent += '  ·  ' + queued.length + ' more queued';
+                }
+
+                banner.style.display = '';
+            })
+            .catch(() => {
+                // Ignore transient polling errors; retry on the next interval.
+            });
+    }
+
+    pollActiveJobs();
+    setInterval(pollActiveJobs, 2500);
+})();
+</script>
+</body>
+</html>
