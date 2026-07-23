@@ -156,6 +156,33 @@ class RegistryStore:
             (parent["children"] if parent else roots).append(node)
         return roots
 
+    def descendants(self, node_id: str) -> list[dict[str, Any]]:
+        """All entities beneath `node_id` (any depth), excluding the node itself.
+        Built from one adjacency map so it never re-queries per level."""
+        children_by_parent: dict[str, list[dict[str, Any]]] = {}
+        for e in self.all_entities():
+            children_by_parent.setdefault(e["parent_id"], []).append(e)
+        out: list[dict[str, Any]] = []
+        stack = list(children_by_parent.get(node_id, []))
+        seen = {node_id}
+        while stack:
+            node = stack.pop()
+            if node["id"] in seen:
+                continue
+            seen.add(node["id"])
+            out.append(node)
+            stack.extend(children_by_parent.get(node["id"], []))
+        return out
+
+    def descendant_deals(self, node_id: str) -> list[dict[str, Any]]:
+        """The deal leaves that roll up into `node_id`. If the node is itself a
+        deal, it returns just that deal — so a rollup works at any level (fund,
+        sub-fund, portfolio, or a single deal)."""
+        node = self.get_entity(node_id)
+        if node and node["type"] == "deal":
+            return [node]
+        return [e for e in self.descendants(node_id) if e["type"] == "deal"]
+
     def list_by_module(self, module: str) -> list[dict[str, Any]]:
         """Entities usable by a given module: single-module retail bindings plus
         deal-analytics entities whose `modules` array includes the module."""
