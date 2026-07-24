@@ -8,6 +8,7 @@ geo panel time series, and search.
 
 import logging
 import os
+import threading
 from typing import Any, Dict, List, Optional
 
 import duckdb
@@ -115,17 +116,26 @@ class OfficeEngine:
 
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = db_path or _default_db_path()
-        self._con = None
+        self._db = None
+        self._local = threading.local()
 
     @property
     def con(self):
-        if self._con is None:
+        # A single DuckDB connection can't run queries concurrently, and the dev
+        # server is threaded — pages fire several queries at once (stats + list),
+        # which otherwise collide and return empty/errored results. Give each
+        # thread its own cursor (a separate connection to the same database).
+        if self._db is None:
             if not os.path.exists(self.db_path):
                 raise FileNotFoundError(
                     'Office DuckDB not found at ' + self.db_path)
-            self._con = duckdb.connect(self.db_path, read_only=True)
+            self._db = duckdb.connect(self.db_path, read_only=True)
             logger.info('Connected to office DuckDB: %s', self.db_path)
-        return self._con
+        cur = getattr(self._local, 'cur', None)
+        if cur is None:
+            cur = self._db.cursor()
+            self._local.cur = cur
+        return cur
 
     def _query(self, sql: str, params=None) -> List[Dict]:
         """Execute SQL and return list of dicts."""

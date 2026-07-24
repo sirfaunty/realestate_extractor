@@ -30,6 +30,7 @@ import duckdb
 import hashlib
 import logging
 import os
+import threading
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
@@ -64,19 +65,40 @@ class WarehouseEngine:
 
     def __init__(self, db_path: str = None):
         self.db_path = db_path or _DEFAULT_DB_PATH
-        self.conn = None
+        self._db = None                  # shared in-process DuckDB database handle
+        self._local = threading.local()  # per-thread cursors (see .conn)
 
     def connect(self):
-        """Open connection and ensure schema exists."""
+        """Open the database and ensure the schema exists."""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.conn = duckdb.connect(self.db_path)
+        self._db = duckdb.connect(self.db_path)
         self._ensure_schema()
         logger.info(f"Warehouse connected: {self.db_path}")
 
+    @property
+    def conn(self):
+        """A DuckDB cursor scoped to the current thread.
+
+        A single DuckDB connection can't run two queries concurrently, and the
+        dev server is threaded — so a page that fires several warehouse queries
+        at once (e.g. stats + rankings on load) would otherwise corrupt each
+        other's results (empty/partial rows, sporadic 500s). Each thread gets
+        its own cursor — a separate connection to the same in-process database —
+        which is DuckDB's supported concurrency model.
+        """
+        if self._db is None:
+            self.connect()
+        cur = getattr(self._local, "cur", None)
+        if cur is None:
+            cur = self._db.cursor()
+            self._local.cur = cur
+        return cur
+
     def close(self):
-        if self.conn:
-            self.conn.close()
-            self.conn = None
+        if self._db is not None:
+            self._db.close()
+            self._db = None
+            self._local = threading.local()
 
     def _ensure_schema(self):
         """Create tables if they don't exist."""
