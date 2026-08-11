@@ -96,16 +96,48 @@ def is_scanned_pdf(filepath: str, sample_pages: int = 3) -> bool:
     Uses PyMuPDF for fast text sampling (avoids pdfplumber timeout on
     corrupted files).
     """
+    def _garbage_ratio(text):
+        """Broken-font text layers surface differently per extractor:
+        pdfplumber emits '(cid:N)' tokens, PyMuPDF emits raw control/
+        private-use codepoints. Measure unusable characters generically."""
+        vis = [ch for ch in text if ch not in '\n\r\t ']
+        if not vis:
+            return 0.0
+        bad = sum(1 for ch in vis
+                  if ord(ch) < 32 or 0x7f <= ord(ch) <= 0x9f
+                  or 0xe000 <= ord(ch) <= 0xf8ff       # private use area
+                  or 0x0870 <= ord(ch) <= 0x089f)      # rare-script soup
+        return bad / len(vis)
+
     try:
         import fitz
         doc = fitz.open(filepath)
         pages_to_check = min(sample_pages, doc.page_count)
         total_chars = 0
-        for i in range(pages_to_check):
+        cid_hits = 0
+        garbage = []
+        sample_idx = list(range(pages_to_check)) + [
+            i for i in (doc.page_count // 3, doc.page_count // 2,
+                        2 * doc.page_count // 3) if i >= pages_to_check]
+        for i in sample_idx:
             text = doc[i].get_text() or ""
-            total_chars += len(text.strip())
+            if i < pages_to_check:
+                total_chars += len(text.strip())
+            cid_hits += text.count('(cid:')
+            if len(text.strip()) > 100:
+                garbage.append(_garbage_ratio(text))
         doc.close()
         avg_chars = total_chars / max(pages_to_check, 1)
+        # Garbage text layer (broken ToUnicode maps) — route to OCR.
+        if cid_hits > 20:
+            logger.info(f"Text layer is (cid:) garbage ({cid_hits} tokens "
+                        f"sampled) — routing to OCR")
+            return True
+        if garbage and sum(garbage) / len(garbage) > 0.15:
+            logger.info(f"Text layer is encoding garbage "
+                        f"({100 * sum(garbage) / len(garbage):.0f}% unprintable "
+                        f"in sampled pages) — routing to OCR")
+            return True
         return avg_chars < 50
     except ImportError:
         # Fall back to pdfplumber if PyMuPDF not available
@@ -275,7 +307,10 @@ def _extract_with_pdfplumber(filepath: str, doc: DocumentContent) -> DocumentCon
                 is_scanned=False
             ))
 
-        doc.page_count = len(doc.pages)
+        # Record the TRUE page count, not just what we extracted: if the
+        # empty-page early-stop fired (page-1-only text layers), the
+        # remaining pages must stay visible so backfill_pages can OCR them.
+        doc.page_count = total_pages
 
     return doc
 
@@ -346,48 +381,74 @@ def extract_text_ocr(filepath: str, preprocess: bool = True,
         is_scanned=True
     )
 
-    # Convert PDF to images (300 DPI for good OCR accuracy)
-    logger.info(f"Converting PDF to images: {filepath}")
-    images = convert_from_path(filepath, dpi=300)
-    doc.page_count = len(images)
+    # Page count first (cheap), then convert in small batches — converting a
+    # whole 300+-page PDF at 300dpi at once needs gigabytes of RAM and
+    # thrashes swap, which was the dominant cost on large scanned leases.
+    import fitz
+    with fitz.open(filepath) as _d:
+        total_pages = _d.page_count
+    doc.page_count = total_pages
+
+    def _tess_page(img, tmo):
+        """Single OCR pass: image_to_data gives words AND confidence —
+        the old double pass (image_to_data + image_to_string) ran
+        Tesseract twice per page."""
+        data = pytesseract.image_to_data(
+            img, lang=language, output_type=pytesseract.Output.DICT,
+            timeout=tmo)
+        words, confs = [], []
+        cur_line = None
+        lines = []
+        for j in range(len(data['text'])):
+            w = (data['text'][j] or '').strip()
+            if not w:
+                continue
+            key = (data['block_num'][j], data['par_num'][j], data['line_num'][j])
+            if key != cur_line:
+                cur_line = key
+                lines.append([])
+            lines[-1].append(w)
+            c = data['conf'][j]
+            if str(c).isdigit() and int(c) > 0:
+                confs.append(int(c))
+        text = '\n'.join(' '.join(l) for l in lines)
+        avg = sum(confs) / len(confs) if confs else 0
+        return text, avg
 
     confidences = []
-
-    for i, image in enumerate(images):
-        logger.info(f"OCR processing page {i+1}/{len(images)}")
-
-        # Preprocess if enabled
-        if preprocess:
-            processed = preprocess_image_for_ocr(image)
-        else:
-            processed = image
-
-        # Run OCR with confidence data
-        ocr_data = pytesseract.image_to_data(
-            processed, lang=language, output_type=pytesseract.Output.DICT
-        )
-
-        # Extract text
-        text = pytesseract.image_to_string(processed, lang=language)
-
-        # Calculate average confidence for this page
-        page_confidences = [
-            int(c) for c in ocr_data['conf'] if str(c).isdigit() and int(c) > 0
-        ]
-        avg_conf = sum(page_confidences) / len(page_confidences) if page_confidences else 0
-        confidences.append(avg_conf)
-
-        # Attempt table detection via OCR'd text structure
-        # (Basic approach — tables from scanned docs are harder)
-        tables = _detect_tables_from_ocr_text(text)
-
-        doc.pages.append(PageContent(
-            page_number=i + 1,
-            text=text,
-            tables=tables,
-            is_scanned=True,
-            ocr_confidence=avg_conf
-        ))
+    BATCH = 10
+    logger.info(f"Converting PDF to images: {filepath}")
+    for start in range(1, total_pages + 1, BATCH):
+        end = min(start + BATCH - 1, total_pages)
+        images = convert_from_path(filepath, dpi=250,
+                                   first_page=start, last_page=end)
+        for k, image in enumerate(images):
+            pageno = start + k
+            logger.info(f"OCR processing page {pageno}/{total_pages}")
+            processed = preprocess_image_for_ocr(image) if preprocess else image
+            try:
+                text, avg_conf = _tess_page(processed, 90)
+            except RuntimeError:      # per-page timeout — bound the damage
+                logger.warning(f"OCR timeout p{pageno} — retrying without "
+                               f"preprocessing at reduced size")
+                try:
+                    small = image.resize((image.width * 2 // 3,
+                                          image.height * 2 // 3))
+                    text, avg_conf = _tess_page(small, 60)
+                except RuntimeError:
+                    logger.warning(f"OCR gave up on p{pageno} — left empty "
+                                   f"(backfill_pages can rescue it)")
+                    text, avg_conf = '', 0
+            confidences.append(avg_conf)
+            tables = _detect_tables_from_ocr_text(text)
+            doc.pages.append(PageContent(
+                page_number=pageno,
+                text=text,
+                tables=tables,
+                is_scanned=True,
+                ocr_confidence=avg_conf
+            ))
+        del images
 
     doc.avg_ocr_confidence = sum(confidences) / len(confidences) if confidences else 0
     return doc

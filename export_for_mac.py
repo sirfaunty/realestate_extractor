@@ -12,17 +12,41 @@ Bundles into `capactive_data_export.zip`:
   - RETAIL (built in this workspace, gitignored/local-only) — so all three no-code
     modules work on the Mac:
       * barrington_db / southtown_db / midway_db : their data/ + source_docs/
+  - PORTFOLIO SAMPLE — enough verified KA data that Portfolio Ownership,
+    Deliverables, and Residential all render for UI work without the multi-GB
+    corpus:
+      * portfolio_warehouse.db sampled to 3 properties (Maplewood I ENGELS-2010
+        w/ loans+leases, Northcourt KAINC-1016 w/ 3 facilities, Cottage Grove
+        OSBORN-3020 w/ the 33-tenancy roster)
+      * portfolio_rentroll.db (whole — small; deliverables economics + vacancy)
+      * residential handoff_package (whole — small)
+      * up to 4 newest generated .docx deliverables as samples
 
-Run on Windows:  python export_for_mac.py
+Run on Windows:  venv/Scripts/python export_for_mac.py
 Then move capactive_data_export.zip to the Mac and follow the printed import steps.
 """
 import os
 import zipfile
 
+PORTFOLIO_SAMPLE_KEYS = ["ENGELS-2010", "KAINC-1016", "OSBORN-3020"]
+KEY_COLS = ("property_key", "entity_code", "property_id", "property_code")
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ZIP = os.path.join(HERE, "capactive_data_export.zip")
 WAREHOUSE = os.path.join(HERE, "data", "warehouse.duckdb")
 CSV_DIR = os.path.join(HERE, "data", "warehouse_export")
+MASTER_DB = os.path.join(HERE, "portfolio_ownership",
+                         "KA_OWNERSHIP_MODULE_MASTER_20260724",
+                         "portfolio_warehouse.db")
+RENTROLL_DB = os.path.join(HERE, "portfolio_ownership", "inbox",
+                           "Portfolio Financial Source Data & Modules",
+                           "Financial Modules",
+                           "Final Portfolio Rent Roll Module_7.10.26",
+                           "database", "portfolio_rentroll.db")
+RESIDENTIAL_PKG = os.path.join(HERE, "portfolio_ownership", "residential",
+                               "handoff_package")
+DELIVERABLES_DIR = os.path.join(HERE, "data", "deliverables")
+SAMPLE_MASTER = os.path.join(HERE, "data", "portfolio_warehouse_sample.db")
 DEAL_TABLES = ["fact_deal_summary", "fact_proforma_annual", "fact_distribution_annual",
                "fact_debt_annual", "fact_tif_annual", "fact_tif_comparison", "dim_partner"]
 RETAIL_ENGINES = ["barrington_db", "southtown_db", "midway_db"]
@@ -51,6 +75,82 @@ def _add_tree(z, root, arc_prefix):
     return total
 
 
+def sample_master(src, dst, keys):
+    """Copy the KA master schema + only the rows belonging to `keys`
+    (MASTER property keys). Two passes: first learn each property's entity
+    codes (loan tables mix composite ENGELS-2010 and bare 1603 keys), then
+    filter every table that carries a key column. Keyless dimension/meta
+    tables are copied whole. Pure stdlib sqlite3."""
+    import sqlite3
+    if not os.path.isfile(src):
+        print("  master not found — skipping portfolio sample")
+        return False
+    if os.path.exists(dst):
+        os.remove(dst)
+    s = sqlite3.connect(f"file:{src.replace(os.sep, '/')}?mode=ro", uri=True)
+    d = sqlite3.connect(dst)
+    objs = s.execute(
+        "SELECT type, name, sql FROM sqlite_master "
+        "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").fetchall()
+
+    keyset = {str(k) for k in keys} | {str(k).split('-')[-1] for k in keys}
+    # pass 1: collect entity codes tied to the sampled property keys
+    for typ, name, _sql in objs:
+        if typ != 'table':
+            continue
+        cols = [r[1] for r in s.execute(f'PRAGMA table_info("{name}")')]
+        low = [c.lower() for c in cols]
+        if 'property_key' in low and 'entity_code' in low:
+            pk = cols[low.index('property_key')]
+            ec = cols[low.index('entity_code')]
+            ph = ",".join("?" * len(keyset))
+            for (v,) in s.execute(
+                    f'SELECT DISTINCT "{ec}" FROM "{name}" '
+                    f'WHERE CAST("{pk}" AS TEXT) IN ({ph})', tuple(keyset)):
+                if v is not None:
+                    keyset.add(str(v))
+
+    # pass 2: create tables and copy filtered rows
+    total = 0
+    for typ, name, sql in objs:
+        if typ != 'table':
+            continue
+        d.execute(sql)
+        cols = [r[1] for r in s.execute(f'PRAGMA table_info("{name}")')]
+        low = [c.lower() for c in cols]
+        kc = [cols[i] for i, c in enumerate(low) if c in KEY_COLS]
+        if kc:
+            ph = ",".join("?" * len(keyset))
+            where = " OR ".join(
+                f'CAST("{c}" AS TEXT) IN ({ph})' for c in kc)
+            rows = s.execute(f'SELECT * FROM "{name}" WHERE {where}',
+                             tuple(keyset) * len(kc)).fetchall()
+            tag = ""
+        else:
+            rows = s.execute(f'SELECT * FROM "{name}"').fetchall()
+            tag = "  (no key col — copied whole)"
+        if rows:
+            d.executemany(
+                f'INSERT INTO "{name}" VALUES '
+                f'({",".join("?" * len(cols))})', rows)
+        total += len(rows)
+        print(f"  {name}: {len(rows)} rows{tag}")
+
+    # indexes / views / triggers last (best-effort)
+    for typ, _name, sql in objs:
+        if typ in ('index', 'view', 'trigger'):
+            try:
+                d.execute(sql)
+            except Exception:
+                pass
+    d.commit()
+    d.close()
+    s.close()
+    print(f"  sample rows total: {total:,}  "
+          f"({_mb(os.path.getsize(dst))} vs full {_mb(os.path.getsize(src))})")
+    return True
+
+
 def export_warehouse_csvs():
     """Option B: dump the deal-analytics tables to CSV. Skips silently if duckdb or the
     warehouse isn't available (the Mac already has the market-data tables)."""
@@ -77,10 +177,32 @@ def export_warehouse_csvs():
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Bundle Capactive data for another machine. The portfolio "
+                    "master is SAMPLED to a property list so you never ship "
+                    "the full multi-GB corpus — pass more keys as you need "
+                    "more properties on the other device.")
+    ap.add_argument("--properties",
+                    default=",".join(PORTFOLIO_SAMPLE_KEYS),
+                    help="comma-separated MASTER property keys to include "
+                         f"(default: {','.join(PORTFOLIO_SAMPLE_KEYS)})")
+    ap.add_argument("--skip-portfolio", action="store_true",
+                    help="omit the portfolio sample entirely (original core/"
+                         "retail export only)")
+    args = ap.parse_args()
+    prop_keys = [k.strip() for k in args.properties.split(",") if k.strip()]
+
     print("Exporting warehouse deal-analytics CSVs (Option B)…")
     export_warehouse_csvs()
 
-    print("Building", os.path.basename(ZIP), "…")
+    have_sample = False
+    if not args.skip_portfolio:
+        print(f"\nSampling portfolio master → {len(prop_keys)} properties: "
+              f"{', '.join(prop_keys)}")
+        have_sample = sample_master(MASTER_DB, SAMPLE_MASTER, prop_keys)
+
+    print("\nBuilding", os.path.basename(ZIP), "…")
     sizes = {}
     with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as z:
         sizes["org_dev.db"] = _add_file(z, os.path.join(HERE, "data", "org_dev.db"), "org_dev.db")
@@ -93,6 +215,28 @@ def main():
             retail += _add_tree(z, os.path.join(HERE, eng, "source_docs"),
                                 f"retail/{eng}/source_docs")
         sizes["retail data + source docs"] = retail
+
+        if not args.skip_portfolio:
+            port = 0
+            if have_sample:
+                port += _add_file(z, SAMPLE_MASTER,
+                                  "portfolio/portfolio_warehouse.db")
+            port += _add_file(z, RENTROLL_DB,
+                              "portfolio/portfolio_rentroll.db")
+            port += _add_tree(z, RESIDENTIAL_PKG,
+                              "portfolio/residential/handoff_package")
+            docx = 0
+            if os.path.isdir(DELIVERABLES_DIR):
+                newest = sorted(
+                    (f for f in os.listdir(DELIVERABLES_DIR)
+                     if f.lower().endswith(".docx")),
+                    key=lambda f: os.path.getmtime(
+                        os.path.join(DELIVERABLES_DIR, f)),
+                    reverse=True)[:4]
+                for f in newest:
+                    docx += _add_file(z, os.path.join(DELIVERABLES_DIR, f),
+                                      f"portfolio/deliverables/{f}")
+            sizes["portfolio sample"] = port + docx
 
     print("\nWrote", ZIP)
     for k, v in sizes.items():
@@ -127,6 +271,13 @@ if os.path.isdir(d):
         except Exception as e: print(t,'skip',str(e)[:50])
     c.close()
 "
+
+# portfolio sample -> where the module engines' fallback paths look
+mkdir -p portfolio_ownership data/deliverables
+cp _import/portfolio/portfolio_warehouse.db portfolio_ownership/ 2>/dev/null
+cp _import/portfolio/portfolio_rentroll.db portfolio_ownership/ 2>/dev/null
+cp -R _import/portfolio/residential portfolio_ownership/ 2>/dev/null
+cp _import/portfolio/deliverables/* data/deliverables/ 2>/dev/null
 
 rm -rf _import
 # then restart:  CAPACTIVE_DEV_MODE=1 python3 run.py

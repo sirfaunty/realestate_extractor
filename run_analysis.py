@@ -415,10 +415,12 @@ def main():
                         help='Filter to specific document type(s)')
     parser.add_argument('--reconcile', action='store_true',
                         help='Run cross-document term reconciliation')
+    parser.add_argument('--db', default=DB_PATH,
+                        help=f'Database path (default: {DB_PATH})')
 
     args = parser.parse_args()
 
-    db = Database(DB_PATH)
+    db = Database(args.db)
     db.connect()
 
     # Determine run mode

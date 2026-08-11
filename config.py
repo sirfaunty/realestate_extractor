@@ -39,6 +39,10 @@ class FeatureFlags:
     api_access_enabled: bool = False
     custom_templates_enabled: bool = False
     max_pages_per_document: int = 500
+    # Platform modules enabled for this org. "*" = all modules (default keeps
+    # existing orgs unrestricted). Otherwise a list of module names from
+    # modules/__init__.py INSTALLED_MODULES (e.g. "scorecard", "residential").
+    modules_enabled: List[str] = field(default_factory=lambda: ["*"])
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -99,6 +103,7 @@ PLAN_FEATURES = {
         api_access_enabled=False,
         custom_templates_enabled=False,
         max_pages_per_document=200,
+        modules_enabled=[],  # extractor core only
     ),
     "standard": FeatureFlags(
         max_users=5,
@@ -111,6 +116,10 @@ PLAN_FEATURES = {
         api_access_enabled=False,
         custom_templates_enabled=False,
         max_pages_per_document=500,
+        modules_enabled=[  # deal-document modules
+            "closing_books", "tif_analysis", "distribution", "debt_analysis",
+            "partnership_dashboard", "barrington", "southtown", "midway",
+        ],
     ),
     "professional": FeatureFlags(
         max_users=20,
@@ -123,6 +132,12 @@ PLAN_FEATURES = {
         api_access_enabled=True,
         custom_templates_enabled=True,
         max_pages_per_document=1000,
+        modules_enabled=[  # deal modules + market analytics + deliverables
+            "closing_books", "tif_analysis", "distribution", "debt_analysis",
+            "partnership_dashboard", "barrington", "southtown", "midway",
+            "inventory", "sales_comps", "scorecard", "lease_analysis",
+            "market_intel", "office", "deliverables",
+        ],
     ),
     "enterprise": FeatureFlags(
         max_users=999,
@@ -135,6 +150,7 @@ PLAN_FEATURES = {
         api_access_enabled=True,
         custom_templates_enabled=True,
         max_pages_per_document=9999,
+        modules_enabled=["*"],  # everything, incl. portfolio_ownership + residential
     ),
 }
 
@@ -287,6 +303,18 @@ class ConfigStore:
                 f"UPDATE organizations SET {', '.join(updates)} WHERE org_id = ?",
                 values)
             self.conn.commit()
+
+    def set_org_features(self, org_id: str, features) -> None:
+        """Persist an org's feature flags directly (module activation etc.).
+
+        `features` may be a FeatureFlags or a plain dict. Unlike update_org,
+        this does NOT change the plan — it records a per-org override.
+        """
+        data = features.to_dict() if hasattr(features, 'to_dict') else dict(features)
+        self.conn.execute(
+            "UPDATE organizations SET features = ? WHERE org_id = ?",
+            (json.dumps(data), org_id))
+        self.conn.commit()
 
     def deactivate_org(self, org_id: str):
         """Deactivate an organization (soft delete)."""

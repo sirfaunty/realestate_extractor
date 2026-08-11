@@ -5,13 +5,28 @@
 <script>document.querySelector('.main').classList.add('main-wide');</script>
 <style>
     .doc-table { table-layout: fixed; }
-    .doc-table th:nth-child(1) { width: 38%; }
-    .doc-table th:nth-child(2) { width: 12%; }
-    .doc-table th:nth-child(3) { width: 18%; }
-    .doc-table th:nth-child(4) { width: 6%; }
-    .doc-table th:nth-child(5) { width: 7%; }
-    .doc-table th:nth-child(6) { width: 13%; }
-    .doc-table th:nth-child(7) { width: 6%; }
+    .doc-table th:nth-child(1) { width: 32%; }   /* filename */
+    .doc-table th:nth-child(2) { width: 14%; }   /* type */
+    .doc-table th:nth-child(3) { width: 17%; }   /* property */
+    .doc-table th:nth-child(4) { width: 5%;  }   /* pages */
+    .doc-table th:nth-child(5) { width: 7%;  }   /* scan */
+    .doc-table th:nth-child(6) { width: 12%; }   /* processed */
+    .doc-table th:nth-child(7) { width: 13%; min-width: 120px; }  /* actions */
+    .doc-table .type-cell { overflow: hidden; }
+    .doc-table .actions-cell {
+        text-align: right;
+        overflow: hidden;
+    }
+    .doc-table .actions-cell .action-group {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        white-space: nowrap;
+    }
+    .doc-table .actions-cell .btn-icon {
+        padding: 4px 7px;
+        line-height: 0;
+    }
     .doc-table .filename-cell {
         max-width: 0;
         overflow: hidden;
@@ -116,16 +131,18 @@
             {% for doc in documents %}
             <tr>
                 <td class="filename-cell" title="{{ doc.filename }}"><a href="{{ url_for('document_detail', doc_id=doc.id) }}">{{ doc.filename }}</a></td>
-                <td><span class="badge badge-{{ doc.document_type }}">{{ doc.document_type.replace('_', ' ') }}</span></td>
+                <td class="type-cell"><span class="badge badge-{{ doc.document_type }}" title="{{ doc.document_type.replace('_', ' ') }}">{{ doc.document_type.replace('_', ' ') }}</span></td>
                 <td class="prop-cell" title="{{ doc.property_name or '' }}">{{ doc.property_name or '—' }}</td>
                 <td>{{ doc.page_count or '—' }}</td>
                 <td>{% if doc.is_scanned %}OCR{% else %}Digital{% endif %}</td>
                 <td>{{ doc.processed_at[:16] if doc.processed_at else '—' }}</td>
-                <td style="white-space: nowrap;">
-                    <a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a>
-                    <a href="{{ url_for('document_pdf', doc_id=doc.id) }}" target="_blank" class="btn btn-sm btn-secondary" title="Open original PDF" style="margin-left: 2px; padding: 4px 6px;">
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 2h5l5 5v7a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.2"/><path d="M9 2v5h5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    </a>
+                <td class="actions-cell">
+                    <span class="action-group">
+                        <a href="{{ url_for('document_detail', doc_id=doc.id) }}" class="btn btn-sm btn-secondary">View</a>
+                        <a href="{{ url_for('document_pdf', doc_id=doc.id) }}" target="_blank" class="btn btn-sm btn-secondary btn-icon" title="Open original PDF">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 2h5l5 5v7a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.2"/><path d="M9 2v5h5" stroke="currentColor" stroke-width="1.2"/></svg>
+                        </a>
+                    </span>
                 </td>
             </tr>
             {% endfor %}

@@ -289,7 +289,27 @@ class InventoryEngine:
         return stats
 
     def get_scored_markets(self) -> List[Dict]:
-        """List all markets that have z-score data."""
+        """List all markets that have z-score data.
+
+        This is a heavy COUNT(DISTINCT) aggregation over the z-score fact
+        table (~6.5s) and is the inventory dashboard's main data load. The
+        result only changes when the z-scores are rebuilt, so memoize it
+        keyed on a cheap row-count of fact_property_zscore — first call pays
+        the cost, subsequent calls are instant, and the cache invalidates
+        when the z-score data actually changes. (Keying on the warehouse
+        file mtime would over-invalidate, since scorecard score writes touch
+        the same db file without changing inventory's source tables.)
+        """
+        try:
+            version = self.wh.conn.execute(
+                "SELECT count(*) FROM fact_property_zscore"
+            ).fetchone()[0]
+        except Exception:
+            version = None
+        cached = getattr(self, '_scored_markets_cache', None)
+        if cached is not None and version is not None and cached[0] == version:
+            return cached[1]
+
         rows = self.wh.conn.execute("""
             SELECT p.market,
                    count(DISTINCT z.property_id) as scored,
@@ -304,7 +324,9 @@ class InventoryEngine:
             ORDER BY scored DESC
         """).fetchall()
         cols = ['market', 'scored_properties', 'total_properties', 'peer_cuts', 'metrics']
-        return [dict(zip(cols, r)) for r in rows]
+        result = [dict(zip(cols, r)) for r in rows]
+        self._scored_markets_cache = (version, result)
+        return result
 
     # ─── Property Search ───────────────────────────────────────────
 

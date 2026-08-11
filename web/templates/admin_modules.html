@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Modules — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Module Access</h2>
+    <p>{{ org.org_name }} — plan: <span class="plan-badge plan-badge-{{ plan }}">{{ plan }}</span></p>
+</div>
+
+<form method="post">
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header">Access mode</div>
+    <div style="padding: 14px 16px; font-size: 14px;">
+        <label style="display:block; margin-bottom:10px; cursor:pointer;">
+            <input type="radio" name="mode" value="all" {% if all_enabled %}checked{% endif %}
+                   onchange="document.getElementById('module-list').style.opacity=this.checked?0.45:1">
+            <strong>All modules</strong>
+            <span style="color: var(--text-secondary);"> — no restrictions (enterprise default)</span>
+        </label>
+        <label style="display:block; cursor:pointer;">
+            <input type="radio" name="mode" value="custom" {% if not all_enabled %}checked{% endif %}
+                   onchange="document.getElementById('module-list').style.opacity=1">
+            <strong>Selected modules only</strong>
+            <span style="color: var(--text-secondary);"> — check the modules this organization can access</span>
+        </label>
+    </div>
+</div>
+
+<div id="module-list" style="{% if all_enabled %}opacity:0.45;{% endif %}">
+{% for group in groups %}
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header">{{ group.label }}</div>
+    <div style="padding: 6px 0;">
+        {% for m in group.entries %}
+        <label style="display:flex; gap:12px; align-items:flex-start; padding:10px 16px;
+                      border-bottom:1px solid var(--border-subtle); cursor:pointer;">
+            <input type="checkbox" name="modules" value="{{ m.name }}"
+                   {% if m.enabled %}checked{% endif %} style="margin-top:3px;">
+            <span>
+                <strong style="font-size:14px;">{{ m.display_name }}</strong><br>
+                <span style="font-size:12.5px; color: var(--text-secondary);">{{ m.description }}</span>
+            </span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+</div>
+
+<div style="margin: 20px 0;">
+    <button type="submit" class="btn btn-primary">Save module access</button>
+    <span style="font-size: 12.5px; color: var(--text-secondary); margin-left: 12px;">
+        Changes take effect immediately for all users in this organization.
+    </span>
+</div>
+</form>
+{% endblock %}

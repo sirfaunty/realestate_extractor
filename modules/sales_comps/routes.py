@@ -268,6 +268,11 @@ INDEX_HTML = """
 .loading-msg{text-align:center;color:var(--text2);padding:48px 0}
 .loading-msg .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
+.cap-activity{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:48px 0}
+.cap-activity .cap-bar{position:relative;width:200px;height:4px;border-radius:2px;background:var(--border);overflow:hidden}
+.cap-activity .cap-bar::before{content:"";position:absolute;top:0;left:-45%;height:100%;width:45%;border-radius:2px;background:var(--accent);animation:cap-slide 1.15s ease-in-out infinite}
+@keyframes cap-slide{0%{left:-45%}100%{left:100%}}
+.cap-activity .cap-msg{font-size:13px;color:var(--text2);letter-spacing:.2px;text-align:center}
 </style>
 </head><body>
 <div class="container">
@@ -284,7 +289,7 @@ INDEX_HTML = """
     </div>
     <h2>Markets by Deal Volume</h2>
     <div id="markets-table">
-        <div class="loading-msg"><span class="spinner"></span>Loading market data&hellip;</div>
+        <div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading transaction comps &amp; pricing trends&hellip;</div></div>
     </div>
 </div>
 <script>

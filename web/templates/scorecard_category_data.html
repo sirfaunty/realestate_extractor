@@ -211,6 +211,11 @@
   font-style: italic;
   font-size: 12px;
 }
+.catdata-root .cap-activity { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px 0; }
+.catdata-root .cap-activity .cap-bar { position: relative; width: 200px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.catdata-root .cap-activity .cap-bar::before { content: ""; position: absolute; top: 0; left: -45%; height: 100%; width: 45%; border-radius: 2px; background: var(--active); animation: cap-slide 1.15s ease-in-out infinite; }
+@keyframes cap-slide { 0% { left: -45%; } 100% { left: 100%; } }
+.catdata-root .cap-activity .cap-msg { font-size: 13px; color: var(--muted); letter-spacing: 0.2px; text-align: center; }
 
 .catdata-root .cd-error-box {
   background: #fdecea;
@@ -268,7 +273,7 @@
   </div>
 
   <div id="cd-content">
-    <div class="cd-empty">Loading data...</div>
+    <div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading category data…</div></div>
   </div>
 </div>
 <script>

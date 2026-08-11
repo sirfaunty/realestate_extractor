@@ -61,6 +61,29 @@ ARCHIVE_EXTENSIONS = {'zip'}
 # Max upload size: 500 MB (supports ~100 large PDFs in a single batch)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
+
+@app.after_request
+def _inject_global_progress(resp):
+    """Inject the universal job-progress widget into every HTML page.
+
+    Module pages are standalone render_template_string documents that don't
+    extend base.html, so a template include can't reach them — this hook
+    makes the running-jobs pill truly app-wide. The script defers to the
+    inline banner on base.html pages and to /job/ status pages.
+    """
+    try:
+        if (resp.status_code == 200 and not resp.direct_passthrough
+                and resp.mimetype == 'text/html'):
+            body = resp.get_data(as_text=True)
+            if '</body>' in body and 'global_progress.js' not in body:
+                resp.set_data(body.replace(
+                    '</body>',
+                    '<script src="/static/global_progress.js"></script></body>',
+                    1))
+    except Exception:
+        pass  # never let the widget break a page
+    return resp
+
 # Dev mode: skip login/setup for local testing
 # Set CAPACTIVE_DEV_MODE=1 to bypass authentication
 DEV_MODE = os.environ.get('CAPACTIVE_DEV_MODE', '0') == '1'
@@ -1429,6 +1452,62 @@ def admin_license():
     return render_template('admin_license.html',
                            org=org, usage=usage, user_count=len(users),
                            plan_features=PLAN_FEATURES)
+
+
+@app.route('/admin/modules', methods=['GET', 'POST'])
+@admin_required
+def admin_modules():
+    """Per-org module activation (tier overrides)."""
+    from .modules.gating import MODULE_GROUPS, MODULE_ROUTES
+    from .modules import registry as module_registry
+    org_id = session['org_id']
+
+    store = get_config_store()
+    org = store.get_org(org_id)
+    features = org.features
+
+    if request.method == 'POST':
+        if request.form.get('mode') == 'all':
+            features.modules_enabled = ['*']
+        else:
+            selected = request.form.getlist('modules')
+            # only accept known module names
+            valid = set(MODULE_ROUTES.keys())
+            features.modules_enabled = [m for m in selected if m in valid]
+        store.set_org_features(org_id, features)
+        flash('Module access updated.', 'success')
+        return redirect(url_for('admin_modules'))
+
+    # module display metadata from the registry
+    if not module_registry._loaded:
+        module_registry.discover()
+    meta = {}
+    for name, inst in module_registry._modules.items():
+        meta[name] = {
+            'display_name': inst.display_name,
+            'description': inst.description,
+        }
+
+    mods = list(features.modules_enabled or [])
+    all_enabled = '*' in mods
+    enabled_set = set(mods)
+
+    groups = []
+    for label, names in MODULE_GROUPS:
+        entries = []
+        for n in names:
+            m = meta.get(n, {})
+            entries.append({
+                'name': n,
+                'display_name': m.get('display_name', n.replace('_', ' ').title()),
+                'description': m.get('description', ''),
+                'enabled': all_enabled or n in enabled_set,
+            })
+        groups.append({'label': label, 'entries': entries})
+
+    return render_template('admin_modules.html',
+                           org=org, groups=groups, all_enabled=all_enabled,
+                           plan=org.plan)
 
 
 @app.route('/admin/permissions', methods=['GET', 'POST'])
@@ -3338,6 +3417,14 @@ try:
 except Exception as e:
     import logging
     logging.getLogger(__name__).warning(f'Module registration failed: {e}')
+
+# ─── Module Gating (per-org module activation / tiers) ─────────────
+try:
+    from .modules.gating import register_gating
+    register_gating(app)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(f'Module gating registration failed: {e}')
 
 # ─── Warehouse Registration ────────────────────────────────────────
 # Analytical warehouse (DuckDB) — property z-scores, sales comps, cap rates

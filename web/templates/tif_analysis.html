@@ -163,11 +163,15 @@
   text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px;
 }
 .tif-root .loading-spinner {
-  display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
-  border-top-color: var(--primary); border-radius: 50%;
-  animation: tif-spin 0.6s linear infinite; margin-bottom: 8px;
+  position: relative; display: inline-block; width: 200px; height: 4px;
+  border-radius: 2px; background: var(--border); overflow: hidden; margin-bottom: 12px;
+  vertical-align: middle;
 }
-@keyframes tif-spin { to { transform: rotate(360deg); } }
+.tif-root .loading-spinner::before {
+  content: ""; position: absolute; top: 0; left: -45%; height: 100%; width: 45%;
+  border-radius: 2px; background: var(--primary); animation: tif-slide 1.15s ease-in-out infinite;
+}
+@keyframes tif-slide { 0% { left: -45%; } 100% { left: 100%; } }
 
 .tif-root .error-state {
   text-align: center; padding: 30px 20px; color: var(--danger);

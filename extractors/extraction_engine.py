@@ -71,6 +71,17 @@ class ExtractionEngine:
             }
         }
 
+        # Segment-first path for leases (validated on the Hadley pilot:
+        # 7% -> 71% tie-out vs the KA master, zero LLM timeouts).
+        # Instrument-chain detection + article/section segmentation, then
+        # small per-segment prompts instead of one whole-document pass.
+        if template.document_type == 'lease' and doc.pages:
+            seg_results = self._extract_lease_segmented(doc, template)
+            if seg_results is not None:
+                results.update(seg_results)
+                results["metadata"]["extraction_modes"] = ["segment_first"]
+                return results
+
         for mode in template.extraction_modes:
             if mode == ExtractionMode.DUAL:
                 # Run both legal and financial extraction
@@ -84,6 +95,58 @@ class ExtractionEngine:
                 results["tabular_data"] = self._extract_tabular(doc, template)
 
         return results
+
+    # ─── Segment-First Lease Extraction ──────────────────────────────
+
+    def _extract_lease_segmented(self, doc: DocumentContent,
+                                 template: DocumentTemplate) -> Optional[Dict[str, Any]]:
+        """Segment-first extraction for lease documents.
+
+        Returns None when segmentation is too sparse to trust (non-standard
+        instrument) — the caller then falls back to the legacy path.
+        """
+        from .lease_segmenter import (segment_pages, build_clause_records,
+                                      extract_targeted, summarize)
+        pages = [(p.page_number, p.text or '') for p in doc.pages]
+        instruments = segment_pages(pages)
+        # Sparse check on FINAL clause records, not top-level segments:
+        # forms like Ross carry their structure in sub-provisions (inline
+        # 'N.N. Title.' sections inside one giant top-level container).
+        clauses = build_clause_records(instruments)
+        if len(clauses) < 4:
+            logger.info(f'lease segmentation too sparse ({len(clauses)} '
+                        f'provisions) — falling back to legacy extraction path')
+            return None
+        logger.info(f'segment-first lease extraction: {summarize(instruments)} '
+                    f'-> {len(clauses)} provision records')
+
+        # Deterministic base: rules + prose patterns (NO whole-document LLM
+        # gap-fill — that pass only ever saw the first 2,500 chars and timed
+        # out on long leases; the per-segment prompts replace it).
+        rule_terms = self._extract_financial_rules(doc, template)
+        found = {t['term_type'] for t in rule_terms}
+        rule_terms.extend(
+            self._extract_prose_patterns(doc, template, found, rule_terms))
+
+        llm = self.llm if self.llm_available else None
+        seg_terms = extract_targeted(pages, instruments, llm)
+
+        # Merge: segment-derived terms take priority for their term types.
+        # The segmented identity/expiration also supersede the legacy rule
+        # aliases for the same facts (whole-text tenant_name grabs are noisy).
+        seg_types = {t['term_type'] for t in seg_terms}
+        alias = {'tenant_identity': {'tenant_name'},
+                 'governing_expiration': {'expiration_date', 'lease_expiration'},
+                 'square_footage': {'square_feet', 'rentable_sf'}}
+        superseded = set()
+        for st, aliases in alias.items():
+            if st in seg_types:
+                superseded |= aliases
+        merged = seg_terms + [t for t in rule_terms
+                              if t['term_type'] not in seg_types
+                              and t['term_type'] not in superseded]
+        return {'financial_terms': merged, 'clauses': clauses,
+                'tabular_data': []}
 
     # ─── Financial Term Extraction ───────────────────────────────────
 
@@ -223,8 +286,13 @@ class ExtractionEngine:
             if val_lower == desc or val_lower in desc or desc in val_lower:
                 logger.warning(f"LLM echoed description for {term_type}: '{value_raw}' — skipping")
                 continue
-            # Skip suspiciously low confidence
-            if (t.get('confidence') or 0) < 0.2:
+            # Skip suspiciously low confidence (LLMs sometimes return the
+            # confidence as a string — coerce before comparing)
+            try:
+                conf = float(t.get('confidence') or 0)
+            except (TypeError, ValueError):
+                conf = 0.5
+            if conf < 0.2:
                 continue
 
             validated_llm.append(t)

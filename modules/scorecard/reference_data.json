@@ -1,1999 +1,4728 @@
 {
   "reference_table": [
     {
-      "costar_raw": "Abilene - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Akron - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Albany - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Albany - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Albany - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Albuquerque - NM",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Alexandria - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Altoona - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Amarillo - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Ames - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
       "costar_raw": "Anchorage - AK",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Ann Arbor - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Anniston-Oxford - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Appleton - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Asheville - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Athens - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Atlanta - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Atlantic City - NJ",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Auburn-Opelika - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Augusta - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Austin - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Bakersfield - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Baltimore - MD",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Bangor - ME",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Barnstable Town - MA",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Baton Rouge - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Battle Creek - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Bay City - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Beaumont - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Beckley - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Bellingham - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Bend - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Billings - MT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Binghamton - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Birmingham - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Bismarck - ND",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Blacksburg - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Bloomington - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Bloomington - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Bloomsburg-Berwick - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Boise - ID",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Boston - MA",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Boulder - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Bowling Green - KY",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Bozeman - MT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Bremerton - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Brownsville-Harlingen - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Brunswick - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Buffalo - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Burlington - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Burlington - VT",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "California-Lexington Park - MD",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Canton - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Cape Girardeau - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Carbondale-Marion - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Carson City - NV",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Casper - WY",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Cedar Rapids - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Chambersburg-Waynesboro - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Champaign-Urbana - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Charleston - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Charleston - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Charlotte - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Charlottesville - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Chattanooga - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Cheyenne - WY",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Chicago - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Chico - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Cincinnati - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Clarksville - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Cleveland - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Cleveland - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Coeur d'Alene - ID",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "College Station-Bryan - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Colorado Springs - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Columbia - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Columbia - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Columbus - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Columbus - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Columbus - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Corpus Christi - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Corvallis - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Cumberland - MD",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Dallas-Fort Worth - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Dalton - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Danville - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Daphne-Fairhope-Foley - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Davenport - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Dayton - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Daytona Beach - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Decatur - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Decatur - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Denver - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Des Moines - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Detroit - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Dothan - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Dover - DE",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Dubuque - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Duluth - MN",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Durham - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Eagle Pass - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "East Bay - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "East Stroudsburg - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Eau Claire - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "El Centro - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "El Paso - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Elizabethtown-Fort Knox - KY",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Elkhart - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Elmira - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Enid - OK",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Erie - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Eugene - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Evansville - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
+      "market_name": "Anchorage - AKUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
     },
     {
       "costar_raw": "Fairbanks - AK",
-      "general_region": "West",
-      "specific_region": "Pacific"
+      "market_name": "Fairbanks - AKUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
     },
     {
-      "costar_raw": "Fargo - ND",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
+      "costar_raw": "Anniston-Oxford - AL",
+      "market_name": "Anniston-Oxford - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Farmington - NM",
-      "general_region": "West",
-      "specific_region": "Mountain"
+      "costar_raw": "Auburn-Opelika - AL",
+      "market_name": "Auburn-Opelika - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Fayetteville - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
+      "costar_raw": "Birmingham - AL",
+      "market_name": "Birmingham - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Flagstaff - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
+      "costar_raw": "Daphne-Fairhope-Foley - AL",
+      "market_name": "Daphne-Fairhope-Foley - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Flint - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
+      "costar_raw": "Decatur - AL",
+      "market_name": "Decatur - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Florence - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
+      "costar_raw": "Dothan - AL",
+      "market_name": "Dothan - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Florence-Muscle Shoals - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Fond du Lac - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Fort Collins - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Fort Lauderdale - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Fort Myers - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Fort Smith - AR",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Fort Wayne - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Fresno - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Ft Walton Beach - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
+      "market_name": "Florence-Muscle Shoals - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Gadsden - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Gainesville - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Gainesville - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Gettysburg - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Glens Falls - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Goldsboro - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Grand Forks - ND",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Grand Island - NE",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Grand Junction - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Grand Rapids - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Grants Pass - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Great Falls - MT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Greeley - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Green Bay - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Greensboro - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Greenville - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Greenville - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Gulfport-Biloxi-Pascagoula - MS",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Hagerstown - MD",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Hammond - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Hanford-Corcoran - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Harrisburg - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Harrisonburg - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Hartford - CT",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Hattiesburg - MS",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Helena - MT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Hickory - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Hilton Head Island - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Hinesville - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Homosassa Springs - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Honolulu - HI",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Hot Springs - AR",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Houma-Thibodaux - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Houston - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Huntington - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
+      "market_name": "Gadsden - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Huntsville - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Idaho Falls - ID",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Indianapolis - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Inland Empire - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Iowa City - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Ithaca - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Jackson - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Jackson - MS",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Jackson - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Jacksonville - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Jacksonville - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Janesville-Beloit - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Jefferson City - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Johnson City - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Johnstown - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Jonesboro - AR",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Joplin - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Kahului-Wailuku-Lahaina - HI",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Kalamazoo - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Kankakee - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Kansas City - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Kennewick-Richland - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Killeen - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Kingsport - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Kingston - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Knoxville - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Kokomo - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "La Crosse-Onalaska - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Lafayette - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Lafayette-West Lafayette - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Lake Charles - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Lake Havasu - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Lakeland - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Lancaster - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Lansing - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Laredo - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Las Cruces - NM",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Las Vegas - NV",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Lawrence - KS",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Lawton - OK",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Lebanon - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Lehigh Valley - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Lewiston - ID",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Lewiston-Auburn - ME",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Lexington - KY",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Lima - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Lincoln - NE",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Little Rock - AR",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Logan - UT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Long Island - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Longview - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Longview - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Los Angeles - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Louisville - KY",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Lubbock - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Lynchburg - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Macon - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Madera - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Madison - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Manchester - NH",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Manhattan - KS",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Mankato - MN",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Mansfield - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "McAllen - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Medford - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Melbourne - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Memphis - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Merced - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Miami - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Michigan City-La Porte - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Midland - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Midland - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Milwaukee - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Minneapolis - MN",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Minot - ND",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Missoula - MT",
-      "general_region": "West",
-      "specific_region": "Mountain"
+      "market_name": "Huntsville - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Mobile - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Modesto - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Monroe - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Monroe - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
+      "market_name": "Mobile - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Montgomery - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Morgantown - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Morristown - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Mount Vernon - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Muncie - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Muskegon - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Myrtle Beach - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Napa - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Naples - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Nashville - TN",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "New Bern - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "New Haven - CT",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "New Orleans - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "New York - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Niles-Benton Harbor - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Norfolk - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Northern New Jersey - NJ",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Northwest Arkansas - AR",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Norwich - CT",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Ocala - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Ocean City - NJ",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Odessa - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Ogden - UT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Oklahoma City - OK",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Olympia - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Omaha - NE",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Orange County - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Orlando - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Oshkosh-Neenah - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Owensboro - KY",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Paducah - KY",
-      "general_region": "South",
-      "specific_region": "East South Central"
-    },
-    {
-      "costar_raw": "Palm Beach - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Panama City - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Parkersburg - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Pensacola - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Peoria - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Philadelphia - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Phoenix - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Pine Bluff - AR",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Pinehurst-Southern Pines - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Pittsburgh - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Pittsfield - MA",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Pocatello - ID",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Port St. Lucie - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Portland - ME",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Portland - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Poughkeepsie - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Prescott - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Providence - RI",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Provo - UT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Pueblo - CO",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Punta Gorda - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Racine - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Raleigh - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Rapid City - SD",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Reading - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Redding - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Reno - NV",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Richmond - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Roanoke - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Rochester - MN",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Rochester - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Rockford - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Rocky Mount - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Rome - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Sacramento - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Saginaw - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Saint Louis - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Salem - OR",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Salinas - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Salisbury - MD",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Salt Lake City - UT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "San Angelo - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "San Antonio - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "San Diego - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "San Francisco - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "San Jose - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "San Luis Obispo - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "San Rafael - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Sandusky - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Santa Barbara - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Santa Cruz - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Santa Fe - NM",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Santa Rosa - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Sarasota - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Savannah - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Scranton - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Seattle - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Sebastian-Vero Beach - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Sebring - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Sheboygan - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Sherman-Denison - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Shreveport - LA",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Sierra Vista-Douglas - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Sioux City - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Sioux Falls - SD",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "South Bend - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Spartanburg - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Spokane - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Springfield - IL",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Springfield - MA",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Springfield - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Springfield - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "St. Cloud - MN",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "St. George - UT",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "St. Joseph - MO",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Stamford - CT",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "State College - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Staunton-Waynesboro - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Stockton - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Sumter - SC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Syracuse - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Tallahassee - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Tampa - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Terre Haute - IN",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Texarkana - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "The Villages - FL",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Toledo - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Topeka - KS",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Traverse City - MI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Trenton - NJ",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Tucson - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
-    },
-    {
-      "costar_raw": "Tulsa - OK",
-      "general_region": "South",
-      "specific_region": "West South Central"
+      "market_name": "Montgomery - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Tuscaloosa - AL",
-      "general_region": "South",
-      "specific_region": "East South Central"
+      "market_name": "Tuscaloosa - ALUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Twin Falls - ID",
-      "general_region": "West",
-      "specific_region": "Mountain"
+      "costar_raw": "Fort Smith - AR",
+      "market_name": "Fort Smith - ARUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Tyler - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
+      "costar_raw": "Hot Springs - AR",
+      "market_name": "Hot Springs - ARUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Utica - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
+      "costar_raw": "Jonesboro - AR",
+      "market_name": "Jonesboro - ARUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Valdosta - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
+      "costar_raw": "Little Rock - AR",
+      "market_name": "Little Rock - ARUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Vallejo-Fairfield - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
+      "costar_raw": "Northwest Arkansas - AR",
+      "market_name": "Northwest Arkansas - ARUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Ventura - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
+      "costar_raw": "Pine Bluff - AR",
+      "market_name": "Pine Bluff - ARUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Victoria - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
+      "costar_raw": "Flagstaff - AZ",
+      "market_name": "Flagstaff - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Vineland - NJ",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
+      "costar_raw": "Lake Havasu - AZ",
+      "market_name": "Lake Havasu - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Visalia - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
+      "costar_raw": "Phoenix - AZ",
+      "market_name": "Phoenix - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Waco - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
+      "costar_raw": "Prescott - AZ",
+      "market_name": "Prescott - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Walla Walla - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
+      "costar_raw": "Sierra Vista-Douglas - AZ",
+      "market_name": "Sierra Vista-Douglas - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
-      "costar_raw": "Warner Robins - GA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Washington - DC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Waterloo-Cedar Falls - IA",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Watertown-Fort Drum - NY",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Wausau - WI",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Weirton-Steubenville - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Wenatchee - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "Wheeling - WV",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Wichita - KS",
-      "general_region": "Midwest",
-      "specific_region": "West North Central"
-    },
-    {
-      "costar_raw": "Wichita Falls - TX",
-      "general_region": "South",
-      "specific_region": "West South Central"
-    },
-    {
-      "costar_raw": "Williamsport - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Wilmington - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Winchester - VA",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Winston-Salem - NC",
-      "general_region": "South",
-      "specific_region": "South Atlantic"
-    },
-    {
-      "costar_raw": "Worcester - MA",
-      "general_region": "Northeast",
-      "specific_region": "New England"
-    },
-    {
-      "costar_raw": "Yakima - WA",
-      "general_region": "West",
-      "specific_region": "Pacific"
-    },
-    {
-      "costar_raw": "York - PA",
-      "general_region": "Northeast",
-      "specific_region": "Mid-Atlantic"
-    },
-    {
-      "costar_raw": "Youngstown - OH",
-      "general_region": "Midwest",
-      "specific_region": "East North Central"
-    },
-    {
-      "costar_raw": "Yuba City - CA",
-      "general_region": "West",
-      "specific_region": "Pacific"
+      "costar_raw": "Tucson - AZ",
+      "market_name": "Tucson - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
     },
     {
       "costar_raw": "Yuma - AZ",
-      "general_region": "West",
-      "specific_region": "Mountain"
+      "market_name": "Yuma - AZUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Bakersfield - CA",
+      "market_name": "Bakersfield - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Chico - CA",
+      "market_name": "Chico - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "East Bay - CA",
+      "market_name": "East Bay - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "El Centro - CA",
+      "market_name": "El Centro - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Fresno - CA",
+      "market_name": "Fresno - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Hanford-Corcoran - CA",
+      "market_name": "Hanford-Corcoran - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Inland Empire - CA",
+      "market_name": "Inland Empire - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Los Angeles - CA",
+      "market_name": "Los Angeles - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Madera - CA",
+      "market_name": "Madera - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Merced - CA",
+      "market_name": "Merced - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Modesto - CA",
+      "market_name": "Modesto - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Napa - CA",
+      "market_name": "Napa - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Orange County - CA",
+      "market_name": "Orange County - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Redding - CA",
+      "market_name": "Redding - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Sacramento - CA",
+      "market_name": "Sacramento - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Salinas - CA",
+      "market_name": "Salinas - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "San Diego - CA",
+      "market_name": "San Diego - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "San Francisco - CA",
+      "market_name": "San Francisco - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "San Jose - CA",
+      "market_name": "San Jose - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "San Luis Obispo - CA",
+      "market_name": "San Luis Obispo - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "San Rafael - CA",
+      "market_name": "San Rafael - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Santa Barbara - CA",
+      "market_name": "Santa Barbara - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Santa Cruz - CA",
+      "market_name": "Santa Cruz - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Santa Rosa - CA",
+      "market_name": "Santa Rosa - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Stockton - CA",
+      "market_name": "Stockton - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Vallejo-Fairfield - CA",
+      "market_name": "Vallejo-Fairfield - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Ventura - CA",
+      "market_name": "Ventura - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Visalia - CA",
+      "market_name": "Visalia - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Yuba City - CA",
+      "market_name": "Yuba City - CAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Boulder - CO",
+      "market_name": "Boulder - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Colorado Springs - CO",
+      "market_name": "Colorado Springs - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Denver - CO",
+      "market_name": "Denver - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Fort Collins - CO",
+      "market_name": "Fort Collins - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Grand Junction - CO",
+      "market_name": "Grand Junction - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Greeley - CO",
+      "market_name": "Greeley - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Pueblo - CO",
+      "market_name": "Pueblo - COUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Hartford - CT",
+      "market_name": "Hartford - CTUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "New Haven - CT",
+      "market_name": "New Haven - CTUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Norwich - CT",
+      "market_name": "Norwich - CTUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Providence - RI",
+      "market_name": "Providence - RIUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Stamford - CT",
+      "market_name": "Stamford - CTUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Daytona Beach - FL",
+      "market_name": "Daytona Beach - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Fort Lauderdale - FL",
+      "market_name": "Fort Lauderdale - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Fort Myers - FL",
+      "market_name": "Fort Myers - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Ft Walton Beach - FL",
+      "market_name": "Ft Walton Beach - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Lakeland - FL",
+      "market_name": "Lakeland - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Gainesville - FL",
+      "market_name": "Gainesville - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Homosassa Springs - FL",
+      "market_name": "Homosassa Springs - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Jacksonville - FL",
+      "market_name": "Jacksonville - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Melbourne - FL",
+      "market_name": "Melbourne - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Miami - FL",
+      "market_name": "Miami - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Naples - FL",
+      "market_name": "Naples - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Ocala - FL",
+      "market_name": "Ocala - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Orlando - FL",
+      "market_name": "Orlando - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Palm Beach - FL",
+      "market_name": "Palm Beach - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Panama City - FL",
+      "market_name": "Panama City - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Pensacola - FL",
+      "market_name": "Pensacola - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Port St. Lucie - FL",
+      "market_name": "Port St. Lucie - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Punta Gorda - FL",
+      "market_name": "Punta Gorda - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Sarasota - FL",
+      "market_name": "Sarasota - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Sebastian-Vero Beach - FL",
+      "market_name": "Sebastian-Vero Beach - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Sebring - FL",
+      "market_name": "Sebring - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Tallahassee - FL",
+      "market_name": "Tallahassee - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Tampa - FL",
+      "market_name": "Tampa - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "The Villages - FL",
+      "market_name": "The Villages - FLUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Athens - GA",
+      "market_name": "Athens - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Atlanta - GA",
+      "market_name": "Atlanta - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Augusta - GA",
+      "market_name": "Augusta - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Brunswick - GA",
+      "market_name": "Brunswick - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Columbus - GA",
+      "market_name": "Columbus - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Dalton - GA",
+      "market_name": "Dalton - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Gainesville - GA",
+      "market_name": "Gainesville - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Hinesville - GA",
+      "market_name": "Hinesville - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Macon - GA",
+      "market_name": "Macon - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Rome - GA",
+      "market_name": "Rome - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Savannah - GA",
+      "market_name": "Savannah - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Valdosta - GA",
+      "market_name": "Valdosta - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Warner Robins - GA",
+      "market_name": "Warner Robins - GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Honolulu - HI",
+      "market_name": "Honolulu - HIUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Kahului-Wailuku-Lahaina - HI",
+      "market_name": "Kahului-Wailuku-Lahaina - HIUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Ames - IA",
+      "market_name": "Ames - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Cedar Rapids - IA",
+      "market_name": "Cedar Rapids - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Davenport - IA",
+      "market_name": "Davenport - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Des Moines - IA",
+      "market_name": "Des Moines - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Dubuque - IA",
+      "market_name": "Dubuque - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Iowa City - IA",
+      "market_name": "Iowa City - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Sioux City - IA",
+      "market_name": "Sioux City - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Waterloo-Cedar Falls - IA",
+      "market_name": "Waterloo-Cedar Falls - IAUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Boise - ID",
+      "market_name": "Boise - IDUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Coeur d'Alene - ID",
+      "market_name": "Coeur d'Alene - IDUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Idaho Falls - ID",
+      "market_name": "Idaho Falls - IDUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Lewiston - ID",
+      "market_name": "Lewiston - IDUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Pocatello - ID",
+      "market_name": "Pocatello - IDUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Bloomington - IL",
+      "market_name": "Bloomington - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Carbondale-Marion - IL",
+      "market_name": "Carbondale-Marion - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Champaign-Urbana - IL",
+      "market_name": "Champaign-Urbana - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Chicago - IL",
+      "market_name": "Chicago - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Danville - IL",
+      "market_name": "Danville - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Decatur - IL",
+      "market_name": "Decatur - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Kankakee - IL",
+      "market_name": "Kankakee - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Peoria - IL",
+      "market_name": "Peoria - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Rockford - IL",
+      "market_name": "Rockford - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Springfield - IL",
+      "market_name": "Springfield - ILUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Bloomington - IN",
+      "market_name": "Bloomington - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Columbus - IN",
+      "market_name": "Columbus - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Elkhart - IN",
+      "market_name": "Elkhart - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Evansville - IN",
+      "market_name": "Evansville - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Fort Wayne - IN",
+      "market_name": "Fort Wayne - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Indianapolis - IN",
+      "market_name": "Indianapolis - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Kokomo - IN",
+      "market_name": "Kokomo - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Lafayette-West Lafayette - IN",
+      "market_name": "Lafayette-West Lafayette - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Michigan City-La Porte - IN",
+      "market_name": "Michigan City-La Porte - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Muncie - IN",
+      "market_name": "Muncie - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "South Bend - IN",
+      "market_name": "South Bend - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Terre Haute - IN",
+      "market_name": "Terre Haute - INUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Lawrence - KS",
+      "market_name": "Lawrence - KSUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Manhattan - KS",
+      "market_name": "Manhattan - KSUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Wichita - KS",
+      "market_name": "Wichita - KSUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Bowling Green - KY",
+      "market_name": "Bowling Green - KYUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Elizabethtown-Fort Knox - KY",
+      "market_name": "Elizabethtown-Fort Knox - KYUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Lexington - KY",
+      "market_name": "Lexington - KYUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Louisville - KY",
+      "market_name": "Louisville - KYUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Owensboro - KY",
+      "market_name": "Owensboro - KYUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Alexandria - LA",
+      "market_name": "Alexandria - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Baton Rouge - LA",
+      "market_name": "Baton Rouge - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Hammond - LA",
+      "market_name": "Hammond - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Houma-Thibodaux - LA",
+      "market_name": "Houma-Thibodaux - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Lafayette - LA",
+      "market_name": "Lafayette - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Lake Charles - LA",
+      "market_name": "Lake Charles - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Monroe - LA",
+      "market_name": "Monroe - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "New Orleans - LA",
+      "market_name": "New Orleans - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Shreveport - LA",
+      "market_name": "Shreveport - LAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Barnstable Town - MA",
+      "market_name": "Barnstable Town - MAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Boston - MA",
+      "market_name": "Boston - MAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Pittsfield - MA",
+      "market_name": "Pittsfield - MAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Springfield - MA",
+      "market_name": "Springfield - MAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Worcester - MA",
+      "market_name": "Worcester - MAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Washington - DC",
+      "market_name": "Washington - DCUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Dover - DE",
+      "market_name": "Dover - DEUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Baltimore - MD",
+      "market_name": "Baltimore - MDUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "California-Lexington Park - MD",
+      "market_name": "California-Lexington Park - MDUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Cumberland - MD",
+      "market_name": "Cumberland - MDUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Hagerstown - MD",
+      "market_name": "Hagerstown - MDUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Salisbury - MD",
+      "market_name": "Salisbury - MDUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Bangor - ME",
+      "market_name": "Bangor - MEUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Manchester - NH",
+      "market_name": "Manchester - NHUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Burlington - VT",
+      "market_name": "Burlington - VTUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Lewiston-Auburn - ME",
+      "market_name": "Lewiston-Auburn - MEUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Portland - ME",
+      "market_name": "Portland - MEUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Ann Arbor - MI",
+      "market_name": "Ann Arbor - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Battle Creek - MI",
+      "market_name": "Battle Creek - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Bay City - MI",
+      "market_name": "Bay City - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Detroit - MI",
+      "market_name": "Detroit - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Flint - MI",
+      "market_name": "Flint - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Grand Rapids - MI",
+      "market_name": "Grand Rapids - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Jackson - MI",
+      "market_name": "Jackson - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Kalamazoo - MI",
+      "market_name": "Kalamazoo - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Lansing - MI",
+      "market_name": "Lansing - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Midland - MI",
+      "market_name": "Midland - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Monroe - MI",
+      "market_name": "Monroe - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Muskegon - MI",
+      "market_name": "Muskegon - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Niles-Benton Harbor - MI",
+      "market_name": "Niles-Benton Harbor - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Saginaw - MI",
+      "market_name": "Saginaw - MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Duluth - MN",
+      "market_name": "Duluth - MNUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Mankato - MN",
+      "market_name": "Mankato - MNUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Minneapolis - MN",
+      "market_name": "Minneapolis - MNUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Rochester - MN",
+      "market_name": "Rochester - MNUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "St. Cloud - MN",
+      "market_name": "St. Cloud - MNUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Cape Girardeau - MO",
+      "market_name": "Cape Girardeau - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Columbia - MO",
+      "market_name": "Columbia - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Jefferson City - MO",
+      "market_name": "Jefferson City - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Joplin - MO",
+      "market_name": "Joplin - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Kansas City - MO",
+      "market_name": "Kansas City - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Saint Louis - MO",
+      "market_name": "Saint Louis - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Springfield - MO",
+      "market_name": "Springfield - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "St. Joseph - MO",
+      "market_name": "St. Joseph - MOUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Gulfport-Biloxi-Pascagoula - MS",
+      "market_name": "Gulfport-Biloxi-Pascagoula - MSUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Hattiesburg - MS",
+      "market_name": "Hattiesburg - MSUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Jackson - MS",
+      "market_name": "Jackson - MSUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Billings - MT",
+      "market_name": "Billings - MTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Great Falls - MT",
+      "market_name": "Great Falls - MTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Missoula - MT",
+      "market_name": "Missoula - MTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Asheville - NC",
+      "market_name": "Asheville - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Burlington - NC",
+      "market_name": "Burlington - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Charlotte - NC",
+      "market_name": "Charlotte - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Durham - NC",
+      "market_name": "Durham - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Fayetteville - NC",
+      "market_name": "Fayetteville - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Goldsboro - NC",
+      "market_name": "Goldsboro - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Greensboro - NC",
+      "market_name": "Greensboro - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Greenville - NC",
+      "market_name": "Greenville - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Hickory - NC",
+      "market_name": "Hickory - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Jacksonville - NC",
+      "market_name": "Jacksonville - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "New Bern - NC",
+      "market_name": "New Bern - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Raleigh - NC",
+      "market_name": "Raleigh - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Rocky Mount - NC",
+      "market_name": "Rocky Mount - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Wilmington - NC",
+      "market_name": "Wilmington - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Winston-Salem - NC",
+      "market_name": "Winston-Salem - NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Bismarck - ND",
+      "market_name": "Bismarck - NDUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Fargo - ND",
+      "market_name": "Fargo - NDUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Grand Forks - ND",
+      "market_name": "Grand Forks - NDUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Grand Island - NE",
+      "market_name": "Grand Island - NEUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Lincoln - NE",
+      "market_name": "Lincoln - NEUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Omaha - NE",
+      "market_name": "Omaha - NEUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Atlantic City - NJ",
+      "market_name": "Atlantic City - NJUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Northern New Jersey - NJ",
+      "market_name": "Northern New Jersey - NJUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Ocean City - NJ",
+      "market_name": "Ocean City - NJUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Trenton - NJ",
+      "market_name": "Trenton - NJUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Vineland - NJ",
+      "market_name": "Vineland - NJUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Albuquerque - NM",
+      "market_name": "Albuquerque - NMUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Farmington - NM",
+      "market_name": "Farmington - NMUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Las Cruces - NM",
+      "market_name": "Las Cruces - NMUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Santa Fe - NM",
+      "market_name": "Santa Fe - NMUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Carson City - NV",
+      "market_name": "Carson City - NVUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Las Vegas - NV",
+      "market_name": "Las Vegas - NVUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Reno - NV",
+      "market_name": "Reno - NVUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Albany - NY",
+      "market_name": "Albany - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Binghamton - NY",
+      "market_name": "Binghamton - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Buffalo - NY",
+      "market_name": "Buffalo - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Elmira - NY",
+      "market_name": "Elmira - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Glens Falls - NY",
+      "market_name": "Glens Falls - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Ithaca - NY",
+      "market_name": "Ithaca - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Kingston - NY",
+      "market_name": "Kingston - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Long Island - NY",
+      "market_name": "Long Island - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "New York - NY",
+      "market_name": "New York - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Poughkeepsie - NY",
+      "market_name": "Poughkeepsie - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Rochester - NY",
+      "market_name": "Rochester - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Syracuse - NY",
+      "market_name": "Syracuse - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Utica - NY",
+      "market_name": "Utica - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Watertown-Fort Drum - NY",
+      "market_name": "Watertown-Fort Drum - NYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Akron - OH",
+      "market_name": "Akron - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Canton - OH",
+      "market_name": "Canton - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Cincinnati - OH",
+      "market_name": "Cincinnati - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Cleveland - OH",
+      "market_name": "Cleveland - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Columbus - OH",
+      "market_name": "Columbus - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Dayton - OH",
+      "market_name": "Dayton - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Lima - OH",
+      "market_name": "Lima - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Mansfield - OH",
+      "market_name": "Mansfield - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Springfield - OH",
+      "market_name": "Springfield - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Toledo - OH",
+      "market_name": "Toledo - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Youngstown - OH",
+      "market_name": "Youngstown - OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Enid - OK",
+      "market_name": "Enid - OKUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Lawton - OK",
+      "market_name": "Lawton - OKUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Oklahoma City - OK",
+      "market_name": "Oklahoma City - OKUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Tulsa - OK",
+      "market_name": "Tulsa - OKUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Albany - OR",
+      "market_name": "Albany - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Bend - OR",
+      "market_name": "Bend - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Corvallis - OR",
+      "market_name": "Corvallis - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Eugene - OR",
+      "market_name": "Eugene - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Grants Pass - OR",
+      "market_name": "Grants Pass - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Medford - OR",
+      "market_name": "Medford - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Portland - OR",
+      "market_name": "Portland - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Salem - OR",
+      "market_name": "Salem - ORUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Altoona - PA",
+      "market_name": "Altoona - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Chambersburg-Waynesboro - PA",
+      "market_name": "Chambersburg-Waynesboro - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "East Stroudsburg - PA",
+      "market_name": "East Stroudsburg - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Bloomsburg-Berwick - PA",
+      "market_name": "Bloomsburg-Berwick - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Johnstown - PA",
+      "market_name": "Johnstown - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Pittsburgh - PA",
+      "market_name": "Pittsburgh - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Erie - PA",
+      "market_name": "Erie - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Gettysburg - PA",
+      "market_name": "Gettysburg - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Harrisburg - PA",
+      "market_name": "Harrisburg - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Lancaster - PA",
+      "market_name": "Lancaster - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Lebanon - PA",
+      "market_name": "Lebanon - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Lehigh Valley - PA",
+      "market_name": "Lehigh Valley - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Philadelphia - PA",
+      "market_name": "Philadelphia - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Reading - PA",
+      "market_name": "Reading - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Scranton - PA",
+      "market_name": "Scranton - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "State College - PA",
+      "market_name": "State College - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Williamsport - PA",
+      "market_name": "Williamsport - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "York - PA",
+      "market_name": "York - PAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Charleston - SC",
+      "market_name": "Charleston - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Columbia - SC",
+      "market_name": "Columbia - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Florence - SC",
+      "market_name": "Florence - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Greenville - SC",
+      "market_name": "Greenville - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Hilton Head Island - SC",
+      "market_name": "Hilton Head Island - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Myrtle Beach - SC",
+      "market_name": "Myrtle Beach - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Spartanburg - SC",
+      "market_name": "Spartanburg - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Sumter - SC",
+      "market_name": "Sumter - SCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Rapid City - SD",
+      "market_name": "Rapid City - SDUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Sioux Falls - SD",
+      "market_name": "Sioux Falls - SDUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Chattanooga - TN",
+      "market_name": "Chattanooga - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Clarksville - TN",
+      "market_name": "Clarksville - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Cleveland - TN",
+      "market_name": "Cleveland - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Jackson - TN",
+      "market_name": "Jackson - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Johnson City - TN",
+      "market_name": "Johnson City - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Kingsport - TN",
+      "market_name": "Kingsport - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Knoxville - TN",
+      "market_name": "Knoxville - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Memphis - TN",
+      "market_name": "Memphis - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Morristown - TN",
+      "market_name": "Morristown - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Nashville - TN",
+      "market_name": "Nashville - TNUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Amarillo - TX",
+      "market_name": "Amarillo - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Austin - TX",
+      "market_name": "Austin - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Beaumont - TX",
+      "market_name": "Beaumont - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Brownsville-Harlingen - TX",
+      "market_name": "Brownsville-Harlingen - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "College Station-Bryan - TX",
+      "market_name": "College Station-Bryan - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Corpus Christi - TX",
+      "market_name": "Corpus Christi - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Dallas-Fort Worth - TX",
+      "market_name": "Dallas-Fort Worth - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "El Paso - TX",
+      "market_name": "El Paso - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Houston - TX",
+      "market_name": "Houston - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Killeen - TX",
+      "market_name": "Killeen - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Laredo - TX",
+      "market_name": "Laredo - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Longview - TX",
+      "market_name": "Longview - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Lubbock - TX",
+      "market_name": "Lubbock - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "McAllen - TX",
+      "market_name": "McAllen - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Midland - TX",
+      "market_name": "Midland - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Odessa - TX",
+      "market_name": "Odessa - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "San Angelo - TX",
+      "market_name": "San Angelo - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "San Antonio - TX",
+      "market_name": "San Antonio - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Sherman-Denison - TX",
+      "market_name": "Sherman-Denison - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Texarkana - TX",
+      "market_name": "Texarkana - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Tyler - TX",
+      "market_name": "Tyler - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Victoria - TX",
+      "market_name": "Victoria - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Waco - TX",
+      "market_name": "Waco - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Wichita Falls - TX",
+      "market_name": "Wichita Falls - TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Logan - UT",
+      "market_name": "Logan - UTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Ogden - UT",
+      "market_name": "Ogden - UTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Provo - UT",
+      "market_name": "Provo - UTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Salt Lake City - UT",
+      "market_name": "Salt Lake City - UTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "St. George - UT",
+      "market_name": "St. George - UTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Blacksburg - VA",
+      "market_name": "Blacksburg - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Charlottesville - VA",
+      "market_name": "Charlottesville - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Harrisonburg - VA",
+      "market_name": "Harrisonburg - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Lynchburg - VA",
+      "market_name": "Lynchburg - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Norfolk - VA",
+      "market_name": "Norfolk - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Richmond - VA",
+      "market_name": "Richmond - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Roanoke - VA",
+      "market_name": "Roanoke - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Staunton-Waynesboro - VA",
+      "market_name": "Staunton-Waynesboro - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Winchester - VA",
+      "market_name": "Winchester - VAUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Bellingham - WA",
+      "market_name": "Bellingham - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Bremerton - WA",
+      "market_name": "Bremerton - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Kennewick-Richland - WA",
+      "market_name": "Kennewick-Richland - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Longview - WA",
+      "market_name": "Longview - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Mount Vernon - WA",
+      "market_name": "Mount Vernon - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Olympia - WA",
+      "market_name": "Olympia - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Seattle - WA",
+      "market_name": "Seattle - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Spokane - WA",
+      "market_name": "Spokane - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Walla Walla - WA",
+      "market_name": "Walla Walla - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Wenatchee - WA",
+      "market_name": "Wenatchee - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Yakima - WA",
+      "market_name": "Yakima - WAUSA",
+      "general_region": "Coastal",
+      "specific_region": "West Coast"
+    },
+    {
+      "costar_raw": "Appleton - WI",
+      "market_name": "Appleton - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Eau Claire - WI",
+      "market_name": "Eau Claire - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Fond du Lac - WI",
+      "market_name": "Fond du Lac - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Green Bay - WI",
+      "market_name": "Green Bay - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Janesville-Beloit - WI",
+      "market_name": "Janesville-Beloit - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "La Crosse-Onalaska - WI",
+      "market_name": "La Crosse-Onalaska - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Madison - WI",
+      "market_name": "Madison - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Milwaukee - WI",
+      "market_name": "Milwaukee - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Oshkosh-Neenah - WI",
+      "market_name": "Oshkosh-Neenah - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Racine - WI",
+      "market_name": "Racine - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Sheboygan - WI",
+      "market_name": "Sheboygan - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Wausau - WI",
+      "market_name": "Wausau - WIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Beckley - WV",
+      "market_name": "Beckley - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Charleston - WV",
+      "market_name": "Charleston - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Huntington - WV",
+      "market_name": "Huntington - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Morgantown - WV",
+      "market_name": "Morgantown - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Parkersburg - WV",
+      "market_name": "Parkersburg - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Weirton-Steubenville - WV",
+      "market_name": "Weirton-Steubenville - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Wheeling - WV",
+      "market_name": "Wheeling - WVUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Casper - WY",
+      "market_name": "Casper - WYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Cheyenne - WY",
+      "market_name": "Cheyenne - WYUSA",
+      "general_region": "Coastal",
+      "specific_region": "East Coast"
+    },
+    {
+      "costar_raw": "Abilene - TX",
+      "market_name": "Abilene-TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Albany - GA",
+      "market_name": "Albany-GAUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Bozeman - MT",
+      "market_name": "Bozeman-MTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Eagle Pass - TX",
+      "market_name": "EaglePass-TXUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Helena - MT",
+      "market_name": "Helena-MTUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
+    },
+    {
+      "costar_raw": "Minot - ND",
+      "market_name": "Minot-NDUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Paducah - KY",
+      "market_name": "Paducah-KYUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Pinehurst-Southern Pines - NC",
+      "market_name": "Pinehurst-SouthernPines-NCUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Sunbelt"
+    },
+    {
+      "costar_raw": "Sandusky - OH",
+      "market_name": "Sandusky-OHUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Topeka - KS",
+      "market_name": "Topeka-KSUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Traverse City - MI",
+      "market_name": "TraverseCity-MIUSA",
+      "general_region": "Midwest",
+      "specific_region": "Midwest"
+    },
+    {
+      "costar_raw": "Twin Falls - ID",
+      "market_name": "TwinFalls-IDUSA",
+      "general_region": "Smile Belt",
+      "specific_region": "Mountain West"
     }
-  ]
+  ],
+  "rank_order": [
+    {
+      "market": "New York - NY USA",
+      "rank": 1,
+      "tier": "Over 50K",
+      "inventory_all": 1488557
+    },
+    {
+      "market": "Los Angeles - CA USA",
+      "rank": 2,
+      "tier": "Over 50K",
+      "inventory_all": 1057674
+    },
+    {
+      "market": "Dallas-Fort Worth - TX USA",
+      "rank": 3,
+      "tier": "Over 50K",
+      "inventory_all": 921807
+    },
+    {
+      "market": "Houston - TX USA",
+      "rank": 4,
+      "tier": "Over 50K",
+      "inventory_all": 737398
+    },
+    {
+      "market": "Washington - DC USA",
+      "rank": 5,
+      "tier": "Over 50K",
+      "inventory_all": 590533
+    },
+    {
+      "market": "Chicago - IL USA",
+      "rank": 6,
+      "tier": "Over 50K",
+      "inventory_all": 580812
+    },
+    {
+      "market": "Atlanta - GA USA",
+      "rank": 7,
+      "tier": "Over 50K",
+      "inventory_all": 546715
+    },
+    {
+      "market": "Phoenix - AZ USA",
+      "rank": 8,
+      "tier": "Over 50K",
+      "inventory_all": 428061
+    },
+    {
+      "market": "Seattle - WA USA",
+      "rank": 9,
+      "tier": "Over 50K",
+      "inventory_all": 405286
+    },
+    {
+      "market": "Philadelphia - PA USA",
+      "rank": 10,
+      "tier": "Over 50K",
+      "inventory_all": 383437
+    },
+    {
+      "market": "Austin - TX USA",
+      "rank": 11,
+      "tier": "Over 50K",
+      "inventory_all": 333997
+    },
+    {
+      "market": "Denver - CO USA",
+      "rank": 12,
+      "tier": "Over 50K",
+      "inventory_all": 320212
+    },
+    {
+      "market": "Boston - MA USA",
+      "rank": 13,
+      "tier": "Over 50K",
+      "inventory_all": 297791
+    },
+    {
+      "market": "San Diego - CA USA",
+      "rank": 14,
+      "tier": "Over 50K",
+      "inventory_all": 288510
+    },
+    {
+      "market": "Minneapolis - MN USA",
+      "rank": 15,
+      "tier": "Over 50K",
+      "inventory_all": 286094
+    },
+    {
+      "market": "Orange County - CA USA",
+      "rank": 16,
+      "tier": "Over 50K",
+      "inventory_all": 260112
+    },
+    {
+      "market": "Portland - OR USA",
+      "rank": 17,
+      "tier": "Over 50K",
+      "inventory_all": 239735
+    },
+    {
+      "market": "Tampa - FL USA",
+      "rank": 18,
+      "tier": "Over 50K",
+      "inventory_all": 243451
+    },
+    {
+      "market": "Detroit - MI USA",
+      "rank": 19,
+      "tier": "Over 50K",
+      "inventory_all": 233542
+    },
+    {
+      "market": "Charlotte - NC USA",
+      "rank": 20,
+      "tier": "Over 50K",
+      "inventory_all": 245276
+    },
+    {
+      "market": "Orlando - FL USA",
+      "rank": 21,
+      "tier": "Over 50K",
+      "inventory_all": 238450
+    },
+    {
+      "market": "San Antonio - TX USA",
+      "rank": 22,
+      "tier": "Over 50K",
+      "inventory_all": 231876
+    },
+    {
+      "market": "Columbus - OH USA",
+      "rank": 23,
+      "tier": "Over 50K",
+      "inventory_all": 228596
+    },
+    {
+      "market": "Baltimore - MD USA",
+      "rank": 24,
+      "tier": "Over 50K",
+      "inventory_all": 216005
+    },
+    {
+      "market": "Miami - FL USA",
+      "rank": 25,
+      "tier": "Over 50K",
+      "inventory_all": 206204
+    },
+    {
+      "market": "East Bay - CA USA",
+      "rank": 26,
+      "tier": "Over 50K",
+      "inventory_all": 192989
+    },
+    {
+      "market": "Las Vegas - NV USA",
+      "rank": 27,
+      "tier": "Over 50K",
+      "inventory_all": 193778
+    },
+    {
+      "market": "San Francisco - CA USA",
+      "rank": 28,
+      "tier": "Over 50K",
+      "inventory_all": 190707
+    },
+    {
+      "market": "Nashville - TN USA",
+      "rank": 29,
+      "tier": "Over 50K",
+      "inventory_all": 187067
+    },
+    {
+      "market": "Inland Empire - CA USA",
+      "rank": 30,
+      "tier": "Over 50K",
+      "inventory_all": 181989
+    },
+    {
+      "market": "Kansas City - MO USA",
+      "rank": 31,
+      "tier": "Over 50K",
+      "inventory_all": 181335
+    },
+    {
+      "market": "Indianapolis - IN USA",
+      "rank": 32,
+      "tier": "Over 50K",
+      "inventory_all": 178006
+    },
+    {
+      "market": "San Jose - CA USA",
+      "rank": 33,
+      "tier": "Over 50K",
+      "inventory_all": 163487
+    },
+    {
+      "market": "Northern New Jersey - NJ USA",
+      "rank": 34,
+      "tier": "Over 50K",
+      "inventory_all": 158493
+    },
+    {
+      "market": "Saint Louis - MO USA",
+      "rank": 35,
+      "tier": "Over 50K",
+      "inventory_all": 153879
+    },
+    {
+      "market": "Cincinnati - OH USA",
+      "rank": 36,
+      "tier": "Over 50K",
+      "inventory_all": 147740
+    },
+    {
+      "market": "Sacramento - CA USA",
+      "rank": 37,
+      "tier": "Over 50K",
+      "inventory_all": 145661
+    },
+    {
+      "market": "Fort Lauderdale - FL USA",
+      "rank": 38,
+      "tier": "Over 50K",
+      "inventory_all": 146666
+    },
+    {
+      "market": "Cleveland - OH USA",
+      "rank": 39,
+      "tier": "Over 50K",
+      "inventory_all": 138581
+    },
+    {
+      "market": "Raleigh - NC USA",
+      "rank": 40,
+      "tier": "Over 50K",
+      "inventory_all": 138182
+    },
+    {
+      "market": "Norfolk - VA USA",
+      "rank": 41,
+      "tier": "Over 50K",
+      "inventory_all": 127324
+    },
+    {
+      "market": "Jacksonville - FL USA",
+      "rank": 42,
+      "tier": "Over 50K",
+      "inventory_all": 127549
+    },
+    {
+      "market": "Milwaukee - WI USA",
+      "rank": 43,
+      "tier": "Over 50K",
+      "inventory_all": 121397
+    },
+    {
+      "market": "Pittsburgh - PA USA",
+      "rank": 44,
+      "tier": "Over 50K",
+      "inventory_all": 108760
+    },
+    {
+      "market": "Richmond - VA USA",
+      "rank": 45,
+      "tier": "Over 50K",
+      "inventory_all": 107438
+    },
+    {
+      "market": "Memphis - TN USA",
+      "rank": 46,
+      "tier": "Over 50K",
+      "inventory_all": 102823
+    },
+    {
+      "market": "Oklahoma City - OK USA",
+      "rank": 47,
+      "tier": "Over 50K",
+      "inventory_all": 102041
+    },
+    {
+      "market": "Salt Lake City - UT USA",
+      "rank": 48,
+      "tier": "Over 50K",
+      "inventory_all": 101507
+    },
+    {
+      "market": "Louisville - KY USA",
+      "rank": 49,
+      "tier": "Over 50K",
+      "inventory_all": 96784
+    },
+    {
+      "market": "Tucson - AZ USA",
+      "rank": 50,
+      "tier": "Over 50K",
+      "inventory_all": 85620
+    },
+    {
+      "market": "Palm Beach - FL USA",
+      "rank": 51,
+      "tier": "Over 50K",
+      "inventory_all": 84322
+    },
+    {
+      "market": "Omaha - NE USA",
+      "rank": 52,
+      "tier": "Over 50K",
+      "inventory_all": 86688
+    },
+    {
+      "market": "Madison - WI USA",
+      "rank": 53,
+      "tier": "Over 50K",
+      "inventory_all": 79726
+    },
+    {
+      "market": "Charleston - SC USA",
+      "rank": 54,
+      "tier": "Over 50K",
+      "inventory_all": 74939
+    },
+    {
+      "market": "Hartford - CT USA",
+      "rank": 55,
+      "tier": "Over 50K",
+      "inventory_all": 72501
+    },
+    {
+      "market": "Tulsa - OK USA",
+      "rank": 56,
+      "tier": "Over 50K",
+      "inventory_all": 67500
+    },
+    {
+      "market": "Birmingham - AL USA",
+      "rank": 57,
+      "tier": "Over 50K",
+      "inventory_all": 68051
+    },
+    {
+      "market": "New Orleans - LA USA",
+      "rank": 58,
+      "tier": "Over 50K",
+      "inventory_all": 64503
+    },
+    {
+      "market": "Providence - RI USA",
+      "rank": 59,
+      "tier": "Over 50K",
+      "inventory_all": 64347
+    },
+    {
+      "market": "Durham - NC USA",
+      "rank": 60,
+      "tier": "Over 50K",
+      "inventory_all": 64423
+    },
+    {
+      "market": "Des Moines - IA USA",
+      "rank": 61,
+      "tier": "Over 50K",
+      "inventory_all": 63675
+    },
+    {
+      "market": "Rochester - NY USA",
+      "rank": 62,
+      "tier": "Over 50K",
+      "inventory_all": 59626
+    },
+    {
+      "market": "Albany - NY USA",
+      "rank": 63,
+      "tier": "Over 50K",
+      "inventory_all": 59582
+    },
+    {
+      "market": "Fresno - CA USA",
+      "rank": 64,
+      "tier": "Over 50K",
+      "inventory_all": 59347
+    },
+    {
+      "market": "Long Island - NY USA",
+      "rank": 65,
+      "tier": "Over 50K",
+      "inventory_all": 59717
+    },
+    {
+      "market": "Colorado Springs - CO USA",
+      "rank": 66,
+      "tier": "Over 50K",
+      "inventory_all": 58264
+    },
+    {
+      "market": "Albuquerque - NM USA",
+      "rank": 67,
+      "tier": "Over 50K",
+      "inventory_all": 56354
+    },
+    {
+      "market": "Greenville - SC USA",
+      "rank": 68,
+      "tier": "Over 50K",
+      "inventory_all": 55727
+    },
+    {
+      "market": "Little Rock - AR USA",
+      "rank": 69,
+      "tier": "Over 50K",
+      "inventory_all": 55189
+    },
+    {
+      "market": "Grand Rapids - MI USA",
+      "rank": 70,
+      "tier": "Over 50K",
+      "inventory_all": 55648
+    },
+    {
+      "market": "Dayton - OH USA",
+      "rank": 71,
+      "tier": "Over 50K",
+      "inventory_all": 52642
+    },
+    {
+      "market": "Greensboro - NC USA",
+      "rank": 72,
+      "tier": "Over 50K",
+      "inventory_all": 51327
+    },
+    {
+      "market": "Huntsville - AL USA",
+      "rank": 73,
+      "tier": "Over 50K",
+      "inventory_all": 50272
+    },
+    {
+      "market": "Buffalo - NY USA",
+      "rank": 1,
+      "tier": "15K - 50K",
+      "inventory_all": 48865
+    },
+    {
+      "market": "Reno - NV USA",
+      "rank": 2,
+      "tier": "15K - 50K",
+      "inventory_all": 47915
+    },
+    {
+      "market": "El Paso - TX USA",
+      "rank": 3,
+      "tier": "15K - 50K",
+      "inventory_all": 47530
+    },
+    {
+      "market": "Knoxville - TN USA",
+      "rank": 4,
+      "tier": "15K - 50K",
+      "inventory_all": 47270
+    },
+    {
+      "market": "Sarasota - FL USA",
+      "rank": 5,
+      "tier": "15K - 50K",
+      "inventory_all": 49776
+    },
+    {
+      "market": "Northwest Arkansas - AR USA",
+      "rank": 6,
+      "tier": "15K - 50K",
+      "inventory_all": 47174
+    },
+    {
+      "market": "Baton Rouge - LA USA",
+      "rank": 7,
+      "tier": "15K - 50K",
+      "inventory_all": 44469
+    },
+    {
+      "market": "Spokane - WA USA",
+      "rank": 8,
+      "tier": "15K - 50K",
+      "inventory_all": 43889
+    },
+    {
+      "market": "Boise - ID USA",
+      "rank": 9,
+      "tier": "15K - 50K",
+      "inventory_all": 43534
+    },
+    {
+      "market": "Stamford - CT USA",
+      "rank": 10,
+      "tier": "15K - 50K",
+      "inventory_all": 42852
+    },
+    {
+      "market": "Columbia - SC USA",
+      "rank": 11,
+      "tier": "15K - 50K",
+      "inventory_all": 41428
+    },
+    {
+      "market": "New Haven - CT USA",
+      "rank": 12,
+      "tier": "15K - 50K",
+      "inventory_all": 41075
+    },
+    {
+      "market": "Toledo - OH USA",
+      "rank": 13,
+      "tier": "15K - 50K",
+      "inventory_all": 40996
+    },
+    {
+      "market": "Lexington - KY USA",
+      "rank": 14,
+      "tier": "15K - 50K",
+      "inventory_all": 40174
+    },
+    {
+      "market": "Fargo - ND USA",
+      "rank": 15,
+      "tier": "15K - 50K",
+      "inventory_all": 38482
+    },
+    {
+      "market": "Akron - OH USA",
+      "rank": 16,
+      "tier": "15K - 50K",
+      "inventory_all": 37468
+    },
+    {
+      "market": "Lehigh Valley - PA USA",
+      "rank": 17,
+      "tier": "15K - 50K",
+      "inventory_all": 38134
+    },
+    {
+      "market": "Ventura - CA USA",
+      "rank": 18,
+      "tier": "15K - 50K",
+      "inventory_all": 38114
+    },
+    {
+      "market": "Wichita - KS USA",
+      "rank": 19,
+      "tier": "15K - 50K",
+      "inventory_all": 37063
+    },
+    {
+      "market": "Savannah - GA USA",
+      "rank": 20,
+      "tier": "15K - 50K",
+      "inventory_all": 39754
+    },
+    {
+      "market": "Winston-Salem - NC USA",
+      "rank": 21,
+      "tier": "15K - 50K",
+      "inventory_all": 35046
+    },
+    {
+      "market": "Syracuse - NY USA",
+      "rank": 22,
+      "tier": "15K - 50K",
+      "inventory_all": 34794
+    },
+    {
+      "market": "Fort Myers - FL USA",
+      "rank": 23,
+      "tier": "15K - 50K",
+      "inventory_all": 38827
+    },
+    {
+      "market": "Corpus Christi - TX USA",
+      "rank": 24,
+      "tier": "15K - 50K",
+      "inventory_all": 33738
+    },
+    {
+      "market": "Harrisburg - PA USA",
+      "rank": 25,
+      "tier": "15K - 50K",
+      "inventory_all": 33511
+    },
+    {
+      "market": "Lincoln - NE USA",
+      "rank": 26,
+      "tier": "15K - 50K",
+      "inventory_all": 34970
+    },
+    {
+      "market": "Lakeland - FL USA",
+      "rank": 27,
+      "tier": "15K - 50K",
+      "inventory_all": 34964
+    },
+    {
+      "market": "Ann Arbor - MI USA",
+      "rank": 28,
+      "tier": "15K - 50K",
+      "inventory_all": 32727
+    },
+    {
+      "market": "Lansing - MI USA",
+      "rank": 29,
+      "tier": "15K - 50K",
+      "inventory_all": 31506
+    },
+    {
+      "market": "Salem - OR USA",
+      "rank": 30,
+      "tier": "15K - 50K",
+      "inventory_all": 31214
+    },
+    {
+      "market": "Sioux Falls - SD USA",
+      "rank": 31,
+      "tier": "15K - 50K",
+      "inventory_all": 32131
+    },
+    {
+      "market": "Augusta - GA USA",
+      "rank": 32,
+      "tier": "15K - 50K",
+      "inventory_all": 31856
+    },
+    {
+      "market": "Melbourne - FL USA",
+      "rank": 33,
+      "tier": "15K - 50K",
+      "inventory_all": 32307
+    },
+    {
+      "market": "Honolulu - HI USA",
+      "rank": 34,
+      "tier": "15K - 50K",
+      "inventory_all": 29697
+    },
+    {
+      "market": "Worcester - MA USA",
+      "rank": 35,
+      "tier": "15K - 50K",
+      "inventory_all": 30109
+    },
+    {
+      "market": "Chattanooga - TN USA",
+      "rank": 36,
+      "tier": "15K - 50K",
+      "inventory_all": 30400
+    },
+    {
+      "market": "Stockton - CA USA",
+      "rank": 37,
+      "tier": "15K - 50K",
+      "inventory_all": 29379
+    },
+    {
+      "market": "Jackson - MS USA",
+      "rank": 38,
+      "tier": "15K - 50K",
+      "inventory_all": 28644
+    },
+    {
+      "market": "Daytona Beach - FL USA",
+      "rank": 39,
+      "tier": "15K - 50K",
+      "inventory_all": 31031
+    },
+    {
+      "market": "Myrtle Beach - SC USA",
+      "rank": 40,
+      "tier": "15K - 50K",
+      "inventory_all": 30064
+    },
+    {
+      "market": "Wilmington - NC USA",
+      "rank": 41,
+      "tier": "15K - 50K",
+      "inventory_all": 28528
+    },
+    {
+      "market": "Gainesville - FL USA",
+      "rank": 42,
+      "tier": "15K - 50K",
+      "inventory_all": 27761
+    },
+    {
+      "market": "Springfield - MO USA",
+      "rank": 43,
+      "tier": "15K - 50K",
+      "inventory_all": 27098
+    },
+    {
+      "market": "Lubbock - TX USA",
+      "rank": 44,
+      "tier": "15K - 50K",
+      "inventory_all": 26618
+    },
+    {
+      "market": "Bakersfield - CA USA",
+      "rank": 45,
+      "tier": "15K - 50K",
+      "inventory_all": 26598
+    },
+    {
+      "market": "Ogden - UT USA",
+      "rank": 46,
+      "tier": "15K - 50K",
+      "inventory_all": 27168
+    },
+    {
+      "market": "Fort Wayne - IN USA",
+      "rank": 47,
+      "tier": "15K - 50K",
+      "inventory_all": 26169
+    },
+    {
+      "market": "Manchester - NH USA",
+      "rank": 48,
+      "tier": "15K - 50K",
+      "inventory_all": 25931
+    },
+    {
+      "market": "Fayetteville - NC USA",
+      "rank": 49,
+      "tier": "15K - 50K",
+      "inventory_all": 25654
+    },
+    {
+      "market": "Santa Rosa - CA USA",
+      "rank": 50,
+      "tier": "15K - 50K",
+      "inventory_all": 24961
+    },
+    {
+      "market": "Tallahassee - FL USA",
+      "rank": 51,
+      "tier": "15K - 50K",
+      "inventory_all": 24985
+    },
+    {
+      "market": "Eugene - OR USA",
+      "rank": 52,
+      "tier": "15K - 50K",
+      "inventory_all": 24598
+    },
+    {
+      "market": "Shreveport - LA USA",
+      "rank": 53,
+      "tier": "15K - 50K",
+      "inventory_all": 24007
+    },
+    {
+      "market": "Killeen - TX USA",
+      "rank": 54,
+      "tier": "15K - 50K",
+      "inventory_all": 23466
+    },
+    {
+      "market": "Green Bay - WI USA",
+      "rank": 55,
+      "tier": "15K - 50K",
+      "inventory_all": 23400
+    },
+    {
+      "market": "Provo - UT USA",
+      "rank": 56,
+      "tier": "15K - 50K",
+      "inventory_all": 22969
+    },
+    {
+      "market": "Mobile - AL USA",
+      "rank": 57,
+      "tier": "15K - 50K",
+      "inventory_all": 22335
+    },
+    {
+      "market": "Pensacola - FL USA",
+      "rank": 58,
+      "tier": "15K - 50K",
+      "inventory_all": 22481
+    },
+    {
+      "market": "Columbus - GA USA",
+      "rank": 59,
+      "tier": "15K - 50K",
+      "inventory_all": 21616
+    },
+    {
+      "market": "Santa Barbara - CA USA",
+      "rank": 60,
+      "tier": "15K - 50K",
+      "inventory_all": 21241
+    },
+    {
+      "market": "Boulder - CO USA",
+      "rank": 61,
+      "tier": "15K - 50K",
+      "inventory_all": 22270
+    },
+    {
+      "market": "Asheville - NC USA",
+      "rank": 62,
+      "tier": "15K - 50K",
+      "inventory_all": 23827
+    },
+    {
+      "market": "Trenton - NJ USA",
+      "rank": 63,
+      "tier": "15K - 50K",
+      "inventory_all": 23038
+    },
+    {
+      "market": "McAllen - TX USA",
+      "rank": 64,
+      "tier": "15K - 50K",
+      "inventory_all": 21700
+    },
+    {
+      "market": "Montgomery - AL USA",
+      "rank": 65,
+      "tier": "15K - 50K",
+      "inventory_all": 20720
+    },
+    {
+      "market": "Flint - MI USA",
+      "rank": 66,
+      "tier": "15K - 50K",
+      "inventory_all": 20224
+    },
+    {
+      "market": "College Station-Bryan - TX USA",
+      "rank": 67,
+      "tier": "15K - 50K",
+      "inventory_all": 20211
+    },
+    {
+      "market": "Salinas - CA USA",
+      "rank": 68,
+      "tier": "15K - 50K",
+      "inventory_all": 20012
+    },
+    {
+      "market": "Kalamazoo - MI USA",
+      "rank": 69,
+      "tier": "15K - 50K",
+      "inventory_all": 20097
+    },
+    {
+      "market": "Lancaster - PA USA",
+      "rank": 70,
+      "tier": "15K - 50K",
+      "inventory_all": 20068
+    },
+    {
+      "market": "Springfield - MA USA",
+      "rank": 71,
+      "tier": "15K - 50K",
+      "inventory_all": 19012
+    },
+    {
+      "market": "Gulfport-Biloxi-Pascagoula - MS USA",
+      "rank": 72,
+      "tier": "15K - 50K",
+      "inventory_all": 18986
+    },
+    {
+      "market": "Fort Collins - CO USA",
+      "rank": 73,
+      "tier": "15K - 50K",
+      "inventory_all": 19706
+    },
+    {
+      "market": "Olympia - WA USA",
+      "rank": 74,
+      "tier": "15K - 50K",
+      "inventory_all": 19006
+    },
+    {
+      "market": "Portland - ME USA",
+      "rank": 75,
+      "tier": "15K - 50K",
+      "inventory_all": 19474
+    },
+    {
+      "market": "Beaumont - TX USA",
+      "rank": 76,
+      "tier": "15K - 50K",
+      "inventory_all": 18931
+    },
+    {
+      "market": "Clarksville - TN USA",
+      "rank": 77,
+      "tier": "15K - 50K",
+      "inventory_all": 19038
+    },
+    {
+      "market": "Vallejo-Fairfield - CA USA",
+      "rank": 78,
+      "tier": "15K - 50K",
+      "inventory_all": 19125
+    },
+    {
+      "market": "Spartanburg - SC USA",
+      "rank": 79,
+      "tier": "15K - 50K",
+      "inventory_all": 17962
+    },
+    {
+      "market": "Midland - TX USA",
+      "rank": 80,
+      "tier": "15K - 50K",
+      "inventory_all": 17172
+    },
+    {
+      "market": "Champaign-Urbana - IL USA",
+      "rank": 81,
+      "tier": "15K - 50K",
+      "inventory_all": 17085
+    },
+    {
+      "market": "Modesto - CA USA",
+      "rank": 82,
+      "tier": "15K - 50K",
+      "inventory_all": 16772
+    },
+    {
+      "market": "St. Cloud - MN USA",
+      "rank": 83,
+      "tier": "15K - 50K",
+      "inventory_all": 16460
+    },
+    {
+      "market": "South Bend - IN USA",
+      "rank": 84,
+      "tier": "15K - 50K",
+      "inventory_all": 16590
+    },
+    {
+      "market": "San Rafael - CA USA",
+      "rank": 85,
+      "tier": "15K - 50K",
+      "inventory_all": 15899
+    },
+    {
+      "market": "Youngstown - OH USA",
+      "rank": 86,
+      "tier": "15K - 50K",
+      "inventory_all": 15752
+    },
+    {
+      "market": "Lafayette - LA USA",
+      "rank": 87,
+      "tier": "15K - 50K",
+      "inventory_all": 16439
+    },
+    {
+      "market": "Evansville - IN USA",
+      "rank": 88,
+      "tier": "15K - 50K",
+      "inventory_all": 15830
+    },
+    {
+      "market": "Amarillo - TX USA",
+      "rank": 89,
+      "tier": "15K - 50K",
+      "inventory_all": 15619
+    },
+    {
+      "market": "Lafayette-West Lafayette - IN USA",
+      "rank": 90,
+      "tier": "15K - 50K",
+      "inventory_all": 15706
+    },
+    {
+      "market": "Port St. Lucie - FL USA",
+      "rank": 91,
+      "tier": "15K - 50K",
+      "inventory_all": 15630
+    },
+    {
+      "market": "Waco - TX USA",
+      "rank": 92,
+      "tier": "15K - 50K",
+      "inventory_all": 15492
+    },
+    {
+      "market": "Greenville - NC USA",
+      "rank": 93,
+      "tier": "15K - 50K",
+      "inventory_all": 15576
+    },
+    {
+      "market": "Roanoke - VA USA",
+      "rank": 94,
+      "tier": "15K - 50K",
+      "inventory_all": 15715
+    },
+    {
+      "market": "Greeley - CO USA",
+      "rank": 95,
+      "tier": "15K - 50K",
+      "inventory_all": 15557
+    },
+    {
+      "market": "Macon - GA USA",
+      "rank": 96,
+      "tier": "15K - 50K",
+      "inventory_all": 15501
+    },
+    {
+      "market": "Davenport - IA USA",
+      "rank": 97,
+      "tier": "15K - 50K",
+      "inventory_all": 15163
+    },
+    {
+      "market": "Naples - FL USA",
+      "rank": 98,
+      "tier": "15K - 50K",
+      "inventory_all": 15680
+    },
+    {
+      "market": "Kennewick-Richland - WA USA",
+      "rank": 99,
+      "tier": "15K - 50K",
+      "inventory_all": 15261
+    },
+    {
+      "market": "Panama City - FL USA",
+      "rank": 100,
+      "tier": "15K - 50K",
+      "inventory_all": 15128
+    },
+    {
+      "market": "Poughkeepsie - NY USA",
+      "rank": 1,
+      "tier": "5K - 15K",
+      "inventory_all": 14331
+    },
+    {
+      "market": "Cedar Rapids - IA USA",
+      "rank": 2,
+      "tier": "5K - 15K",
+      "inventory_all": 14438
+    },
+    {
+      "market": "Bremerton - WA USA",
+      "rank": 3,
+      "tier": "5K - 15K",
+      "inventory_all": 13323
+    },
+    {
+      "market": "Tyler - TX USA",
+      "rank": 4,
+      "tier": "5K - 15K",
+      "inventory_all": 13380
+    },
+    {
+      "market": "Anchorage - AK USA",
+      "rank": 5,
+      "tier": "5K - 15K",
+      "inventory_all": 13094
+    },
+    {
+      "market": "Athens - GA USA",
+      "rank": 6,
+      "tier": "5K - 15K",
+      "inventory_all": 13490
+    },
+    {
+      "market": "Ft Walton Beach - FL USA",
+      "rank": 7,
+      "tier": "5K - 15K",
+      "inventory_all": 14669
+    },
+    {
+      "market": "Appleton - WI USA",
+      "rank": 8,
+      "tier": "5K - 15K",
+      "inventory_all": 13308
+    },
+    {
+      "market": "Canton - OH USA",
+      "rank": 9,
+      "tier": "5K - 15K",
+      "inventory_all": 12987
+    },
+    {
+      "market": "Tuscaloosa - AL USA",
+      "rank": 10,
+      "tier": "5K - 15K",
+      "inventory_all": 12935
+    },
+    {
+      "market": "Charlottesville - VA USA",
+      "rank": 11,
+      "tier": "5K - 15K",
+      "inventory_all": 13446
+    },
+    {
+      "market": "Bellingham - WA USA",
+      "rank": 12,
+      "tier": "5K - 15K",
+      "inventory_all": 12832
+    },
+    {
+      "market": "Peoria - IL USA",
+      "rank": 13,
+      "tier": "5K - 15K",
+      "inventory_all": 12864
+    },
+    {
+      "market": "York - PA USA",
+      "rank": 14,
+      "tier": "5K - 15K",
+      "inventory_all": 13647
+    },
+    {
+      "market": "Lynchburg - VA USA",
+      "rank": 15,
+      "tier": "5K - 15K",
+      "inventory_all": 12591
+    },
+    {
+      "market": "Bloomington - IN USA",
+      "rank": 16,
+      "tier": "5K - 15K",
+      "inventory_all": 12612
+    },
+    {
+      "market": "Rochester - MN USA",
+      "rank": 17,
+      "tier": "5K - 15K",
+      "inventory_all": 12790
+    },
+    {
+      "market": "Chico - CA USA",
+      "rank": 18,
+      "tier": "5K - 15K",
+      "inventory_all": 12115
+    },
+    {
+      "market": "Columbia - MO USA",
+      "rank": 19,
+      "tier": "5K - 15K",
+      "inventory_all": 12435
+    },
+    {
+      "market": "Lawrence - KS USA",
+      "rank": 20,
+      "tier": "5K - 15K",
+      "inventory_all": 12076
+    },
+    {
+      "market": "Norwich - CT USA",
+      "rank": 21,
+      "tier": "5K - 15K",
+      "inventory_all": 12406
+    },
+    {
+      "market": "Gainesville - GA USA",
+      "rank": 22,
+      "tier": "5K - 15K",
+      "inventory_all": 13120
+    },
+    {
+      "market": "Oshkosh-Neenah - WI USA",
+      "rank": 23,
+      "tier": "5K - 15K",
+      "inventory_all": 12404
+    },
+    {
+      "market": "Atlantic City - NJ USA",
+      "rank": 24,
+      "tier": "5K - 15K",
+      "inventory_all": 11490
+    },
+    {
+      "market": "Daphne-Fairhope-Foley - AL USA",
+      "rank": 25,
+      "tier": "5K - 15K",
+      "inventory_all": 11746
+    },
+    {
+      "market": "Reading - PA USA",
+      "rank": 26,
+      "tier": "5K - 15K",
+      "inventory_all": 11587
+    },
+    {
+      "market": "Hagerstown - MD USA",
+      "rank": 27,
+      "tier": "5K - 15K",
+      "inventory_all": 11464
+    },
+    {
+      "market": "Brownsville-Harlingen - TX USA",
+      "rank": 28,
+      "tier": "5K - 15K",
+      "inventory_all": 11065
+    },
+    {
+      "market": "Warner Robins - GA USA",
+      "rank": 29,
+      "tier": "5K - 15K",
+      "inventory_all": 11840
+    },
+    {
+      "market": "Rapid City - SD USA",
+      "rank": 30,
+      "tier": "5K - 15K",
+      "inventory_all": 10798
+    },
+    {
+      "market": "Iowa City - IA USA",
+      "rank": 31,
+      "tier": "5K - 15K",
+      "inventory_all": 10355
+    },
+    {
+      "market": "Burlington - NC USA",
+      "rank": 32,
+      "tier": "5K - 15K",
+      "inventory_all": 10834
+    },
+    {
+      "market": "Longview - TX USA",
+      "rank": 33,
+      "tier": "5K - 15K",
+      "inventory_all": 10150
+    },
+    {
+      "market": "Bloomington - IL USA",
+      "rank": 34,
+      "tier": "5K - 15K",
+      "inventory_all": 10559
+    },
+    {
+      "market": "Hilton Head Island - SC USA",
+      "rank": 35,
+      "tier": "5K - 15K",
+      "inventory_all": 10798
+    },
+    {
+      "market": "Grand Forks - ND USA",
+      "rank": 36,
+      "tier": "5K - 15K",
+      "inventory_all": 10073
+    },
+    {
+      "market": "Bowling Green - KY USA",
+      "rank": 37,
+      "tier": "5K - 15K",
+      "inventory_all": 9956
+    },
+    {
+      "market": "Scranton - PA USA",
+      "rank": 38,
+      "tier": "5K - 15K",
+      "inventory_all": 9752
+    },
+    {
+      "market": "Ocala - FL USA",
+      "rank": 39,
+      "tier": "5K - 15K",
+      "inventory_all": 11574
+    },
+    {
+      "market": "Coeur d'Alene - ID USA",
+      "rank": 40,
+      "tier": "5K - 15K",
+      "inventory_all": 9752
+    },
+    {
+      "market": "Odessa - TX USA",
+      "rank": 41,
+      "tier": "5K - 15K",
+      "inventory_all": 9374
+    },
+    {
+      "market": "Rockford - IL USA",
+      "rank": 42,
+      "tier": "5K - 15K",
+      "inventory_all": 9305
+    },
+    {
+      "market": "Manhattan - KS USA",
+      "rank": 43,
+      "tier": "5K - 15K",
+      "inventory_all": 9298
+    },
+    {
+      "market": "Fort Smith - AR USA",
+      "rank": 44,
+      "tier": "5K - 15K",
+      "inventory_all": 9546
+    },
+    {
+      "market": "Duluth - MN USA",
+      "rank": 45,
+      "tier": "5K - 15K",
+      "inventory_all": 9281
+    },
+    {
+      "market": "Racine - WI USA",
+      "rank": 46,
+      "tier": "5K - 15K",
+      "inventory_all": 9251
+    },
+    {
+      "market": "Auburn-Opelika - AL USA",
+      "rank": 47,
+      "tier": "5K - 15K",
+      "inventory_all": 9360
+    },
+    {
+      "market": "Hattiesburg - MS USA",
+      "rank": 48,
+      "tier": "5K - 15K",
+      "inventory_all": 9118
+    },
+    {
+      "market": "Lake Charles - LA USA",
+      "rank": 49,
+      "tier": "5K - 15K",
+      "inventory_all": 9080
+    },
+    {
+      "market": "Hickory - NC USA",
+      "rank": 50,
+      "tier": "5K - 15K",
+      "inventory_all": 9173
+    },
+    {
+      "market": "Merced - CA USA",
+      "rank": 51,
+      "tier": "5K - 15K",
+      "inventory_all": 8845
+    },
+    {
+      "market": "Ames - IA USA",
+      "rank": 52,
+      "tier": "5K - 15K",
+      "inventory_all": 8741
+    },
+    {
+      "market": "San Luis Obispo - CA USA",
+      "rank": 53,
+      "tier": "5K - 15K",
+      "inventory_all": 8816
+    },
+    {
+      "market": "Huntington - WV USA",
+      "rank": 54,
+      "tier": "5K - 15K",
+      "inventory_all": 8827
+    },
+    {
+      "market": "Las Cruces - NM USA",
+      "rank": 55,
+      "tier": "5K - 15K",
+      "inventory_all": 8371
+    },
+    {
+      "market": "Johnson City - TN USA",
+      "rank": 56,
+      "tier": "5K - 15K",
+      "inventory_all": 8564
+    },
+    {
+      "market": "Bend - OR USA",
+      "rank": 57,
+      "tier": "5K - 15K",
+      "inventory_all": 9197
+    },
+    {
+      "market": "Santa Cruz - CA USA",
+      "rank": 58,
+      "tier": "5K - 15K",
+      "inventory_all": 7992
+    },
+    {
+      "market": "Binghamton - NY USA",
+      "rank": 59,
+      "tier": "5K - 15K",
+      "inventory_all": 7976
+    },
+    {
+      "market": "Visalia - CA USA",
+      "rank": 60,
+      "tier": "5K - 15K",
+      "inventory_all": 8392
+    },
+    {
+      "market": "Sherman-Denison - TX USA",
+      "rank": 61,
+      "tier": "5K - 15K",
+      "inventory_all": 8351
+    },
+    {
+      "market": "Springfield - IL USA",
+      "rank": 62,
+      "tier": "5K - 15K",
+      "inventory_all": 7816
+    },
+    {
+      "market": "Elkhart - IN USA",
+      "rank": 63,
+      "tier": "5K - 15K",
+      "inventory_all": 7887
+    },
+    {
+      "market": "Jonesboro - AR USA",
+      "rank": 64,
+      "tier": "5K - 15K",
+      "inventory_all": 7903
+    },
+    {
+      "market": "Corvallis - OR USA",
+      "rank": 65,
+      "tier": "5K - 15K",
+      "inventory_all": 7755
+    },
+    {
+      "market": "San Angelo - TX USA",
+      "rank": 66,
+      "tier": "5K - 15K",
+      "inventory_all": 7745
+    },
+    {
+      "market": "Burlington - VT USA",
+      "rank": 67,
+      "tier": "5K - 15K",
+      "inventory_all": 7649
+    },
+    {
+      "market": "Eau Claire - WI USA",
+      "rank": 68,
+      "tier": "5K - 15K",
+      "inventory_all": 7790
+    },
+    {
+      "market": "Monroe - LA USA",
+      "rank": 69,
+      "tier": "5K - 15K",
+      "inventory_all": 7518
+    },
+    {
+      "market": "Texarkana - TX USA",
+      "rank": 70,
+      "tier": "5K - 15K",
+      "inventory_all": 7454
+    },
+    {
+      "market": "Laredo - TX USA",
+      "rank": 71,
+      "tier": "5K - 15K",
+      "inventory_all": 7514
+    },
+    {
+      "market": "Bismarck - ND USA",
+      "rank": 72,
+      "tier": "5K - 15K",
+      "inventory_all": 7646
+    },
+    {
+      "market": "Erie - PA USA",
+      "rank": 73,
+      "tier": "5K - 15K",
+      "inventory_all": 7327
+    },
+    {
+      "market": "Charleston - WV USA",
+      "rank": 74,
+      "tier": "5K - 15K",
+      "inventory_all": 7149
+    },
+    {
+      "market": "Medford - OR USA",
+      "rank": 75,
+      "tier": "5K - 15K",
+      "inventory_all": 7020
+    },
+    {
+      "market": "Jacksonville - NC USA",
+      "rank": 76,
+      "tier": "5K - 15K",
+      "inventory_all": 7235
+    },
+    {
+      "market": "Sioux City - IA USA",
+      "rank": 77,
+      "tier": "5K - 15K",
+      "inventory_all": 7082
+    },
+    {
+      "market": "Billings - MT USA",
+      "rank": 78,
+      "tier": "5K - 15K",
+      "inventory_all": 7146
+    },
+    {
+      "market": "Wichita Falls - TX USA",
+      "rank": 79,
+      "tier": "5K - 15K",
+      "inventory_all": 6857
+    },
+    {
+      "market": "Lawton - OK USA",
+      "rank": 80,
+      "tier": "5K - 15K",
+      "inventory_all": 6812
+    },
+    {
+      "market": "Utica - NY USA",
+      "rank": 81,
+      "tier": "5K - 15K",
+      "inventory_all": 6832
+    },
+    {
+      "market": "Yakima - WA USA",
+      "rank": 82,
+      "tier": "5K - 15K",
+      "inventory_all": 6664
+    },
+    {
+      "market": "Valdosta - GA USA",
+      "rank": 83,
+      "tier": "5K - 15K",
+      "inventory_all": 6582
+    },
+    {
+      "market": "Morgantown - WV USA",
+      "rank": 84,
+      "tier": "5K - 15K",
+      "inventory_all": 6540
+    },
+    {
+      "market": "Napa - CA USA",
+      "rank": 85,
+      "tier": "5K - 15K",
+      "inventory_all": 6532
+    },
+    {
+      "market": "Albany - OR USA",
+      "rank": 86,
+      "tier": "5K - 15K",
+      "inventory_all": 6578
+    },
+    {
+      "market": "Blacksburg - VA USA",
+      "rank": 87,
+      "tier": "5K - 15K",
+      "inventory_all": 6442
+    },
+    {
+      "market": "Kingsport - TN USA",
+      "rank": 88,
+      "tier": "5K - 15K",
+      "inventory_all": 6195
+    },
+    {
+      "market": "Missoula - MT USA",
+      "rank": 89,
+      "tier": "5K - 15K",
+      "inventory_all": 6465
+    },
+    {
+      "market": "Battle Creek - MI USA",
+      "rank": 90,
+      "tier": "5K - 15K",
+      "inventory_all": 6105
+    },
+    {
+      "market": "Mankato - MN USA",
+      "rank": 91,
+      "tier": "5K - 15K",
+      "inventory_all": 6125
+    },
+    {
+      "market": "Flagstaff - AZ USA",
+      "rank": 92,
+      "tier": "5K - 15K",
+      "inventory_all": 6364
+    },
+    {
+      "market": "Jackson - TN USA",
+      "rank": 93,
+      "tier": "5K - 15K",
+      "inventory_all": 6050
+    },
+    {
+      "market": "La Crosse-Onalaska - WI USA",
+      "rank": 94,
+      "tier": "5K - 15K",
+      "inventory_all": 6074
+    },
+    {
+      "market": "Florence-Muscle Shoals - AL USA",
+      "rank": 95,
+      "tier": "5K - 15K",
+      "inventory_all": 5995
+    },
+    {
+      "market": "Saginaw - MI USA",
+      "rank": 96,
+      "tier": "5K - 15K",
+      "inventory_all": 5977
+    },
+    {
+      "market": "Florence - SC USA",
+      "rank": 97,
+      "tier": "5K - 15K",
+      "inventory_all": 6317
+    },
+    {
+      "market": "Elizabethtown-Fort Knox - KY USA",
+      "rank": 98,
+      "tier": "5K - 15K",
+      "inventory_all": 6024
+    },
+    {
+      "market": "Ithaca - NY USA",
+      "rank": 99,
+      "tier": "5K - 15K",
+      "inventory_all": 5843
+    },
+    {
+      "market": "Salisbury - MD USA",
+      "rank": 100,
+      "tier": "5K - 15K",
+      "inventory_all": 5788
+    },
+    {
+      "market": "Wausau - WI USA",
+      "rank": 101,
+      "tier": "5K - 15K",
+      "inventory_all": 5991
+    },
+    {
+      "market": "Redding - CA USA",
+      "rank": 102,
+      "tier": "5K - 15K",
+      "inventory_all": 5744
+    },
+    {
+      "market": "Watertown-Fort Drum - NY USA",
+      "rank": 103,
+      "tier": "5K - 15K",
+      "inventory_all": 5727
+    },
+    {
+      "market": "Yuba City - CA USA",
+      "rank": 104,
+      "tier": "5K - 15K",
+      "inventory_all": 5699
+    },
+    {
+      "market": "Janesville-Beloit - WI USA",
+      "rank": 105,
+      "tier": "5K - 15K",
+      "inventory_all": 5828
+    },
+    {
+      "market": "Kingston - NY USA",
+      "rank": 106,
+      "tier": "5K - 15K",
+      "inventory_all": 5586
+    },
+    {
+      "market": "Idaho Falls - ID USA",
+      "rank": 107,
+      "tier": "5K - 15K",
+      "inventory_all": 6759
+    },
+    {
+      "market": "Santa Fe - NM USA",
+      "rank": 108,
+      "tier": "5K - 15K",
+      "inventory_all": 6317
+    },
+    {
+      "market": "Victoria - TX USA",
+      "rank": 109,
+      "tier": "5K - 15K",
+      "inventory_all": 5332
+    },
+    {
+      "market": "Dover - DE USA",
+      "rank": 110,
+      "tier": "5K - 15K",
+      "inventory_all": 5420
+    },
+    {
+      "market": "Pueblo - CO USA",
+      "rank": 111,
+      "tier": "5K - 15K",
+      "inventory_all": 5174
+    },
+    {
+      "market": "Prescott - AZ USA",
+      "rank": 112,
+      "tier": "5K - 15K",
+      "inventory_all": 5123
+    },
+    {
+      "market": "Houma-Thibodaux - LA USA",
+      "rank": 113,
+      "tier": "5K - 15K",
+      "inventory_all": 5033
+    },
+    {
+      "market": "Fond du Lac - WI USA",
+      "rank": 114,
+      "tier": "5K - 15K",
+      "inventory_all": 5097
+    },
+    {
+      "market": "State College - PA USA",
+      "rank": 1,
+      "tier": "Under 5K",
+      "inventory_all": 4985
+    },
+    {
+      "market": "Jackson - MI USA",
+      "rank": 2,
+      "tier": "Under 5K",
+      "inventory_all": 4849
+    },
+    {
+      "market": "Waterloo-Cedar Falls - IA USA",
+      "rank": 3,
+      "tier": "Under 5K",
+      "inventory_all": 4862
+    },
+    {
+      "market": "Sheboygan - WI USA",
+      "rank": 4,
+      "tier": "Under 5K",
+      "inventory_all": 4875
+    },
+    {
+      "market": "Hanford-Corcoran - CA USA",
+      "rank": 5,
+      "tier": "Under 5K",
+      "inventory_all": 4785
+    },
+    {
+      "market": "Winchester - VA USA",
+      "rank": 6,
+      "tier": "Under 5K",
+      "inventory_all": 4864
+    },
+    {
+      "market": "Brunswick - GA USA",
+      "rank": 7,
+      "tier": "Under 5K",
+      "inventory_all": 4938
+    },
+    {
+      "market": "Dothan - AL USA",
+      "rank": 8,
+      "tier": "Under 5K",
+      "inventory_all": 4607
+    },
+    {
+      "market": "Monroe - MI USA",
+      "rank": 9,
+      "tier": "Under 5K",
+      "inventory_all": 4385
+    },
+    {
+      "market": "St. George - UT USA",
+      "rank": 10,
+      "tier": "Under 5K",
+      "inventory_all": 4931
+    },
+    {
+      "market": "Lewiston-Auburn - ME USA",
+      "rank": 11,
+      "tier": "Under 5K",
+      "inventory_all": 4615
+    },
+    {
+      "market": "Columbus - IN USA",
+      "rank": 12,
+      "tier": "Under 5K",
+      "inventory_all": 4300
+    },
+    {
+      "market": "Yuma - AZ USA",
+      "rank": 13,
+      "tier": "Under 5K",
+      "inventory_all": 4287
+    },
+    {
+      "market": "Muskegon - MI USA",
+      "rank": 14,
+      "tier": "Under 5K",
+      "inventory_all": 4507
+    },
+    {
+      "market": "El Centro - CA USA",
+      "rank": 15,
+      "tier": "Under 5K",
+      "inventory_all": 4235
+    },
+    {
+      "market": "Sierra Vista-Douglas - AZ USA",
+      "rank": 16,
+      "tier": "Under 5K",
+      "inventory_all": 4195
+    },
+    {
+      "market": "Terre Haute - IN USA",
+      "rank": 17,
+      "tier": "Under 5K",
+      "inventory_all": 4226
+    },
+    {
+      "market": "Niles-Benton Harbor - MI USA",
+      "rank": 18,
+      "tier": "Under 5K",
+      "inventory_all": 4183
+    },
+    {
+      "market": "Springfield - OH USA",
+      "rank": 19,
+      "tier": "Under 5K",
+      "inventory_all": 4160
+    },
+    {
+      "market": "The Villages - FL USA",
+      "rank": 20,
+      "tier": "Under 5K",
+      "inventory_all": 4057
+    },
+    {
+      "market": "Carson City - NV USA",
+      "rank": 21,
+      "tier": "Under 5K",
+      "inventory_all": 4321
+    },
+    {
+      "market": "Kokomo - IN USA",
+      "rank": 22,
+      "tier": "Under 5K",
+      "inventory_all": 4016
+    },
+    {
+      "market": "Hammond - LA USA",
+      "rank": 23,
+      "tier": "Under 5K",
+      "inventory_all": 4010
+    },
+    {
+      "market": "Staunton-Waynesboro - VA USA",
+      "rank": 24,
+      "tier": "Under 5K",
+      "inventory_all": 4276
+    },
+    {
+      "market": "Carbondale-Marion - IL USA",
+      "rank": 25,
+      "tier": "Under 5K",
+      "inventory_all": 3975
+    },
+    {
+      "market": "Logan - UT USA",
+      "rank": 26,
+      "tier": "Under 5K",
+      "inventory_all": 4512
+    },
+    {
+      "market": "Decatur - AL USA",
+      "rank": 27,
+      "tier": "Under 5K",
+      "inventory_all": 3803
+    },
+    {
+      "market": "Hot Springs - AR USA",
+      "rank": 28,
+      "tier": "Under 5K",
+      "inventory_all": 3742
+    },
+    {
+      "market": "Mansfield - OH USA",
+      "rank": 29,
+      "tier": "Under 5K",
+      "inventory_all": 3732
+    },
+    {
+      "market": "Punta Gorda - FL USA",
+      "rank": 30,
+      "tier": "Under 5K",
+      "inventory_all": 4044
+    },
+    {
+      "market": "Joplin - MO USA",
+      "rank": 31,
+      "tier": "Under 5K",
+      "inventory_all": 3701
+    },
+    {
+      "market": "Alexandria - LA USA",
+      "rank": 32,
+      "tier": "Under 5K",
+      "inventory_all": 3599
+    },
+    {
+      "market": "California-Lexington Park - MD USA",
+      "rank": 33,
+      "tier": "Under 5K",
+      "inventory_all": 3565
+    },
+    {
+      "market": "Glens Falls - NY USA",
+      "rank": 34,
+      "tier": "Under 5K",
+      "inventory_all": 3658
+    },
+    {
+      "market": "Longview - WA USA",
+      "rank": 35,
+      "tier": "Under 5K",
+      "inventory_all": 3455
+    },
+    {
+      "market": "Decatur - IL USA",
+      "rank": 36,
+      "tier": "Under 5K",
+      "inventory_all": 3437
+    },
+    {
+      "market": "Wenatchee - WA USA",
+      "rank": 37,
+      "tier": "Under 5K",
+      "inventory_all": 3765
+    },
+    {
+      "market": "Michigan City-La Porte - IN USA",
+      "rank": 38,
+      "tier": "Under 5K",
+      "inventory_all": 3294
+    },
+    {
+      "market": "Grand Junction - CO USA",
+      "rank": 39,
+      "tier": "Under 5K",
+      "inventory_all": 3752
+    },
+    {
+      "market": "Rocky Mount - NC USA",
+      "rank": 40,
+      "tier": "Under 5K",
+      "inventory_all": 3257
+    },
+    {
+      "market": "Vineland - NJ USA",
+      "rank": 41,
+      "tier": "Under 5K",
+      "inventory_all": 3245
+    },
+    {
+      "market": "Lake Havasu - AZ USA",
+      "rank": 42,
+      "tier": "Under 5K",
+      "inventory_all": 3232
+    },
+    {
+      "market": "Dalton - GA USA",
+      "rank": 43,
+      "tier": "Under 5K",
+      "inventory_all": 3212
+    },
+    {
+      "market": "Muncie - IN USA",
+      "rank": 44,
+      "tier": "Under 5K",
+      "inventory_all": 3344
+    },
+    {
+      "market": "Pocatello - ID USA",
+      "rank": 45,
+      "tier": "Under 5K",
+      "inventory_all": 3082
+    },
+    {
+      "market": "Pine Bluff - AR USA",
+      "rank": 46,
+      "tier": "Under 5K",
+      "inventory_all": 3051
+    },
+    {
+      "market": "Fairbanks - AK USA",
+      "rank": 47,
+      "tier": "Under 5K",
+      "inventory_all": 3028
+    },
+    {
+      "market": "Cleveland - TN USA",
+      "rank": 48,
+      "tier": "Under 5K",
+      "inventory_all": 3015
+    },
+    {
+      "market": "Harrisonburg - VA USA",
+      "rank": 49,
+      "tier": "Under 5K",
+      "inventory_all": 3501
+    },
+    {
+      "market": "Mount Vernon - WA USA",
+      "rank": 50,
+      "tier": "Under 5K",
+      "inventory_all": 3120
+    },
+    {
+      "market": "Dubuque - IA USA",
+      "rank": 51,
+      "tier": "Under 5K",
+      "inventory_all": 2800
+    },
+    {
+      "market": "Jefferson City - MO USA",
+      "rank": 52,
+      "tier": "Under 5K",
+      "inventory_all": 2842
+    },
+    {
+      "market": "Sumter - SC USA",
+      "rank": 53,
+      "tier": "Under 5K",
+      "inventory_all": 2779
+    },
+    {
+      "market": "St. Joseph - MO USA",
+      "rank": 54,
+      "tier": "Under 5K",
+      "inventory_all": 2716
+    },
+    {
+      "market": "Lebanon - PA USA",
+      "rank": 55,
+      "tier": "Under 5K",
+      "inventory_all": 2886
+    },
+    {
+      "market": "Madera - CA USA",
+      "rank": 56,
+      "tier": "Under 5K",
+      "inventory_all": 2588
+    },
+    {
+      "market": "Great Falls - MT USA",
+      "rank": 57,
+      "tier": "Under 5K",
+      "inventory_all": 2556
+    },
+    {
+      "market": "Midland - MI USA",
+      "rank": 58,
+      "tier": "Under 5K",
+      "inventory_all": 2539
+    },
+    {
+      "market": "Casper - WY USA",
+      "rank": 59,
+      "tier": "Under 5K",
+      "inventory_all": 2503
+    },
+    {
+      "market": "New Bern - NC USA",
+      "rank": 60,
+      "tier": "Under 5K",
+      "inventory_all": 2484
+    },
+    {
+      "market": "Parkersburg - WV USA",
+      "rank": 61,
+      "tier": "Under 5K",
+      "inventory_all": 2591
+    },
+    {
+      "market": "Lima - OH USA",
+      "rank": 62,
+      "tier": "Under 5K",
+      "inventory_all": 2473
+    },
+    {
+      "market": "Cheyenne - WY USA",
+      "rank": 63,
+      "tier": "Under 5K",
+      "inventory_all": 2461
+    },
+    {
+      "market": "Williamsport - PA USA",
+      "rank": 64,
+      "tier": "Under 5K",
+      "inventory_all": 2456
+    },
+    {
+      "market": "Pittsfield - MA USA",
+      "rank": 65,
+      "tier": "Under 5K",
+      "inventory_all": 2400
+    },
+    {
+      "market": "Elmira - NY USA",
+      "rank": 66,
+      "tier": "Under 5K",
+      "inventory_all": 2393
+    },
+    {
+      "market": "Chambersburg-Waynesboro - PA USA",
+      "rank": 67,
+      "tier": "Under 5K",
+      "inventory_all": 2498
+    },
+    {
+      "market": "Goldsboro - NC USA",
+      "rank": 68,
+      "tier": "Under 5K",
+      "inventory_all": 2288
+    },
+    {
+      "market": "Morristown - TN USA",
+      "rank": 69,
+      "tier": "Under 5K",
+      "inventory_all": 2276
+    },
+    {
+      "market": "Hinesville - GA USA",
+      "rank": 70,
+      "tier": "Under 5K",
+      "inventory_all": 2253
+    },
+    {
+      "market": "Sebastian-Vero Beach - FL USA",
+      "rank": 71,
+      "tier": "Under 5K",
+      "inventory_all": 2423
+    },
+    {
+      "market": "Owensboro - KY USA",
+      "rank": 72,
+      "tier": "Under 5K",
+      "inventory_all": 2215
+    },
+    {
+      "market": "Bangor - ME USA",
+      "rank": 73,
+      "tier": "Under 5K",
+      "inventory_all": 2073
+    },
+    {
+      "market": "Rome - GA USA",
+      "rank": 74,
+      "tier": "Under 5K",
+      "inventory_all": 2307
+    },
+    {
+      "market": "Grand Island - NE USA",
+      "rank": 75,
+      "tier": "Under 5K",
+      "inventory_all": 2053
+    },
+    {
+      "market": "Anniston-Oxford - AL USA",
+      "rank": 76,
+      "tier": "Under 5K",
+      "inventory_all": 2043
+    },
+    {
+      "market": "Barnstable Town - MA USA",
+      "rank": 77,
+      "tier": "Under 5K",
+      "inventory_all": 2089
+    },
+    {
+      "market": "Kahului-Wailuku-Lahaina - HI USA",
+      "rank": 78,
+      "tier": "Under 5K",
+      "inventory_all": 2011
+    },
+    {
+      "market": "Gadsden - AL USA",
+      "rank": 79,
+      "tier": "Under 5K",
+      "inventory_all": 1885
+    },
+    {
+      "market": "Bay City - MI USA",
+      "rank": 80,
+      "tier": "Under 5K",
+      "inventory_all": 1865
+    },
+    {
+      "market": "East Stroudsburg - PA USA",
+      "rank": 81,
+      "tier": "Under 5K",
+      "inventory_all": 1880
+    },
+    {
+      "market": "Enid - OK USA",
+      "rank": 82,
+      "tier": "Under 5K",
+      "inventory_all": 1821
+    },
+    {
+      "market": "Farmington - NM USA",
+      "rank": 83,
+      "tier": "Under 5K",
+      "inventory_all": 1690
+    },
+    {
+      "market": "Kankakee - IL USA",
+      "rank": 84,
+      "tier": "Under 5K",
+      "inventory_all": 1685
+    },
+    {
+      "market": "Cape Girardeau - MO USA",
+      "rank": 85,
+      "tier": "Under 5K",
+      "inventory_all": 1564
+    },
+    {
+      "market": "Walla Walla - WA USA",
+      "rank": 86,
+      "tier": "Under 5K",
+      "inventory_all": 1531
+    },
+    {
+      "market": "Wheeling - WV USA",
+      "rank": 87,
+      "tier": "Under 5K",
+      "inventory_all": 1475
+    },
+    {
+      "market": "Altoona - PA USA",
+      "rank": 88,
+      "tier": "Under 5K",
+      "inventory_all": 1405
+    },
+    {
+      "market": "Bloomsburg-Berwick - PA USA",
+      "rank": 89,
+      "tier": "Under 5K",
+      "inventory_all": 1401
+    },
+    {
+      "market": "Sebring - FL USA",
+      "rank": 90,
+      "tier": "Under 5K",
+      "inventory_all": 1351
+    },
+    {
+      "market": "Beckley - WV USA",
+      "rank": 91,
+      "tier": "Under 5K",
+      "inventory_all": 1342
+    },
+    {
+      "market": "Danville - IL USA",
+      "rank": 92,
+      "tier": "Under 5K",
+      "inventory_all": 1140
+    },
+    {
+      "market": "Ocean City - NJ USA",
+      "rank": 93,
+      "tier": "Under 5K",
+      "inventory_all": 1086
+    },
+    {
+      "market": "Johnstown - PA USA",
+      "rank": 94,
+      "tier": "Under 5K",
+      "inventory_all": 1058
+    },
+    {
+      "market": "Lewiston - ID USA",
+      "rank": 95,
+      "tier": "Under 5K",
+      "inventory_all": 1066
+    },
+    {
+      "market": "Cumberland - MD USA",
+      "rank": 96,
+      "tier": "Under 5K",
+      "inventory_all": 1004
+    },
+    {
+      "market": "Gettysburg - PA USA",
+      "rank": 97,
+      "tier": "Under 5K",
+      "inventory_all": 966
+    },
+    {
+      "market": "Weirton-Steubenville - WV USA",
+      "rank": 98,
+      "tier": "Under 5K",
+      "inventory_all": 921
+    },
+    {
+      "market": "Homosassa Springs - FL USA",
+      "rank": 99,
+      "tier": "Under 5K",
+      "inventory_all": 685
+    },
+    {
+      "market": "Grants Pass - OR USA",
+      "rank": 100,
+      "tier": "Under 5K",
+      "inventory_all": 609
+    }
+  ],
+  "thresholds": {
+    "Over 50K": 50000,
+    "15K - 50K": 15000,
+    "5K - 15K": 5000,
+    "Under 5K": 5000
+  }
 }

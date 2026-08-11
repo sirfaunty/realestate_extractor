@@ -17,18 +17,21 @@ logger = logging.getLogger(__name__)
 
 leases_bp = Blueprint('lease_analysis', __name__, url_prefix='/leases')
 
-_engine = None
-
-
 def _get_engine():
-    global _engine
-    if _engine is None:
-        from ...webapp import get_org_db
-        from flask import session
-        db = get_org_db(session.get('org_id', 1))
-        from .engine import LeaseAnalysisEngine
-        _engine = LeaseAnalysisEngine(db)
-    return _engine
+    """Build the lease engine for the current request.
+
+    The org database from get_org_db() is a per-request connection (cached in
+    flask.g and closed at request teardown), so it must NOT be captured in a
+    module-level singleton — a cached engine would hold a closed/stale db on
+    later requests. Resolve it fresh each call, and default org_id to 'dev'
+    to match the rest of the app (the previous default of 1 matched no org,
+    so get_org_db returned None → 'NoneType has no attribute conn').
+    """
+    from ...webapp import get_org_db
+    from flask import session
+    from .engine import LeaseAnalysisEngine
+    db = get_org_db(session.get('org_id', 'dev'))
+    return LeaseAnalysisEngine(db)
 
 
 def register_lease_analysis_routes(app):
@@ -316,6 +319,11 @@ _DASHBOARD_HTML = _STYLE + """
 .loading-msg{text-align:center;color:var(--muted);padding:48px 0}
 .loading-msg .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
+.cap-activity{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:48px 0}
+.cap-activity .cap-bar{position:relative;width:200px;height:4px;border-radius:2px;background:var(--border);overflow:hidden}
+.cap-activity .cap-bar::before{content:"";position:absolute;top:0;left:-45%;height:100%;width:45%;border-radius:2px;background:var(--accent);animation:cap-slide 1.15s ease-in-out infinite}
+@keyframes cap-slide{0%{left:-45%}100%{left:100%}}
+.cap-activity .cap-msg{font-size:13px;color:var(--muted);letter-spacing:.2px;text-align:center}
 </style>
 """ + _NAV.replace('{extra}', '<span style="color: var(--text-secondary, #5A5A6E);">Lease Analysis</span>').replace('{title}', 'Lease Analysis') + """
 <div class="container">
@@ -324,7 +332,7 @@ _DASHBOARD_HTML = _STYLE + """
     <!-- JS will populate -->
   </div>
   <div id="properties-list">
-    <div class="loading-msg"><span class="spinner"></span>Loading lease data&hellip;</div>
+    <div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading lease terms &amp; concession data&hellip;</div></div>
   </div>
 </div>
 <script>
@@ -407,8 +415,8 @@ _PROPERTY_HTML = _STYLE + _NAV.replace(
     </div>
     <div class="card">
       <div class="card-label">Vacant</div>
-      <div class="card-value {% if summary.vacant_units > 0 %}yellow{% else %}green{% endif %}">
-        {{ summary.vacant_units }}
+      <div class="card-value {% if (summary.get('vacant_units') or 0) > 0 %}yellow{% else %}green{% endif %}">
+        {{ summary.get('vacant_units', 0) }}
       </div>
     </div>
     <div class="card">

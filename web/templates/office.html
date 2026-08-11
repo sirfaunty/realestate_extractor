@@ -453,6 +453,11 @@
   color: var(--muted);
   font-size: 13px;
 }
+.office-root .cap-activity { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 34px 0; }
+.office-root .cap-activity .cap-bar { position: relative; width: 200px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.office-root .cap-activity .cap-bar::before { content: ""; position: absolute; top: 0; left: -45%; height: 100%; width: 45%; border-radius: 2px; background: var(--primary); animation: cap-slide 1.15s ease-in-out infinite; }
+@keyframes cap-slide { 0% { left: -45%; } 100% { left: 100%; } }
+.office-root .cap-activity .cap-msg { font-size: 13px; color: var(--muted); letter-spacing: 0.2px; text-align: center; }
 </style>
 
 <div class="office-root">
@@ -541,7 +546,7 @@
           </tr>
         </thead>
         <tbody id="off-tbody">
-          <tr><td colspan="10" class="loading-msg">Loading...</td></tr>
+          <tr><td colspan="10"><div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading office inventory&hellip;</div></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -570,7 +575,7 @@
           </tr>
         </thead>
         <tbody id="off-ph-tbody">
-          <tr><td colspan="5" class="loading-msg">Loading...</td></tr>
+          <tr><td colspan="5"><div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading peer health metrics&hellip;</div></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -720,7 +725,7 @@
     if (search) params.set("search", search);
 
     var tbody = document.getElementById("off-tbody");
-    tbody.innerHTML = '<tr><td colspan="10" class="loading-msg">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading office inventory&hellip;</div></div></td></tr>';
     offState.expandedPid = null;
 
     fetch("/office/api/properties?" + params.toString())
@@ -840,7 +845,7 @@
     var row = document.querySelector('tr[data-pid="' + pid + '"]');
     if (row) row.classList.add("expanded");
     drillEl.classList.add("open");
-    drillEl.querySelector("td").innerHTML = '<div class="drill-content"><div class="loading-msg">Loading property detail...</div></div>';
+    drillEl.querySelector("td").innerHTML = '<div class="drill-content"><div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading property detail&hellip;</div></div></div>';
 
     offLoadPropertyDetail(pid);
   };

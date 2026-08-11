@@ -92,3 +92,11 @@ midway_db/_*
 capactive_data_export.zip
 data/warehouse_export/
 _import/
+
+# staged source documents (re-extractable from inbox zips)
+portfolio_ownership/re_import/staging/
+
+# staged source documents (re-extractable from inbox zips)
+portfolio_ownership/re_import/staging/
+portfolio_ownership/re_import/staging/
+portfolio_ownership/pilot_hadley/sources/

@@ -251,6 +251,11 @@ INDEX_HTML = """
 .loading-msg .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
     border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.cap-activity { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 48px 0; }
+.cap-activity .cap-bar { position: relative; width: 200px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.cap-activity .cap-bar::before { content: ""; position: absolute; top: 0; left: -45%; height: 100%; width: 45%; border-radius: 2px; background: var(--accent); animation: cap-slide 1.15s ease-in-out infinite; }
+@keyframes cap-slide { 0% { left: -45%; } 100% { left: 100%; } }
+.cap-activity .cap-msg { font-size: 13px; color: var(--text2); letter-spacing: 0.2px; text-align: center; }
 </style>
 </head><body>
 <div class="container">
@@ -269,7 +274,7 @@ INDEX_HTML = """
     </div>
     <h2>Scored Markets</h2>
     <div id="markets-table">
-        <div class="loading-msg"><span class="spinner"></span>Loading market data&hellip;</div>
+        <div class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Querying market inventory &amp; ranking scored markets&hellip;</div></div>
     </div>
 </div>
 <script>
@@ -474,7 +479,7 @@ PROPERTY_HTML = """
             </td>
             <td>
                 {% if s.z_score is not none %}
-                <span class="z-bar {{ 'z-pos' if s.z_score > 0 else 'z-neg' }}" style="width:{{ [abs(s.z_score)*15, 80]|min }}px"></span>
+                <span class="z-bar {{ 'z-pos' if s.z_score > 0 else 'z-neg' }}" style="width:{{ [(s.z_score|abs)*15, 80]|min }}px"></span>
                 {% endif %}
             </td>
         </tr>

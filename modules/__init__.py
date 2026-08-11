@@ -31,6 +31,9 @@ INSTALLED_MODULES = [
     'modules.barrington',
     'modules.southtown',
     'modules.midway',
+    'modules.portfolio_ownership',
+    'modules.residential',
+    'modules.deliverables',
 ]
 
 
