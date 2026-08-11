@@ -9,8 +9,13 @@ Provides:
   - Config management
 """
 
+import contextlib
+import io
 import json
 import logging
+import os
+import pickle
+import threading
 from datetime import date
 from dataclasses import asdict
 from typing import List, Dict, Optional, Any
@@ -520,49 +525,585 @@ class ScorecardEngine:
 
         return results
 
+    # ─── Demographics scoring (ported from capactive-scorecard) ─────
+
+    def _build_demo_config(self, config_overrides: dict):
+        """Map flat config overrides (frontend getDemoConfig) → DemoScorecardConfig."""
+        from .demo_engine import DemoScorecardConfig
+        config = DemoScorecardConfig()
+        co = dict(config_overrides) if config_overrides else {}
+
+        # Category weights + duration
+        if "analysis_duration_years" in co:
+            config.analysis_duration_years = int(co["analysis_duration_years"])
+        if "pop_weight" in co:
+            config.pop_weight = float(co["pop_weight"])
+        if "afford_weight" in co:
+            config.afford_weight = float(co["afford_weight"])
+        if "emp_weight" in co:
+            config.emp_weight = float(co["emp_weight"])
+
+        # Affordability sub-weights
+        if "afford_overall_weight" in co:
+            config.afford_overall_weight = float(co["afford_overall_weight"])
+        if "afford_snapshot_weight" in co:
+            config.afford_snapshot_weight = float(co["afford_snapshot_weight"])
+        if "afford_unit_dispersion_weight" in co:
+            config.afford_unit_dispersion_weight = float(co["afford_unit_dispersion_weight"])
+
+        # Broad dispersion weight
+        if "demo_dispersion_weight" in co:
+            config.demo_dispersion_weight = float(co["demo_dispersion_weight"])
+        if "demo_dispersion_cap" in co:
+            config.demo_dispersion_cap = float(co["demo_dispersion_cap"])
+        if "demo_dispersion_floor" in co:
+            config.demo_dispersion_floor = float(co["demo_dispersion_floor"])
+
+        # Drivers vs Context weights
+        if "pop_drivers_weight" in co:
+            config.pop_drivers_weight = float(co["pop_drivers_weight"])
+        if "emp_drivers_weight" in co:
+            config.emp_drivers_weight = float(co["emp_drivers_weight"])
+
+        # Demographic Growth Drivers (DGD) sub-weights
+        if "dgd_hhpop_weight" in co:
+            config.dgd_hhpop_weight = float(co["dgd_hhpop_weight"])
+        if "dgd_hh_formation_weight" in co:
+            config.dgd_hh_formation_weight = float(co["dgd_hh_formation_weight"])
+        if "dgd_income_weight" in co:
+            config.dgd_income_weight = float(co["dgd_income_weight"])
+        if "dgd_emp_weight" in co:
+            config.dgd_emp_weight = float(co["dgd_emp_weight"])
+        if "dgd_hh_weight" in co:
+            config.dgd_hh_weight = float(co["dgd_hh_weight"])
+        if "dgd_pop_weight" in co:
+            config.dgd_pop_weight = float(co["dgd_pop_weight"])
+        if "dgd_emp_total_weight" in co:
+            config.dgd_emp_total_weight = float(co["dgd_emp_total_weight"])
+        if "dgd_emp_office_weight" in co:
+            config.dgd_emp_office_weight = float(co["dgd_emp_office_weight"])
+        if "dgd_emp_industrial_weight" in co:
+            config.dgd_emp_industrial_weight = float(co["dgd_emp_industrial_weight"])
+
+        # Tilt applicator indicator params
+        if "vol_weight" in co:
+            v = float(co["vol_weight"])
+            config.volatility_indicator = (config.volatility_indicator[0], v, config.volatility_indicator[2])
+        if "cat_weight" in co:
+            c = float(co["cat_weight"])
+            config.category_indicator = (config.category_indicator[0], c, config.category_indicator[2])
+        if "period_weight" in co:
+            p = float(co["period_weight"])
+            config.period_indicator = (config.period_indicator[0], p, config.period_indicator[2])
+
+        # Momentum
+        if "mom_knob" in co:
+            config.mom_knob = float(co["mom_knob"])
+        if "momentum_mult" in co:
+            config.recent_momentum_tilt_multiplier = float(co["momentum_mult"])
+
+        # Z-score caps
+        if "z_cap" in co:
+            config.total_z_cap = float(co["z_cap"])
+        if "z_floor" in co:
+            config.total_z_floor = float(co["z_floor"])
+
+        # Per-period momentum config overrides
+        if "momentum_config" in co and isinstance(co["momentum_config"], dict):
+            for period_name, vals in co["momentum_config"].items():
+                if isinstance(vals, list) and len(vals) >= 2:
+                    hl = float(vals[0])
+                    mt = float(vals[1])
+                    existing = config.momentum_config.get(period_name, (hl, mt, 8))
+                    hl_q = existing[2] if len(existing) >= 3 else 8
+                    config.momentum_config[period_name] = (hl, mt, hl_q)
+
+        # Direction overrides — flip signal Z direction for specific metrics
+        dir_ov = {}
+        if co.get("flip_inv_pop"):
+            dir_ov["mf_inv_pop"] = True
+            dir_ov["mf_inv_pop_growth"] = True
+        if dir_ov:
+            config.direction_overrides = dir_ov
+
+        return config
+
+    def _demo_peer_display(self, classifications, inventory_tier, region, region_type):
+        """Build the Z-score peer group set and the display-filter set.
+
+        Peer group (Z-score normalization population): markets in the selected
+        inventory tier, or None (all markets = the Over-50K dataset) for "All".
+        Display filter: which markets to show — tier, optionally narrowed by
+        region. None means show all scored markets.
+        """
+        cols = getattr(classifications, "columns", [])
+
+        def tier_markets(tier):
+            if "inventory_tier" in cols:
+                return set(classifications[classifications["inventory_tier"] == tier]["market"].unique())
+            return set()
+
+        peer = tier_markets(inventory_tier) if inventory_tier != "All" else None
+
+        display = None
+        if inventory_tier != "All":
+            display = tier_markets(inventory_tier)
+        if region != "All" and region_type == "specific" and "specific_region" in cols:
+            region_markets = set(
+                classifications[classifications["specific_region"] == region]["market"].unique()
+            )
+            display = (display & region_markets) if display is not None else region_markets
+
+        return peer, display
+
+    def score_demographics(self, costar_file: str, config_overrides: dict = None) -> Dict:
+        """Score markets on the Demographics model (population, affordability,
+        employment). Ported from capactive-scorecard's run_demo_scoring; reuses
+        the cached CoStar detail results and the same market classifications."""
+        from .demo_engine import (
+            score_demo_tier, CAT_POP_METRICS, CAT_AFFORD_METRICS, CAT_EMP_METRICS,
+        )
+
+        all_detail_results, classifications = self._get_costar_cache(costar_file)
+        co = dict(config_overrides) if config_overrides else {}
+        config = self._build_demo_config(co)
+
+        property_class = co.get("property_class", "All")
+        region = co.get("region", "All")
+        region_type = co.get("region_type", "general")
+        inventory_tier = co.get("inventory_tier", "All")
+
+        peer, display = self._demo_peer_display(
+            classifications, inventory_tier, region, region_type
+        )
+
+        def _demo_group(mk):
+            if mk in CAT_POP_METRICS:
+                return "Pop/HH"
+            if mk in CAT_AFFORD_METRICS:
+                return "Afford"
+            if mk in CAT_EMP_METRICS:
+                return "Employ"
+            return "Other"
+
+        scores = score_demo_tier(
+            all_detail_results,
+            property_class=property_class,
+            config=config,
+            peer_group_markets=peer,
+        )
+
+        rows = []
+        for market, ms in scores.items():
+            if display is not None and market not in display:
+                continue
+            row = {
+                "market": market,
+                "demo_score": round(ms.final_score, 4),
+                "pop_score": round(ms.duration_weighted_pop, 4),
+                "afford_score": round(ms.duration_weighted_afford, 4),
+                "emp_score": round(ms.duration_weighted_emp, 4),
+                "metrics": {},
+            }
+            drill_period = None
+            for pname in ["Window", "Q1"]:
+                if pname in ms.period_scores:
+                    drill_period = ms.period_scores[pname]
+                    break
+            if drill_period is None and ms.period_scores:
+                drill_period = next(iter(ms.period_scores.values()))
+
+            if drill_period is not None:
+                all_metric_z = {}
+                all_metric_z.update(drill_period.pop_metric_z)
+                all_metric_z.update(drill_period.afford_metric_z)
+                all_metric_z.update(drill_period.emp_metric_z)
+                for mk, mz in all_metric_z.items():
+                    row["metrics"][mk] = {
+                        "signal_z": round(mz.signal_z, 4),
+                        "vol_z": round(mz.volatility_z, 4),
+                        "cat_z": round(mz.category_z, 4),
+                        "total_z": round(mz.total_z, 4),
+                        "group": _demo_group(mk),
+                    }
+            rows.append(row)
+
+        rows.sort(key=lambda r: r["demo_score"], reverse=True)
+        n = len(rows)
+        for i, r in enumerate(rows):
+            r["demo_rank"] = i + 1
+            r["demo_percentile"] = round((1 - i / max(n - 1, 1)) * 100, 1) if n > 1 else 50.0
+
+        for key, fld in [("pop_score", "pop_rank"), ("afford_score", "afford_rank"), ("emp_score", "emp_rank")]:
+            sorted_rows = sorted(rows, key=lambda r: r[key], reverse=True)
+            for i, r in enumerate(sorted_rows):
+                r[fld] = i + 1
+
+        return {
+            "markets": rows,
+            "market_count": n,
+            "property_class": property_class,
+        }
+
+    # Peer-group results are expensive (each slice scores MF + demographics;
+    # unfiltered configs generate ~60 slices → minutes). Results are pure
+    # functions of (filter config, source data), so cache them in memory and
+    # on disk, keyed on the filter fields + source mtimes.
+    _pg_lock = threading.Lock()
+
+    def _pg_store_path(self, costar_file: str) -> str:
+        base, _ = os.path.splitext(costar_file)
+        return base + ".peergroups.pkl"
+
+    def _pg_data_version(self, costar_file: str):
+        try:
+            v = os.path.getmtime(costar_file)
+            ref = os.path.join(os.path.dirname(__file__), "reference_data.json")
+            if os.path.exists(ref):
+                v = max(v, os.path.getmtime(ref))
+            return v
+        except Exception:
+            return None
+
+    def peer_group_summary(self, costar_file: str, config_overrides: dict = None) -> Dict:
+        """Cached peer-group comparison across tier/unit/region slices."""
+        co = dict(config_overrides) if config_overrides else {}
+        # Only these fields influence the output (the rest are ignored by the
+        # computation, mirroring the source app).
+        key_fields = {
+            "inventory_tier": co.get("inventory_tier", "All"),
+            "property_class": co.get("property_class", "All"),
+            "region": co.get("region", "All"),
+            "region_type": co.get("region_type", "general"),
+            "analysis_duration_years": int(co.get("analysis_duration_years", 10)),
+        }
+        # region_type is irrelevant when no region is selected — normalize it
+        # so 'general' and 'specific' map to the same cache entry.
+        if key_fields["region"] == "All":
+            key_fields["region_type"] = "general"
+        key = json.dumps(key_fields, sort_keys=True)
+        version = self._pg_data_version(costar_file)
+
+        mem = getattr(self, "_pg_cache", None)
+        if mem is not None and mem.get("version") == version and key in mem["entries"]:
+            logger.info("Peer group summary: memory cache hit")
+            return mem["entries"][key]
+
+        with self._pg_lock:
+            # Re-check under the lock.
+            mem = getattr(self, "_pg_cache", None)
+            if mem is not None and mem.get("version") == version and key in mem["entries"]:
+                return mem["entries"][key]
+
+            # Disk tier.
+            store_path = self._pg_store_path(costar_file)
+            if (mem is None or mem.get("version") != version) and os.path.exists(store_path):
+                try:
+                    disk = pickle.loads(open(store_path, "rb").read())
+                    if disk.get("version") == version:
+                        self._pg_cache = disk
+                        mem = disk
+                        if key in disk["entries"]:
+                            logger.info("Peer group summary: disk cache hit")
+                            return disk["entries"][key]
+                except Exception as e:
+                    logger.warning(f"Peer group cache load failed ({e}); recomputing.")
+
+            # Compute and persist.
+            result = self._compute_peer_group_summary(costar_file, config_overrides)
+            if mem is None or mem.get("version") != version:
+                mem = {"version": version, "entries": {}}
+            mem["entries"][key] = result
+            self._pg_cache = mem
+            try:
+                tmp = store_path + ".tmp"
+                with open(tmp, "wb") as fh:
+                    pickle.dump(mem, fh, protocol=pickle.HIGHEST_PROTOCOL)
+                os.replace(tmp, store_path)
+            except Exception as e:
+                logger.warning(f"Peer group cache save skipped ({e}).")
+            return result
+
+    def _compute_peer_group_summary(self, costar_file: str, config_overrides: dict = None) -> Dict:
+        """Peer-group comparison across tier/unit/region slices.
+
+        Ported from capactive-scorecard run_peer_group_summary. For each
+        eligible slice, scores both MF fundamentals and demographics against
+        that slice's peer group and returns aggregate means.
+        """
+        import numpy as np
+        from .z_score_engine import score_tier
+        from .tilt_engine import ScorecardConfig
+        from .demo_engine import score_demo_tier, DemoScorecardConfig
+
+        all_detail_results, classifications = self._get_costar_cache(costar_file)
+        if hasattr(classifications, "set_index"):
+            cls_dict = classifications.set_index("market").to_dict(orient="index")
+        else:
+            cls_dict = dict(classifications)
+        all_markets = set(cls_dict.keys())
+
+        def build_peer(tier):
+            if tier != "All":
+                return set(m for m, c in cls_dict.items() if c.get("inventory_tier") == tier)
+            return set(all_markets)
+
+        def build_display(base, region_type, region, tier):
+            result = None
+            if tier != "All":
+                result = set(m for m, c in cls_dict.items() if c.get("inventory_tier") == tier)
+            if region != "All" and region_type == "specific":
+                region_markets = set(
+                    m for m, c in cls_dict.items() if c.get("specific_region") == region
+                )
+                result = result.intersection(region_markets) if result is not None else region_markets
+            return result
+
+        co = dict(config_overrides) if config_overrides else {}
+        active_inv_tier = co.pop("inventory_tier", "All")
+        active_unit_tier = co.pop("property_class", "All")
+        active_region = co.pop("region", "All")
+        active_region_type = co.pop("region_type", "general")
+        duration_years = int(co.pop("analysis_duration_years", 10))
+
+        has_inv_filter = active_inv_tier != "All"
+        has_region_filter = active_region != "All"
+        has_unit_filter = active_unit_tier != "All"
+
+        inv_tiers = sorted(set(c.get("inventory_tier") for c in cls_dict.values() if c.get("inventory_tier")))
+        regions = sorted(set(c.get("specific_region") for c in cls_dict.values() if c.get("specific_region")))
+        unit_tiers = ["4 & 5 Star", "3 Star", "1 & 2 Star"]
+
+        slices = []
+        if not has_inv_filter and not has_region_filter and not has_unit_filter:
+            slices.append({"label": "All Markets", "inventory_tier": "All", "region": "All",
+                           "region_type": "general", "property_class": "All", "category": "All Markets"})
+        if not has_inv_filter:
+            for tier in inv_tiers:
+                slices.append({"label": tier, "inventory_tier": tier,
+                               "region": active_region if has_region_filter else "All",
+                               "region_type": active_region_type if has_region_filter else "general",
+                               "property_class": active_unit_tier if has_unit_filter else "All",
+                               "category": "Inventory Tier"})
+        if not has_unit_filter:
+            for ut in unit_tiers:
+                slices.append({"label": ut, "inventory_tier": active_inv_tier if has_inv_filter else "All",
+                               "region": active_region if has_region_filter else "All",
+                               "region_type": active_region_type if has_region_filter else "general",
+                               "property_class": ut, "category": "Unit Tier"})
+        if not has_region_filter:
+            for region in regions:
+                slices.append({"label": region, "inventory_tier": active_inv_tier if has_inv_filter else "All",
+                               "region": region, "region_type": "specific",
+                               "property_class": active_unit_tier if has_unit_filter else "All",
+                               "category": "Region"})
+        if not has_inv_filter and not has_unit_filter:
+            for tier in inv_tiers:
+                for ut in unit_tiers:
+                    slices.append({"label": f"{tier} + {ut}", "inventory_tier": tier,
+                                   "region": active_region if has_region_filter else "All",
+                                   "region_type": active_region_type if has_region_filter else "general",
+                                   "property_class": ut, "category": "Tier + Unit"})
+        if not has_region_filter and not has_unit_filter:
+            for ut in unit_tiers:
+                for reg in regions:
+                    slices.append({"label": f"{reg} + {ut}",
+                                   "inventory_tier": active_inv_tier if has_inv_filter else "All",
+                                   "region": reg, "region_type": "specific", "property_class": ut,
+                                   "category": "Region + Unit", "subgroup": ut})
+        if not has_inv_filter and not has_region_filter:
+            for tier in inv_tiers:
+                for reg in regions:
+                    slices.append({"label": f"{tier} + {reg}", "inventory_tier": tier,
+                                   "region": reg, "region_type": "specific",
+                                   "property_class": active_unit_tier if has_unit_filter else "All",
+                                   "category": "Tier + Region"})
+
+        groups = []
+        for sl in slices:
+            try:
+                base_peer = build_peer(sl["inventory_tier"])
+                peer = build_display(base_peer, sl["region_type"], sl["region"], sl["inventory_tier"])
+                if peer is None:
+                    peer = base_peer
+                if len(peer) < 3:
+                    continue
+
+                config = ScorecardConfig()
+                config.analysis_duration_years = duration_years
+                scores = score_tier(all_detail_results, property_class=sl["property_class"],
+                                    config=config, peer_group_markets=peer)
+
+                mf_vals, ds_vals, occ_vals, rent_vals = [], [], [], []
+                for m, ms in scores.items():
+                    if m in peer:
+                        ps = ms.period_scores.get("Q1")
+                        if ps:
+                            mf_vals.append(ps.overall_mf)
+                            ds_vals.append(ps.overall_ds_adj)
+                            occ_vals.append(ps.overall_occ_adj)
+                            rent_vals.append(ps.overall_rent_adj)
+                if not mf_vals:
+                    continue
+
+                entry = {
+                    "label": sl["label"], "category": sl["category"], "market_count": len(peer),
+                    "mf_mean": round(float(np.mean(mf_vals)), 4),
+                    "mf_median": round(float(np.median(mf_vals)), 4),
+                    "ds_mean": round(float(np.mean(ds_vals)), 4),
+                    "occ_mean": round(float(np.mean(occ_vals)), 4),
+                    "rent_mean": round(float(np.mean(rent_vals)), 4),
+                    "mf_std": round(float(np.std(mf_vals)), 4),
+                    "mf_min": round(float(np.min(mf_vals)), 4),
+                    "mf_max": round(float(np.max(mf_vals)), 4),
+                }
+                if sl.get("subgroup"):
+                    entry["subgroup"] = sl["subgroup"]
+
+                try:
+                    demo_config = DemoScorecardConfig()
+                    demo_config.analysis_duration_years = duration_years
+                    demo_scores = score_demo_tier(all_detail_results, property_class=sl["property_class"],
+                                                  config=demo_config, peer_group_markets=peer)
+                    demo_vals = [ds.final_score for m, ds in demo_scores.items() if m in peer]
+                    entry["demo_mean"] = round(float(np.mean(demo_vals)), 4) if demo_vals else None
+                except Exception:
+                    entry["demo_mean"] = None
+
+                groups.append(entry)
+            except Exception as e:
+                logger.warning(f"Peer group slice '{sl['label']}' failed: {e}")
+                continue
+
+        _cat_order = {"All Markets": 0, "Inventory Tier": 1, "Unit Tier": 2, "Region": 3,
+                      "Tier + Unit": 4, "Region + Unit": 5, "Tier + Region": 6}
+        _unit_order = {"4 & 5 Star": 0, "3 Star": 1, "1 & 2 Star": 2}
+        groups.sort(key=lambda g: (
+            _cat_order.get(g["category"], 9),
+            _unit_order.get(g.get("subgroup") or g.get("label", ""), 99),
+            -g["mf_mean"],
+        ))
+
+        return {
+            "groups": groups,
+            "active_filters": {
+                "inventory_tier": active_inv_tier,
+                "unit_tier": active_unit_tier,
+                "region": active_region,
+            },
+        }
+
     # ─── CoStar Data Cache (mirrors original _engine_cache) ─────────
 
     _costar_cache_file = None
     _costar_data = None
     _costar_classifications = None
     _costar_detail_results = None
+    # Serializes cold-cache population so concurrent first-calls don't each
+    # recompute the ~25s metric-detail pass (thundering-herd guard).
+    _costar_cache_lock = threading.Lock()
+
+    @staticmethod
+    def _costar_detail_cache_path(costar_file: str) -> str:
+        """Sidecar path for the processed detail-results cache."""
+        base, _ = os.path.splitext(costar_file)
+        return base + ".details.pkl"
 
     def _get_costar_cache(self, costar_file: str):
         """
         Load and cache CoStar data, classifications, and metric details.
 
-        Mirrors the original standalone webapp's _engine_cache pattern:
-        parse once at first call, reuse on all subsequent calls.
-        The three expensive operations (Excel parse, classify, compute_detail)
-        only run once per server lifetime.
+        Three-tier cache, fastest first:
+          1. In-memory (per-process) — instant after the first call.
+          2. On-disk processed sidecar (<file>.details.pkl) — survives restarts,
+             skips the ~25s compute_detail pass. Keyed on source mtime.
+          3. Full recompute (parse + classify + 18x compute_detail), then both
+             caches are populated for next time.
+
+        A lock ensures only one thread performs the cold population; others
+        wait and then hit the in-memory cache.
         """
+        # Fast path: already in memory.
+        if self._costar_detail_results is not None and self._costar_cache_file == costar_file:
+            logger.info("Using cached CoStar data (instant)")
+            return self._costar_detail_results, self._costar_classifications
+
+        with self._costar_cache_lock:
+            # Re-check under the lock — another thread may have just populated it.
+            if self._costar_detail_results is not None and self._costar_cache_file == costar_file:
+                return self._costar_detail_results, self._costar_classifications
+
+            # Tier 2: on-disk processed sidecar, valid if newer than the sources.
+            # The cached payload embeds classifications, which depend on BOTH the
+            # CoStar export and reference_data.json (region/tier assignments) —
+            # so a reference-data update must also invalidate the sidecar.
+            sidecar = self._costar_detail_cache_path(costar_file)
+            ref_data = os.path.join(os.path.dirname(__file__), "reference_data.json")
+            try:
+                source_mtime = os.path.getmtime(costar_file)
+                if os.path.exists(ref_data):
+                    source_mtime = max(source_mtime, os.path.getmtime(ref_data))
+                if (os.path.exists(sidecar)
+                        and os.path.getmtime(sidecar) >= source_mtime):
+                    logger.info(f"Loading processed detail cache: {sidecar}")
+                    payload = pickle.loads(open(sidecar, "rb").read())
+                    self._costar_cache_file = costar_file
+                    self._costar_data = payload.get("data")
+                    self._costar_classifications = payload["classifications"]
+                    self._costar_detail_results = payload["detail_results"]
+                    logger.info(
+                        f"Detail cache hit: {len(self._costar_detail_results)} metrics, "
+                        f"{len(self._costar_classifications)} markets")
+                    return self._costar_detail_results, self._costar_classifications
+            except Exception as e:
+                logger.warning(f"Detail cache load failed ({e}); recomputing.")
+
+            # Tier 3: full recompute.
+            return self._compute_costar_cache(costar_file, sidecar)
+
+    def _compute_costar_cache(self, costar_file: str, sidecar: str):
+        """Parse + classify + compute all metric details, then persist both caches."""
         from .data_loader import load_costar_export
         from .metric_calculator import compute_detail, METRIC_DEFINITIONS
         from .market_classifier import classify_markets
 
-        if self._costar_data is not None and self._costar_cache_file == costar_file:
-            logger.info("Using cached CoStar data (instant)")
-            return self._costar_detail_results, self._costar_classifications
-
         logger.info(f"Loading CoStar data from {costar_file} (first call — will cache)")
-        data = load_costar_export(costar_file)
-        classifications = classify_markets(data)
+        # These library functions print hundreds of progress lines; on a Windows
+        # console that stdout I/O dominates the runtime. Silence it during the
+        # build (logging still flows to handlers).
+        with contextlib.redirect_stdout(io.StringIO()):
+            data = load_costar_export(costar_file)
+            classifications = classify_markets(data)
 
-        logger.info("Computing metric details (18 metrics)...")
-        all_detail_results = {}
-        for mk in METRIC_DEFINITIONS:
-            try:
-                all_detail_results[mk] = compute_detail(
-                    data, mk, classifications, half_life=8,
-                )
-            except Exception as e:
-                logger.warning(f"Metric {mk} failed: {e}")
+            logger.info("Computing metric details (18 metrics)...")
+            all_detail_results = {}
+            for mk in METRIC_DEFINITIONS:
+                try:
+                    all_detail_results[mk] = compute_detail(
+                        data, mk, classifications, half_life=8,
+                    )
+                except Exception as e:
+                    logger.warning(f"Metric {mk} failed: {e}")
 
-        # Cache everything
+        # Populate in-memory cache.
         self._costar_cache_file = costar_file
         self._costar_data = data
         self._costar_classifications = classifications
         self._costar_detail_results = all_detail_results
+
+        # Persist processed sidecar so the next cold start skips the compute pass.
+        try:
+            tmp = sidecar + ".tmp"
+            with open(tmp, "wb") as fh:
+                pickle.dump(
+                    {"classifications": classifications,
+                     "detail_results": all_detail_results},
+                    fh, protocol=pickle.HIGHEST_PROTOCOL,
+                )
+            os.replace(tmp, sidecar)
+            logger.info(f"Saved processed detail cache: {sidecar}")
+        except Exception as e:
+            logger.warning(f"Could not write detail cache ({e}); continuing.")
 
         logger.info(f"Cached: {len(all_detail_results)} metrics, "
                     f"{len(classifications)} markets")

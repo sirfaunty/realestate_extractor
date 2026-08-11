@@ -180,8 +180,18 @@ class PropertyAnalyzer:
                         type_summary['extracted'] += count
 
                     elif template:
-                        # For leases, loans, etc. — run the full extraction engine
-                        counts = self._analyze_with_engine(doc_id, doc_content, template)
+                        # For leases, loans, etc. — run the full extraction
+                        # engine. Per-document isolation: one pathological
+                        # document must not abort the whole property run.
+                        try:
+                            counts = self._analyze_with_engine(
+                                doc_id, doc_content, template)
+                        except Exception as doc_err:
+                            logger.error(
+                                f"Extraction failed for "
+                                f"{doc_record['filename']}: {doc_err}",
+                                exc_info=True)
+                            counts = {}
                         summary['financial_terms'] += counts.get('terms', 0)
                         summary['clauses'] += counts.get('clauses', 0)
                         type_summary['extracted'] += counts.get('terms', 0) + counts.get('clauses', 0)

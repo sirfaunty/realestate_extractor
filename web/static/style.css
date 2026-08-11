@@ -470,6 +470,16 @@ select:focus {
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.02em;
+    /* pills never wrap — ellipsize when the cell is too narrow */
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    box-sizing: border-box;
+    /* neutral default so unmapped types still render as a proper pill */
+    background: #E5E7EB;
+    color: #374151;
 }
 
 /* Document type badges — all use the blue ramp */
@@ -480,6 +490,24 @@ select:focus {
 .badge-rent_roll { background: #E0E7FF; color: #3730A3; }
 .badge-operating_statement { background: #CCFBF1; color: #115E59; }
 .badge-general_ledger { background: #F3E8FF; color: #6B21A8; }
+/* full document-type coverage (templates/document_templates.py) */
+.badge-proforma { background: #E0F2FE; color: #075985; }
+.badge-equity_waterfall { background: #EDE9FE; color: #5B21B6; }
+.badge-hud_form { background: #FFEDD5; color: #9A3412; }
+.badge-partnership_agreement { background: #FFE4E6; color: #9F1239; }
+.badge-due_diligence { background: #ECFCCB; color: #3F6212; }
+.badge-organizational { background: #E2E8F0; color: #334155; }
+.badge-correspondence { background: #CFFAFE; color: #155E75; }
+.badge-reference { background: #F5F5F4; color: #57534E; }
+.badge-balance_sheet { background: #DBEAFE; color: #1E40AF; }
+.badge-cash_flow { background: #DCFCE7; color: #166534; }
+.badge-bank_reconciliation { background: #FAE8FF; color: #86198F; }
+.badge-security_deposit { background: #FEF9C3; color: #854D0E; }
+.badge-payables { background: #FEE2E2; color: #991B1B; }
+.badge-receivables { background: #A7F3D0; color: #065F46; }
+.badge-bad_debt { background: #FECACA; color: #7F1D1D; }
+.badge-concession { background: #FDE68A; color: #78350F; }
+.badge-unknown { background: #E5E7EB; color: #374151; }
 
 .badge-success { background: var(--success-light); color: #065F46; }
 .badge-error { background: var(--danger-light); color: var(--danger); }

@@ -388,7 +388,19 @@ class LeaseAnalysisEngine:
         rr = self.get_rent_roll(property_id)
 
         if not rr:
-            return {"property_id": property_id, "has_data": False}
+            # Return the full key set so templates/consumers can rely on it.
+            return {
+                "property_id": property_id,
+                "property_name": prop["name"] if prop else "",
+                "has_data": False,
+                "total_units": 0,
+                "vacant_units": 0,
+                "occupancy_pct": 0,
+                "avg_rent": 0,
+                "min_rent": 0,
+                "max_rent": 0,
+                "unit_type_count": 0,
+            }
 
         rents = [float(r["monthly_rent"]) for r in rr if r.get("monthly_rent")]
         vacant = sum(

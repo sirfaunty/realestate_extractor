@@ -31,6 +31,9 @@ INSTALLED_MODULES = [
     'modules.portfolio_cashflow',
     'modules.lease_abstraction',
     'modules.disposition_diligence',
+    'modules.portfolio_ownership',
+    'modules.residential',
+    'modules.deliverables',
 ]
 
 

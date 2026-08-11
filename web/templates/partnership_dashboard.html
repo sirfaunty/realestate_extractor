@@ -38,6 +38,14 @@
 .pd-root .page-hdr select { padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:#fff; }
 
 .pd-root .loading-msg { text-align:center; padding:60px 20px; color:var(--muted); font-size:15px; }
+.pd-root .loading-msg::before {
+  content:""; display:block; width:200px; height:4px; margin:0 auto 16px;
+  border-radius:2px; background-color:var(--border);
+  background-image:linear-gradient(90deg, transparent, var(--brand-active), transparent);
+  background-size:50% 100%; background-repeat:no-repeat; background-position:0% 0;
+  animation:pd-slide 1.15s ease-in-out infinite;
+}
+@keyframes pd-slide { to { background-position:100% 0; } }
 
 /* ─── Stats Grid ─────────────────────────────────────────────── */
 .pd-root .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:24px; }

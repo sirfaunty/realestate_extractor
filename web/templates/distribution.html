@@ -168,6 +168,14 @@
 
 /* ── Loading ── */
 .dist-root .loading { text-align: center; padding: 40px; color: var(--muted); }
+.dist-root .loading::before {
+  content: ""; display: block; width: 200px; height: 4px; margin: 0 auto 14px;
+  border-radius: 2px; background-color: var(--border);
+  background-image: linear-gradient(90deg, transparent, var(--active), transparent);
+  background-size: 50% 100%; background-repeat: no-repeat; background-position: 0% 0;
+  animation: dist-slide 1.15s ease-in-out infinite;
+}
+@keyframes dist-slide { to { background-position: 100% 0; } }
 
 /* ── Grid ── */
 .dist-root .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -225,7 +233,7 @@
         <h2>Partner Summary</h2>
       </div>
       <div class="panel-body" id="partnerSummary">
-        <div class="loading">Loading...</div>
+        <div class="loading">Loading partner summary…</div>
       </div>
     </div>
 
@@ -235,7 +243,7 @@
         <h2>Return Metrics</h2>
       </div>
       <div class="panel-body panel-body-padded" id="returnMetrics">
-        <div class="loading">Loading...</div>
+        <div class="loading">Loading return metrics…</div>
       </div>
     </div>
   </div>

@@ -154,6 +154,11 @@
 .debt-root .loading {
   text-align: center; padding: 40px; color: var(--muted); font-size: 14px;
 }
+.debt-root .cap-activity { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px 0; }
+.debt-root .cap-activity .cap-bar { position: relative; width: 200px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.debt-root .cap-activity .cap-bar::before { content: ""; position: absolute; top: 0; left: -45%; height: 100%; width: 45%; border-radius: 2px; background: var(--brand-active); animation: cap-slide 1.15s ease-in-out infinite; }
+@keyframes cap-slide { 0% { left: -45%; } 100% { left: 100%; } }
+.debt-root .cap-activity .cap-msg { font-size: 13px; color: var(--muted); letter-spacing: 0.2px; text-align: center; }
 </style>
 
 <div class="debt-root" id="debt-root">
@@ -302,7 +307,7 @@
   <!-- TIF Scenario Comparison -->
   <div class="panel">
     <div class="panel-title"><span class="icon">📊</span> DSCR by TIF Scenario</div>
-    <div id="scenario-loading" class="loading">Loading scenario comparison…</div>
+    <div id="scenario-loading" class="cap-activity"><div class="cap-bar"></div><div class="cap-msg">Loading DSCR scenario comparison…</div></div>
     <table id="scenario-table" style="display:none;">
       <thead id="scenario-head"></thead>
       <tbody id="scenario-body"></tbody>
