@@ -192,6 +192,34 @@ a:hover {
     max-width: none;
 }
 
+/* Collapsible sidebar groups */
+
+.sidebar-collapse-toggle {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+}
+
+.sidebar-collapse-toggle:hover {
+    color: var(--text-primary, #fff);
+}
+
+.sidebar-collapse-toggle .chev {
+    transition: transform 0.15s ease;
+    flex: 0 0 auto;
+    margin-right: 14px;
+}
+
+.sidebar-group.collapsed .sidebar-collapse-toggle .chev {
+    transform: rotate(-90deg);
+}
+
+.sidebar-group.collapsed .sidebar-nav {
+    display: none;
+}
+
 /* ─── Page Header ──��� */
 
 .page-header {
