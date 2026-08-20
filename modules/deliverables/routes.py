@@ -183,7 +183,9 @@ def _register_job(pid, mode):
     progress widget shows it on every page. Returns (jobs, job_id) or
     (None, None) if the registry is unavailable."""
     try:
-        from webapp import jobs  # safe at call time; webapp fully loaded
+        # package-relative: the app runs as realestate_extractor.webapp,
+        # so a bare `import webapp` would re-execute the module and fail
+        from ...webapp import jobs  # already in sys.modules at call time
         from flask import session
         from datetime import datetime
         job_id = f'deliverable-{int(time.time() * 1000)}'

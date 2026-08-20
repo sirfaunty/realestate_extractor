@@ -1155,8 +1155,11 @@ class Database:
         Review Queue (finalized_at set). `since` (ISO timestamp) limits to
         documents finalized after the last successful push, giving the
         push module delta semantics for free."""
+        # origin_device_id IS NULL: only locally-extracted documents are
+        # sync sources — synced mirror copies never re-push (prevents
+        # relay loops, incl. the loopback case where device == instance)
         q = ("SELECT * FROM documents WHERE review_status = 'approved' "
-             "AND finalized_at IS NOT NULL")
+             "AND finalized_at IS NOT NULL AND origin_device_id IS NULL")
         params = []
         if since:
             q += " AND finalized_at > ?"

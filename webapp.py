@@ -1561,8 +1561,8 @@ def api_sync_run():
                 errors.append({'origin_doc_id':
                                (item.get('document') or {}).get('origin_doc_id'),
                                'error': str(e)})
-        logger.info(f"sync/run from {g.device['device_id']}: "
-                    f"{len(results)} ok, {len(errors)} failed")
+        app.logger.info(f"sync/run from {g.device['device_id']}: "
+                        f"{len(results)} ok, {len(errors)} failed")
         return jsonify({'ok': not errors, 'results': results,
                         'errors': errors})
     finally:
