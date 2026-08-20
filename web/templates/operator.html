@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Capactive Operator Console</title>
+<style>
+  body { background:#0a0e14; color:#d7dde6; margin:0; padding:28px 40px;
+    font-family:'JetBrains Mono','Cascadia Code',Consolas,monospace; }
+  h1 { font-size:16px; color:#4fa3e3; letter-spacing:.08em;
+    text-transform:uppercase; margin:0 0 2px; }
+  .sub { font-size:11.5px; color:#5c6b80; margin-bottom:26px; }
+  .sub a { color:#5c6b80; }
+  h2 { font-size:12px; color:#8595ab; text-transform:uppercase;
+    letter-spacing:.08em; margin:30px 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th { text-align:left; color:#5c6b80; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.06em; padding:6px 12px;
+    border-bottom:1px solid #223047; }
+  td { padding:8px 12px; border-bottom:1px solid #16202f; }
+  tr:hover td { background:#111722; }
+  .pill { display:inline-block; padding:1px 9px; border-radius:9px;
+    font-size:10.5px; }
+  .on  { background:#123524; color:#4ec98a; }
+  .off { background:#3a1520; color:#e06c75; }
+  a.btn, button.btn { background:#16273c; color:#9fc5e8;
+    border:1px solid #223047; border-radius:5px; padding:4px 11px;
+    font-family:inherit; font-size:11.5px; cursor:pointer;
+    text-decoration:none; display:inline-block; }
+  a.btn:hover, button.btn:hover { border-color:#4fa3e3; }
+  .btn-primary { background:#1a5c96; color:#fff; border-color:#1a5c96; }
+  select, input { background:#0a0e14; border:1px solid #223047;
+    border-radius:5px; color:#d7dde6; padding:5px 8px;
+    font-family:inherit; font-size:12px; }
+  form.inline { display:inline-flex; gap:6px; align-items:center; }
+  .provision { background:#111722; border:1px solid #223047;
+    border-radius:8px; padding:16px 20px; max-width:920px; }
+  .provision .row { display:flex; gap:10px; flex-wrap:wrap;
+    margin-bottom:10px; }
+  .flash { max-width:920px; padding:10px 14px; border-radius:6px;
+    font-size:12px; margin-bottom:8px; }
+  .flash.success { background:#123524; color:#4ec98a; }
+  .flash.error { background:#3a1520; color:#e06c75; }
+  .audit td { color:#8595ab; font-size:11.5px; }
+  code { color:#c8a2f5; font-size:11px; }
+</style></head><body>
+
+<h1>Capactive // Operator Console</h1>
+<div class="sub">{{ operator_name }} — all actions audited ·
+  <a href="{{ url_for('operator_logout') }}">log out</a></div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+  <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<h2>Organizations</h2>
+<table>
+<thead><tr><th>Org</th><th>Plan</th><th>Status</th><th>Users</th>
+<th>Devices / Seats</th><th>License key</th><th style="width:340px"></th></tr></thead>
+<tbody>
+{% for o in orgs %}
+<tr>
+  <td>{{ o.org_name }}<br><code>{{ o.org_id }}</code></td>
+  <td>{{ o.plan }}</td>
+  <td><span class="pill {{ 'on' if o.is_active else 'off' }}">
+      {{ 'active' if o.is_active else 'inactive' }}</span></td>
+  <td>{{ o.users }}</td>
+  <td>{{ o.devices }} / {{ o.extraction_seats }} extr ·
+      {{ o.access_seats }} acc</td>
+  <td><code>{{ o.org_key }}</code></td>
+  <td>
+    <a class="btn btn-primary" href="{{ url_for('operator_enter', org_id=o.org_id) }}"
+       onclick="return confirm('Enter {{ o.org_name }} as its admin? This is audited.');">
+       Enter workspace</a>
+    <form class="inline" method="POST"
+          action="{{ url_for('operator_org_action', org_id=o.org_id) }}">
+      <input type="hidden" name="action" value="set_plan">
+      <select name="plan">
+        {% for p in plans %}
+        <option value="{{ p }}" {% if p == o.plan %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn" type="submit">Set plan</button>
+    </form>
+    <form class="inline" method="POST"
+          action="{{ url_for('operator_org_action', org_id=o.org_id) }}"
+          onsubmit="return confirm('{{ 'Deactivate' if o.is_active else 'Reactivate' }} {{ o.org_name }}?');">
+      <input type="hidden" name="action" value="toggle_active">
+      <button class="btn" type="submit">
+        {{ 'Deactivate' if o.is_active else 'Reactivate' }}</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+<h2>Provision a new organization</h2>
+<div class="provision">
+  <form method="POST" action="{{ url_for('operator_provision') }}">
+    <div class="row">
+      <input name="org_name" placeholder="Organization name" required
+             style="width:220px">
+      <select name="plan">
+        {% for p in plans %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="row">
+      <input name="admin_name" placeholder="Admin name" required
+             style="width:180px">
+      <input name="admin_email" type="email" placeholder="Admin email"
+             required style="width:220px">
+      <input name="admin_password" type="password"
+             placeholder="Temp password (they change it)" required
+             style="width:220px">
+    </div>
+    <button class="btn btn-primary" type="submit">Provision</button>
+  </form>
+</div>
+
+<h2>Recent operator activity</h2>
+<table class="audit">
+<thead><tr><th>When</th><th>Operator</th><th>Action</th><th>Org</th>
+<th>Detail</th></tr></thead>
+<tbody>
+{% for a in audit %}
+<tr><td>{{ a.at[:19].replace('T', ' ') }}</td>
+    <td>{{ a.display_name or a.operator_id }}</td>
+    <td>{{ a.action }}</td>
+    <td>{{ a.org_id or '—' }}</td>
+    <td>{{ a.detail or '' }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+
+</body></html>

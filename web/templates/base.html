@@ -8,6 +8,19 @@
 </head>
 <body>
 <div class="layout">
+    {% if session.get('operator_id') and session.get('org_id') %}
+    <div style="position:fixed; top:0; left:0; right:0; z-index:100000;
+                background:#7c2d12; color:#fed7aa; font-size:12.5px;
+                padding:6px 16px; text-align:center;
+                font-family:Consolas,monospace;">
+        CAPACTIVE OPERATOR SESSION — you are inside
+        <strong>{{ session.get('org_id') }}</strong> as its admin; actions
+        are audited &nbsp;·&nbsp;
+        <a href="{{ url_for('operator_exit') }}"
+           style="color:#fff; font-weight:600;">Exit to console</a>
+    </div>
+    <div style="height:30px"></div>
+    {% endif %}
     <nav class="sidebar">
         <div class="sidebar-brand">
             <div class="brand-logo">

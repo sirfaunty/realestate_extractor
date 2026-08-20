@@ -224,6 +224,32 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_devices_org ON devices(org_id);
+
+-- Capactive operators (docs/PACKAGING_DESIGN.md; tasks #102/#103):
+-- staff credentials, entirely separate from org users. Org admins can
+-- never create or become operators. Bootstrap via create_operator.py.
+CREATE TABLE IF NOT EXISTS operators (
+    operator_id     TEXT PRIMARY KEY,
+    email           TEXT NOT NULL UNIQUE,
+    display_name    TEXT NOT NULL,
+    password_hash   TEXT NOT NULL,
+    is_active       BOOLEAN DEFAULT 1,
+    created_at      TEXT,
+    last_login      TEXT
+);
+
+-- Every operator action is recorded — impersonation especially.
+CREATE TABLE IF NOT EXISTS operator_audit (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    operator_id     TEXT NOT NULL,
+    action          TEXT NOT NULL,
+    org_id          TEXT,
+    detail          TEXT,
+    at              TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_operator_audit_op
+    ON operator_audit(operator_id, at);
 """
 
 
@@ -359,6 +385,56 @@ class ConfigStore:
     def deactivate_org(self, org_id: str):
         """Deactivate an organization (soft delete)."""
         self.update_org(org_id, is_active=False)
+
+    # ─── Capactive Operators (staff) ─────────────────────────────────
+
+    def create_operator(self, email: str, display_name: str,
+                        password_hash: str) -> str:
+        import secrets
+        operator_id = f"op-{secrets.token_hex(4)}"
+        self.conn.execute(
+            "INSERT INTO operators (operator_id, email, display_name, "
+            "password_hash, is_active, created_at) VALUES (?, ?, ?, ?, 1, ?)",
+            (operator_id, email.lower().strip(), display_name,
+             password_hash, datetime.now().isoformat()))
+        self.conn.commit()
+        return operator_id
+
+    def get_operator_by_email(self, email: str) -> Optional[Dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM operators WHERE email = ? AND is_active = 1",
+            (email.lower().strip(),))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_operator(self, operator_id: str) -> Optional[Dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM operators WHERE operator_id = ? AND is_active = 1",
+            (operator_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def touch_operator_login(self, operator_id: str):
+        self.conn.execute(
+            "UPDATE operators SET last_login = ? WHERE operator_id = ?",
+            (datetime.now().isoformat(), operator_id))
+        self.conn.commit()
+
+    def log_operator_action(self, operator_id: str, action: str,
+                            org_id: str = None, detail: str = None):
+        self.conn.execute(
+            "INSERT INTO operator_audit (operator_id, action, org_id, "
+            "detail, at) VALUES (?, ?, ?, ?, ?)",
+            (operator_id, action, org_id, detail,
+             datetime.now().isoformat()))
+        self.conn.commit()
+
+    def list_operator_audit(self, limit: int = 100) -> List[Dict]:
+        cur = self.conn.execute(
+            "SELECT a.*, o.display_name FROM operator_audit a "
+            "LEFT JOIN operators o ON o.operator_id = a.operator_id "
+            "ORDER BY a.at DESC LIMIT ?", (limit,))
+        return [dict(r) for r in cur.fetchall()]
 
     # ─── User Management ─────────────────────────────────────────────
 
