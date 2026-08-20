@@ -95,8 +95,14 @@ _import/
 
 # staged source documents (re-extractable from inbox zips)
 portfolio_ownership/re_import/staging/
-
-# staged source documents (re-extractable from inbox zips)
-portfolio_ownership/re_import/staging/
-portfolio_ownership/re_import/staging/
 portfolio_ownership/pilot_hadley/sources/
+
+# sync client config (contains device token) + synced PDF store
+capactive_sync.ini
+data/synced_pdfs/
+
+# CLIENT DATA — never in git (docs/PACKAGING_DESIGN.md; copy between
+# machines via export_for_mac.py, not version control)
+portfolio_ownership/KA_OWNERSHIP_MODULE_MASTER_20260724/
+portfolio_ownership/inbox/
+portfolio_ownership/residential/

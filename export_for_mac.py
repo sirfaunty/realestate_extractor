@@ -163,7 +163,19 @@ def export_warehouse_csvs():
         print("  warehouse: data/warehouse.duckdb not found — skipping CSV export")
         return
     os.makedirs(CSV_DIR, exist_ok=True)
-    conn = duckdb.connect(WAREHOUSE, read_only=True)
+    try:
+        conn = duckdb.connect(WAREHOUSE, read_only=True)
+    except Exception as e:
+        print(f"  warehouse: locked or unreadable ({str(e)[:60]}…)")
+        existing = [f for f in os.listdir(CSV_DIR) if f.endswith('.csv')] \
+            if os.path.isdir(CSV_DIR) else []
+        if existing:
+            print(f"  using {len(existing)} previously exported CSVs "
+                  f"in data/warehouse_export/ instead")
+        else:
+            print("  no prior CSVs — stop the Capactive server "
+                  "(it holds the warehouse open) and re-run to include them")
+        return
     for t in DEAL_TABLES:
         try:
             n = conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0]

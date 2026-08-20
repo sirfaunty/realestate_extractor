@@ -30,6 +30,60 @@
     </div>
 </div>
 
+{% if doc.origin_device_id %}
+<!-- Sync provenance: this document arrived from an extraction device -->
+<div class="card" style="padding: 14px 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 13px; color: var(--text-secondary);">
+            <strong style="color: var(--text-primary);">Synced document</strong>
+            &middot; from device <code style="font-size: 12px;">{{ doc.origin_device_id }}</code>
+            &middot; last sync {{ doc.synced_at[:16] if doc.synced_at else '—' }}
+            {% if sync_history %}&middot; {{ sync_history|length }} prior
+            version{{ 's' if sync_history|length != 1 }}{% endif %}
+        </div>
+        {% if sync_history %}
+        <button type="button" class="btn btn-sm btn-secondary"
+                onclick="var h = document.getElementById('sync-history');
+                         h.style.display = h.style.display === 'none' ? '' : 'none';">
+            Version history</button>
+        {% endif %}
+    </div>
+    {% if sync_history %}
+    <div id="sync-history" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+        {% for v in sync_history %}
+        <div style="margin-bottom: 12px; font-size: 13px;">
+            <div style="color: var(--text-secondary); margin-bottom: 4px;">
+                <strong>v{{ v.version_no }}</strong> replaced
+                {{ v.replaced_at[:16] if v.replaced_at else '' }}
+                {% if v.terms_before != v.terms_after %}
+                &middot; financial terms {{ v.terms_before }} &rarr; {{ v.terms_after }}
+                {% endif %}
+            </div>
+            {% if v.changes %}
+            <table class="data-table" style="max-width: 760px;">
+                <thead><tr><th style="width: 30%;">Field</th>
+                <th>Before</th><th>After</th></tr></thead>
+                <tbody>
+                {% for c in v.changes %}
+                <tr>
+                    <td>{{ c.field.replace('_', ' ') }}</td>
+                    <td style="color: var(--danger, #b91c1c);">{{ c.old if c.old is not none else '—' }}</td>
+                    <td style="color: #065F46;">{{ c.new if c.new is not none else '—' }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="color: var(--text-secondary);">No document-field
+            changes (terms-only update).</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Tabs -->
 <div class="tabs">
     {% if terms %}

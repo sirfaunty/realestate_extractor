@@ -558,6 +558,33 @@ class Database:
                 "ALTER TABLE documents ADD COLUMN reviewed_at TIMESTAMP"
             )
 
+        # Sync provenance (docs/PACKAGING_DESIGN.md §4): documents received
+        # from an extraction device carry their origin; re-pushes snapshot
+        # the prior version into sync_versions (history, never overwrite
+        # silently — provenance is the product).
+        if 'origin_device_id' not in doc_cols:
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN origin_device_id TEXT")
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN origin_doc_id INTEGER")
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN synced_at TIMESTAMP")
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS sync_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL,
+                version_no INTEGER NOT NULL,
+                snapshot TEXT NOT NULL,
+                origin_device_id TEXT,
+                replaced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sync_versions_doc "
+            "ON sync_versions(document_id)")
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_origin "
+            "ON documents(origin_device_id, origin_doc_id)")
+
         # Finalize/publish flag (docs/PACKAGING_DESIGN.md §4): set when a
         # document is approved in the Review Queue. A finalized document is
         # the unit eligible for sync to the org's web instance.
@@ -1137,6 +1164,145 @@ class Database:
         q += " ORDER BY finalized_at"
         cur = self.conn.execute(q, params)
         return [dict(row) for row in cur.fetchall()]
+
+    # ─── Sync receive (instance side, docs/PACKAGING_DESIGN.md §4) ────
+
+    def sync_manifest(self, device_id: str) -> dict:
+        """What this instance already holds from a device:
+        {origin_doc_id: {'synced_at': ..., 'finalized_at': ...}}.
+        The client diffs its list_finalized_documents() against this to
+        push only new/changed documents."""
+        cur = self.conn.execute(
+            "SELECT origin_doc_id, synced_at, finalized_at FROM documents "
+            "WHERE origin_device_id = ?", (device_id,))
+        return {str(r['origin_doc_id']): {'synced_at': r['synced_at'],
+                                          'finalized_at': r['finalized_at']}
+                for r in cur.fetchall()}
+
+    def upsert_synced_document(self, doc: dict, terms: list,
+                               device_id: str) -> dict:
+        """Insert or update a pushed document (+ its financial terms),
+        keyed on (origin_device_id, origin_doc_id). On update, the prior
+        document row and terms are snapshotted into sync_versions first —
+        history is kept, never silently overwritten."""
+        import json as _json
+        from datetime import datetime as _dt
+        origin_id = doc.get('origin_doc_id') or doc.get('id')
+        if origin_id is None:
+            raise ValueError('document payload missing origin_doc_id')
+
+        doc_cols = [r[1] for r in self.conn.execute(
+            "PRAGMA table_info(documents)")]
+        term_cols = [r[1] for r in self.conn.execute(
+            "PRAGMA table_info(financial_terms)")]
+
+        payload = {k: v for k, v in doc.items()
+                   if k in doc_cols and k not in ('id',)}
+        payload['origin_device_id'] = device_id
+        payload['origin_doc_id'] = origin_id
+        payload['synced_at'] = _dt.now().isoformat()
+
+        cur = self.conn.execute(
+            "SELECT * FROM documents WHERE origin_device_id = ? "
+            "AND origin_doc_id = ?", (device_id, origin_id))
+        existing = cur.fetchone()
+
+        if existing:
+            doc_id = existing['id']
+            # snapshot prior state (row + terms) before touching it
+            old_terms = [dict(r) for r in self.conn.execute(
+                "SELECT * FROM financial_terms WHERE document_id = ?",
+                (doc_id,))]
+            ver = self.conn.execute(
+                "SELECT COALESCE(MAX(version_no), 0) + 1 FROM sync_versions "
+                "WHERE document_id = ?", (doc_id,)).fetchone()[0]
+            self.conn.execute(
+                "INSERT INTO sync_versions (document_id, version_no, "
+                "snapshot, origin_device_id) VALUES (?, ?, ?, ?)",
+                (doc_id, ver,
+                 _json.dumps({'document': dict(existing),
+                              'financial_terms': old_terms}, default=str),
+                 device_id))
+            # keep the instance-side filepath (PDF may already be synced)
+            payload.pop('filepath', None)
+            sets = ", ".join(f"{k} = ?" for k in payload)
+            self.conn.execute(
+                f"UPDATE documents SET {sets} WHERE id = ?",
+                (*payload.values(), doc_id))
+            self.conn.execute(
+                "DELETE FROM financial_terms WHERE document_id = ?",
+                (doc_id,))
+            action = 'updated'
+        else:
+            payload.setdefault('filepath', '(awaiting pdf sync)')
+            cols = ", ".join(payload)
+            ph = ", ".join("?" * len(payload))
+            cur = self.conn.execute(
+                f"INSERT INTO documents ({cols}) VALUES ({ph})",
+                tuple(payload.values()))
+            doc_id = cur.lastrowid
+            action = 'created'
+
+        for t in (terms or []):
+            trow = {k: v for k, v in t.items()
+                    if k in term_cols and k not in ('id', 'document_id')}
+            trow['document_id'] = doc_id
+            cols = ", ".join(trow)
+            ph = ", ".join("?" * len(trow))
+            self.conn.execute(
+                f"INSERT INTO financial_terms ({cols}) VALUES ({ph})",
+                tuple(trow.values()))
+
+        self.conn.commit()
+        return {'action': action, 'document_id': doc_id,
+                'origin_doc_id': origin_id,
+                'terms': len(terms or [])}
+
+    def get_sync_history(self, doc_id: int) -> list:
+        """Provenance trail for a synced document, newest first:
+        [{version_no, replaced_at, changes: [{field, old, new}],
+          terms_before, terms_after}]. Each entry diffs a snapshot against
+        the state that replaced it (the next snapshot, or the current row
+        for the most recent one)."""
+        import json as _json
+        rows = self.conn.execute(
+            "SELECT * FROM sync_versions WHERE document_id = ? "
+            "ORDER BY version_no", (doc_id,)).fetchall()
+        if not rows:
+            return []
+        cur_row = self.conn.execute(
+            "SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
+        cur_terms = self.conn.execute(
+            "SELECT COUNT(*) FROM financial_terms WHERE document_id = ?",
+            (doc_id,)).fetchone()[0]
+        snaps = [_json.loads(r['snapshot']) for r in rows]
+        doc_states = [s['document'] for s in snaps] + [dict(cur_row)]
+        term_counts = [len(s.get('financial_terms', [])) for s in snaps] \
+            + [cur_terms]
+        ignore = {'id', 'synced_at', 'filepath'}
+        history = []
+        for i, r in enumerate(rows):
+            old, new = doc_states[i], doc_states[i + 1]
+            changes = [{'field': k, 'old': old.get(k), 'new': new.get(k)}
+                       for k in sorted(set(old) | set(new))
+                       if k not in ignore
+                       and str(old.get(k)) != str(new.get(k))]
+            history.append({'version_no': r['version_no'],
+                            'replaced_at': r['replaced_at'],
+                            'changes': changes,
+                            'terms_before': term_counts[i],
+                            'terms_after': term_counts[i + 1]})
+        history.reverse()
+        return history
+
+    def attach_synced_pdf(self, device_id: str, origin_doc_id,
+                          filepath: str) -> bool:
+        """Point a synced document at its uploaded source PDF."""
+        cur = self.conn.execute(
+            "UPDATE documents SET filepath = ? WHERE origin_device_id = ? "
+            "AND origin_doc_id = ?", (filepath, device_id, origin_doc_id))
+        self.conn.commit()
+        return cur.rowcount > 0
 
     def bulk_approve_matches(self, min_score: float = 0.7) -> int:
         """Approve all pending documents with a high-confidence property match.

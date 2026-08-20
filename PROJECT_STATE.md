@@ -1,9 +1,45 @@
 # Capactive — Project State
 
-**Last updated: 2026-08-02.** Start here when picking the project up on a new
+**Last updated: 2026-08-19.** Start here when picking the project up on a new
 machine or after time away. (README.md / TRACK_A_*.md describe the original
 extractor phase from May 2026 and are historical — this file supersedes them
 for current state.)
+
+## Packaging push (August 2026 — active)
+
+Preparing for the first in-the-wild user. **Read
+`docs/PACKAGING_DESIGN.md`** — extraction seats (local software,
+device-bound) vs access seats (web-only), source PDFs sync as first-class
+artifacts, one container deployable managed-or-client-hosted.
+
+Shipped so far:
+- **Phase 1**: seat classes in config/licensing (1+2 / 2+5 / 3+20 /
+  unlimited; first admin free), `extractor` role template, per-class
+  enforcement at user-add and role-change, seat counts on Admin → License,
+  finalize flag (Review Queue approval = sync-eligible;
+  `list_finalized_documents(since=…)` is the sync contract).
+- **Phase 2a**: device registration + Bearer-token machine auth
+  (Admin → Devices, token shown once, TOFU fingerprint pinning,
+  `/api/sync/ping`).
+- **Phase 2b/2c**: sync receive (`/api/sync/manifest`, `/api/sync/run`
+  with version-history snapshots into `sync_versions`, `/api/sync/pdf`
+  sha256-deduped) + `sync_client.py` push CLI for extraction devices.
+
+Pending (see tasks): sync status UI, container packaging + TLS + backups,
+extraction-client installer, super admin (cross-workspace Capactive
+operator) and a separate Capactive operator panel, tagline/brand rollout
+(brand guidelines doc still on Patrick's other device — get it into
+docs/BRAND.md).
+
+**`TESTING_CHECKLIST.md`** holds all banked manual verification items —
+build sessions add to it; testing sessions work through it.
+
+Also new since 2026-08-02: universal job-progress widget on every page
+(`web/static/global_progress.js`, injected app-wide), collapsible
+Extraction nav group (analytics-first sidebar), documents-page layout +
+badge-color pass, deliverables single-build lock + navigation guard,
+tagline "See the signal. Make the move.", property-sampled
+`export_for_mac.py --properties` (never ship the full master).
 
 ---
 
