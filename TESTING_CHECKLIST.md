@@ -92,6 +92,23 @@ Bugs found + fixed during this run (all committed):
 - [ ] Restart container → sessions survive (secret key stable), data
   intact (volume).
 
+## Operator console (super admin — built 2026-08-20)
+
+- [ ] Bootstrap: `venv/Scripts/python create_operator.py you@capactive.com "Patrick"`
+  (prompts for 12+ char password) → then log in at `/operator/login`.
+- [ ] Console lists all orgs (dev + any test orgs) with plan, status,
+  users, devices/seats, license key.
+- [ ] Provision a test org from the console → flash shows license key;
+  new org's admin can log in normally at /login.
+- [ ] Set plan + deactivate/reactivate the test org — audit table at the
+  bottom records each action.
+- [ ] **Enter workspace** on the test org → lands on its dashboard with
+  the orange operator banner pinned on top; act as admin (e.g. open
+  Admin → License); **Exit to console** returns to /operator; both entry
+  and exit appear in the audit log.
+- [ ] Operator login required even in dev mode (no DEV_MODE bypass);
+  /operator redirects to login when signed out.
+
 Open findings for later:
 - [ ] **Filepath hygiene**: 0/140 finalized docs' filepaths resolve on
   disk — "View PDF" broken for legacy uploads (pre-existing). Needs a

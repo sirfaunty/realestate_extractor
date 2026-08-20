@@ -505,6 +505,18 @@ def device_required(f):
     return decorated
 
 
+def operator_required(f):
+    """Capactive staff only — separate credential class from org users
+    (tasks #102/#103). No DEV_MODE bypass: the operator portal always
+    requires a real operator login."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('operator_id'):
+            return redirect(url_for('operator_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
 def admin_required(f):
     """Require admin role for a route."""
     @functools.wraps(f)
@@ -1658,6 +1670,188 @@ def admin_devices():
                            active_count=active,
                            seat_limit=org.features.max_extraction_seats,
                            new_token=new_token, new_device=new_device)
+
+
+# ─── Capactive Operator Portal (staff console — tasks #102/#103) ─────
+
+@app.route('/operator/login', methods=['GET', 'POST'])
+def operator_login():
+    from werkzeug.security import check_password_hash
+    error = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        store = get_config_store()
+        try:
+            op = store.get_operator_by_email(email)
+            if op and check_password_hash(op['password_hash'], password):
+                session['operator_id'] = op['operator_id']
+                session['operator_name'] = op['display_name']
+                store.touch_operator_login(op['operator_id'])
+                store.log_operator_action(op['operator_id'], 'login')
+                return redirect(url_for('operator_dashboard'))
+            error = 'Invalid operator credentials.'
+        finally:
+            store.close()
+    return render_template('operator_login.html', error=error)
+
+
+@app.route('/operator/logout')
+def operator_logout():
+    op = session.pop('operator_id', None)
+    session.pop('operator_name', None)
+    if op:
+        store = get_config_store()
+        try:
+            store.log_operator_action(op, 'logout')
+        finally:
+            store.close()
+    return redirect(url_for('operator_login'))
+
+
+@app.route('/operator')
+@operator_required
+def operator_dashboard():
+    store = get_config_store()
+    try:
+        orgs = []
+        for org in store.list_orgs():
+            users = store.list_users(org.org_id)
+            devices = store.list_devices(org.org_id)
+            orgs.append({
+                'org_id': org.org_id,
+                'org_name': org.org_name,
+                'plan': org.plan,
+                'is_active': org.is_active,
+                'org_key': org.org_key,
+                'users': len(users),
+                'devices': sum(1 for d in devices if d['is_active']),
+                'extraction_seats': org.features.max_extraction_seats,
+                'access_seats': org.features.max_access_seats,
+            })
+        audit = store.list_operator_audit(limit=25)
+    finally:
+        store.close()
+    return render_template('operator.html', orgs=orgs, audit=audit,
+                           plans=list(PLAN_FEATURES.keys()),
+                           operator_name=session.get('operator_name'))
+
+
+@app.route('/operator/org/<org_id>', methods=['POST'])
+@operator_required
+def operator_org_action(org_id):
+    action = request.form.get('action')
+    store = get_config_store()
+    try:
+        if action == 'set_plan':
+            plan = request.form.get('plan')
+            if plan in PLAN_FEATURES:
+                store.update_org(org_id, plan=plan)
+                store.log_operator_action(session['operator_id'],
+                                          'plan_changed', org_id,
+                                          f'-> {plan}')
+                flash(f'{org_id}: plan set to {plan}.', 'success')
+        elif action == 'toggle_active':
+            org = store.get_org(org_id)
+            if org:
+                store.update_org(org_id, is_active=not org.is_active)
+                store.log_operator_action(
+                    session['operator_id'],
+                    'org_deactivated' if org.is_active else 'org_reactivated',
+                    org_id)
+                flash(f'{org_id}: '
+                      f'{"deactivated" if org.is_active else "reactivated"}.',
+                      'success')
+    finally:
+        store.close()
+    return redirect(url_for('operator_dashboard'))
+
+
+@app.route('/operator/provision', methods=['POST'])
+@operator_required
+def operator_provision():
+    """Create an org + first admin from the console (managed onboarding)."""
+    from werkzeug.security import generate_password_hash
+    org_name = request.form.get('org_name', '').strip()
+    plan = request.form.get('plan', 'standard')
+    admin_name = request.form.get('admin_name', '').strip()
+    admin_email = request.form.get('admin_email', '').strip()
+    admin_password = request.form.get('admin_password', '')
+    if not all([org_name, admin_name, admin_email, admin_password]):
+        flash('All provisioning fields are required.', 'error')
+        return redirect(url_for('operator_dashboard'))
+    if plan not in PLAN_FEATURES:
+        plan = 'standard'
+    org_id = org_name.lower().replace(' ', '-')[:32]
+    user_id = admin_email.split('@')[0].lower().replace('.', '-')
+    license_key = generate_org_key(org_id, plan)
+
+    store = get_config_store()
+    try:
+        if store.get_org(org_id):
+            flash(f'Org id "{org_id}" already exists.', 'error')
+            return redirect(url_for('operator_dashboard'))
+        store.create_org(org_id, org_name, license_key, plan=plan)
+        store.create_user(org_id, user_id, admin_email, admin_name,
+                          role='admin',
+                          password_hash=generate_password_hash(
+                              admin_password))
+        store.log_operator_action(session['operator_id'], 'org_provisioned',
+                                  org_id, f'plan={plan}')
+    finally:
+        store.close()
+    db = get_org_db(org_id)
+    if db:
+        db.close()
+    pstore = get_permission_store()
+    try:
+        pstore.init_user_permissions(user_id, org_id, role='admin')
+    finally:
+        pstore.close()
+    flash(f'Provisioned {org_name} ({org_id}) on {plan}. '
+          f'License key: {license_key}', 'success')
+    return redirect(url_for('operator_dashboard'))
+
+
+@app.route('/operator/enter/<org_id>')
+@operator_required
+def operator_enter(org_id):
+    """Impersonation: full admin inside the org, audited + bannered."""
+    store = get_config_store()
+    try:
+        org = store.get_org(org_id)
+        if not org:
+            flash('Unknown organization.', 'error')
+            return redirect(url_for('operator_dashboard'))
+        admins = [u for u in store.list_users(org_id)
+                  if u.get('role') == 'admin']
+        target = admins[0] if admins else None
+        if not target:
+            flash(f'{org_id} has no admin user to impersonate.', 'error')
+            return redirect(url_for('operator_dashboard'))
+        session['user_id'] = target['user_id']
+        session['org_id'] = org_id
+        store.log_operator_action(session['operator_id'],
+                                  'workspace_entered', org_id,
+                                  f"as {target['user_id']}")
+    finally:
+        store.close()
+    return redirect(url_for('index'))
+
+
+@app.route('/operator/exit')
+@operator_required
+def operator_exit():
+    org_id = session.pop('org_id', None)
+    session.pop('user_id', None)
+    if org_id:
+        store = get_config_store()
+        try:
+            store.log_operator_action(session['operator_id'],
+                                      'workspace_exited', org_id)
+        finally:
+            store.close()
+    return redirect(url_for('operator_dashboard'))
 
 
 @app.route('/admin/license')
