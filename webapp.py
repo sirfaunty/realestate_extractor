@@ -3696,7 +3696,8 @@ def run_webapp(host='127.0.0.1', port=5000, debug=False):
     print(f"  See the signal. Make the move.")
     print(f"")
     print(f"  Running locally at http://{host}:{port}")
-    print(f"  All data stays on this device.")
+    print(f"  Documents are processed on this device; only data you")
+    print(f"  finalize syncs to your organization's instance.")
     print(f"{'='*50}\n")
     # threaded=True so one slow request (e.g. a heavy DuckDB warehouse query) doesn't
     # block every other page — the dev server otherwise handles one request at a time.
