@@ -206,6 +206,24 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_org ON users(email, org_id);
 CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
+
+-- Extraction devices (docs/PACKAGING_DESIGN.md §5): each row is a
+-- registered extraction client. The token is stored hashed; the plaintext
+-- is shown exactly once at registration. fingerprint pins on first
+-- authenticated contact (trust-on-first-use) and is enforced afterwards.
+CREATE TABLE IF NOT EXISTS devices (
+    device_id       TEXT PRIMARY KEY,
+    org_id          TEXT NOT NULL REFERENCES organizations(org_id),
+    device_name     TEXT NOT NULL,
+    token_hash      TEXT NOT NULL UNIQUE,
+    fingerprint     TEXT,
+    is_active       BOOLEAN DEFAULT 1,
+    created_at      TEXT,
+    created_by      TEXT,
+    last_seen       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_devices_org ON devices(org_id);
 """
 
 
@@ -379,6 +397,76 @@ class ConfigStore:
         self.conn.commit()
 
         return user
+
+    # ─── Extraction Devices ──────────────────────────────────────────
+
+    def register_device(self, org_id: str, device_name: str,
+                        created_by: str = None) -> Dict:
+        """Register an extraction device. Returns {'device_id', 'token'} —
+        the ONLY time the plaintext token is available. Enforces the org's
+        extraction-seat limit against active devices."""
+        import secrets
+        import hashlib
+        org = self.get_org(org_id)
+        if org:
+            active = [d for d in self.list_devices(org_id) if d['is_active']]
+            if len(active) >= org.features.max_extraction_seats:
+                raise ValueError(
+                    f"Extraction seat limit reached "
+                    f"({org.features.max_extraction_seats}) for plan "
+                    f"'{org.plan}'. Revoke a device or upgrade.")
+        device_id = f"dev-{secrets.token_hex(6)}"
+        token = f"cap_{secrets.token_urlsafe(32)}"
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        self.conn.execute("""
+            INSERT INTO devices (device_id, org_id, device_name, token_hash,
+                                 is_active, created_at, created_by)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+        """, (device_id, org_id, device_name, token_hash,
+              datetime.now().isoformat(), created_by))
+        self.conn.commit()
+        return {'device_id': device_id, 'token': token}
+
+    def list_devices(self, org_id: str) -> List[Dict]:
+        cur = self.conn.execute(
+            "SELECT device_id, org_id, device_name, fingerprint, is_active, "
+            "created_at, created_by, last_seen FROM devices WHERE org_id = ?",
+            (org_id,))
+        return [dict(row) for row in cur.fetchall()]
+
+    def revoke_device(self, device_id: str):
+        self.conn.execute(
+            "UPDATE devices SET is_active = 0 WHERE device_id = ?",
+            (device_id,))
+        self.conn.commit()
+
+    def authenticate_device(self, token: str,
+                            fingerprint: str = None) -> Optional[Dict]:
+        """Resolve a plaintext token to an active device, enforcing
+        fingerprint pinning (TOFU: first contact pins, later contacts must
+        match). Returns the device row or None. Updates last_seen."""
+        import hashlib
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        cur = self.conn.execute(
+            "SELECT * FROM devices WHERE token_hash = ? AND is_active = 1",
+            (token_hash,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        device = dict(row)
+        if fingerprint:
+            if device['fingerprint'] is None:
+                self.conn.execute(
+                    "UPDATE devices SET fingerprint = ? WHERE device_id = ?",
+                    (fingerprint, device['device_id']))
+                device['fingerprint'] = fingerprint
+            elif device['fingerprint'] != fingerprint:
+                return None   # token replayed from a different machine
+        self.conn.execute(
+            "UPDATE devices SET last_seen = ? WHERE device_id = ?",
+            (datetime.now().isoformat(), device['device_id']))
+        self.conn.commit()
+        return device
 
     def get_user(self, user_id: str) -> Optional[Dict]:
         """Get user by ID, including org info."""
