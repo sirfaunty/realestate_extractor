@@ -476,6 +476,35 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def device_required(f):
+    """Machine-to-machine auth for extraction clients (Phase 2 sync).
+
+    Expects `Authorization: Bearer cap_...` and optionally
+    `X-Device-Fingerprint`. Resolves to a registered, active device;
+    fingerprint pins on first contact and must match thereafter.
+    Attaches g.device / g.device_org_id.
+    """
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get('Authorization', '')
+        if not auth.startswith('Bearer '):
+            return jsonify({'error': 'device token required'}), 401
+        token = auth[7:].strip()
+        fingerprint = request.headers.get('X-Device-Fingerprint')
+        store = get_config_store()
+        try:
+            device = store.authenticate_device(token, fingerprint)
+        finally:
+            store.close()
+        if not device:
+            return jsonify({'error': 'invalid, revoked, or '
+                                     'fingerprint-mismatched token'}), 401
+        g.device = device
+        g.device_org_id = device['org_id']
+        return f(*args, **kwargs)
+    return decorated
+
+
 def admin_required(f):
     """Require admin role for a route."""
     @functools.wraps(f)
@@ -1473,6 +1502,69 @@ def admin_users():
         u['user_key'] = generate_user_key(org_id, u['user_id'])
 
     return render_template('admin_users.html', org=org, users=users)
+
+
+@app.route('/api/sync/ping', methods=['GET', 'POST'])
+@device_required
+def api_sync_ping():
+    """Extraction-client handshake: proves the token works, pins the
+    fingerprint on first contact, reports what the server sees."""
+    return jsonify({
+        'ok': True,
+        'device_id': g.device['device_id'],
+        'device_name': g.device['device_name'],
+        'org_id': g.device_org_id,
+        'fingerprint_pinned': g.device['fingerprint'] is not None,
+        'server_time': datetime.now().isoformat(),
+    })
+
+
+@app.route('/admin/devices', methods=['GET', 'POST'])
+@admin_required
+def admin_devices():
+    """Register and revoke extraction devices (extraction seats)."""
+    org_id = session['org_id']
+    new_token = None
+    new_device = None
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        store = get_config_store()
+        try:
+            if action == 'register':
+                name = request.form.get('device_name', '').strip()
+                if not name:
+                    flash('Device name is required.', 'error')
+                    return redirect(request.url)
+                try:
+                    reg = store.register_device(
+                        org_id, name, created_by=session.get('user_id'))
+                    new_token = reg['token']
+                    new_device = name
+                    flash('Device registered. Copy the token now — it will '
+                          'not be shown again.', 'success')
+                except ValueError as e:
+                    flash(str(e), 'error')
+                    return redirect(request.url)
+            elif action == 'revoke':
+                store.revoke_device(request.form.get('device_id'))
+                flash('Device revoked. Its token no longer authenticates.',
+                      'success')
+                return redirect(request.url)
+        finally:
+            store.close()
+
+    store = get_config_store()
+    try:
+        org = store.get_org(org_id)
+        devices = store.list_devices(org_id)
+    finally:
+        store.close()
+    active = sum(1 for d in devices if d['is_active'])
+    return render_template('admin_devices.html', org=org, devices=devices,
+                           active_count=active,
+                           seat_limit=org.features.max_extraction_seats,
+                           new_token=new_token, new_device=new_device)
 
 
 @app.route('/admin/license')

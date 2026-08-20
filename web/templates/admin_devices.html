@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Devices — capactive{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Extraction Devices</h2>
+    <p>{{ org.org_name }} — machines licensed to run local extraction and
+    sync results to this workspace. {{ active_count }} / {{ seat_limit }}
+    extraction seats in use.</p>
+</div>
+
+{% if new_token %}
+<div class="card" style="border: 2px solid var(--cap-primary, #185FA5);">
+    <div class="card-header">Token for “{{ new_device }}” — copy it now</div>
+    <p style="font-size: 13px; color: var(--text-secondary); margin: 4px 0 12px;">
+        This token is shown once and stored only as a hash. Paste it into the
+        extraction client's configuration on the device it belongs to.
+        If it's lost, revoke the device and register it again.</p>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <code id="dev-token" style="flex: 1; padding: 10px 14px; background: var(--bg-subtle, #f5f7fa);
+              border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+              word-break: break-all;">{{ new_token }}</code>
+        <button type="button" class="btn btn-sm btn-primary"
+                onclick="navigator.clipboard.writeText(document.getElementById('dev-token').textContent).then(() => this.textContent = 'Copied')">
+            Copy</button>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">Register a device</div>
+    <form method="POST" style="display: flex; gap: 12px; align-items: center;">
+        <input type="hidden" name="action" value="register">
+        <input type="text" name="device_name" placeholder="Device name (e.g. 'Riley — office workstation')"
+               style="width: 340px;" required>
+        <button type="submit" class="btn btn-sm btn-primary"
+                {% if active_count >= seat_limit %}disabled title="All extraction seats in use"{% endif %}>
+            Register device</button>
+        {% if active_count >= seat_limit %}
+        <span style="font-size: 12.5px; color: var(--text-secondary);">
+            All {{ seat_limit }} extraction seats are in use — revoke a device or upgrade the plan.</span>
+        {% endif %}
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">Registered devices</div>
+    {% if devices %}
+    <table class="data-table">
+        <thead><tr>
+            <th>Name</th><th>Device ID</th><th>Status</th>
+            <th>Fingerprint</th><th>Last seen</th><th>Registered</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for d in devices %}
+        <tr style="{% if not d.is_active %}opacity: 0.55;{% endif %}">
+            <td>{{ d.device_name }}</td>
+            <td><code style="font-size: 12px;">{{ d.device_id }}</code></td>
+            <td>
+                {% if d.is_active %}<span class="badge badge-success">active</span>
+                {% else %}<span class="badge badge-failed">revoked</span>{% endif %}
+            </td>
+            <td style="font-size: 12px; color: var(--text-secondary);">
+                {% if d.fingerprint %}pinned{% else %}awaiting first contact{% endif %}
+            </td>
+            <td>{{ d.last_seen[:16] if d.last_seen else '—' }}</td>
+            <td>{{ d.created_at[:10] if d.created_at else '—' }}</td>
+            <td>
+                {% if d.is_active %}
+                <form method="POST" style="display: inline;"
+                      onsubmit="return confirm('Revoke {{ d.device_name }}? Its token stops working immediately.');">
+                    <input type="hidden" name="action" value="revoke">
+                    <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                    <button type="submit" class="btn btn-sm btn-secondary">Revoke</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="font-size: 13px; color: var(--text-secondary);">No devices registered yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
