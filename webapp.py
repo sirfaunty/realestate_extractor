@@ -41,7 +41,8 @@ from .licensing import (
 from .usage import UsageTracker
 from .permissions import (
     PermissionStore, ROLE_TEMPLATES, SCOPES, SCOPE_ORDER, LEVELS,
-    check_permission, can_read, can_edit, get_scope_categories
+    check_permission, can_read, can_edit, get_scope_categories,
+    seat_class_for_role, count_seats, SEAT_CLASS_LABELS
 )
 
 # ─── App Setup ───────────────────────────────────────────────────────
@@ -1367,6 +1368,42 @@ def admin_dashboard():
                            plan_features=PLAN_FEATURES)
 
 
+def _org_seat_state(org_id):
+    """Per-user role templates, current seat usage by class, and plan
+    limits (docs/PACKAGING_DESIGN.md §5 — role-derived seat classes,
+    first admin free)."""
+    store = get_config_store()
+    pstore = get_permission_store()
+    try:
+        org = store.get_org(org_id)
+        users = store.list_users(org_id)  # active only
+        perms = {p['user_id']: p for p in pstore.list_org_permissions(org_id)}
+        roles = {u['user_id']:
+                 (perms.get(u['user_id']) or {}).get('role_template', 'viewer')
+                 for u in users}
+        limits = {'extraction': org.features.max_extraction_seats,
+                  'access': org.features.max_access_seats}
+        return roles, count_seats(list(roles.values())), limits
+    finally:
+        store.close()
+        pstore.close()
+
+
+def _seat_block_reason(org_id, new_role, exclude_user=None):
+    """None if the org can accommodate `new_role`, else a human message.
+    `exclude_user` = user whose current seat frees up (role changes)."""
+    roles, _used, limits = _org_seat_state(org_id)
+    if exclude_user is not None:
+        roles.pop(exclude_user, None)
+    after = count_seats(list(roles.values()) + [new_role])
+    cls = seat_class_for_role(new_role)
+    if after[cls] > limits[cls]:
+        return (f"No {SEAT_CLASS_LABELS[cls].lower()}s left "
+                f"({after[cls] - 1}/{limits[cls]} in use). "
+                f"Upgrade the plan or free a seat.")
+    return None
+
+
 @app.route('/admin/users', methods=['GET', 'POST'])
 @admin_required
 def admin_users():
@@ -1383,6 +1420,11 @@ def admin_users():
 
             if not name or not email:
                 flash('Name and email are required.', 'error')
+                return redirect(request.url)
+
+            blocked = _seat_block_reason(org_id, role)
+            if blocked:
+                flash(blocked, 'error')
                 return redirect(request.url)
 
             user_id = email.split('@')[0].lower().replace('.', '-')
@@ -1449,8 +1491,10 @@ def admin_license():
         store.close()
         tracker.close()
 
+    _roles, seat_usage, seat_limits = _org_seat_state(org_id)
     return render_template('admin_license.html',
                            org=org, usage=usage, user_count=len(users),
+                           seat_usage=seat_usage, seat_limits=seat_limits,
                            plan_features=PLAN_FEATURES)
 
 
@@ -1524,6 +1568,11 @@ def admin_permissions():
         try:
             if action == 'set_role':
                 role = request.form.get('role_template')
+                blocked = _seat_block_reason(org_id, role,
+                                             exclude_user=target_user)
+                if blocked:
+                    flash(blocked, 'error')
+                    return redirect(url_for('admin_permissions'))
                 pstore.set_user_role(target_user, org_id, role)
                 flash(f'Role updated to {role}.', 'success')
 

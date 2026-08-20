@@ -103,6 +103,24 @@ ROLE_TEMPLATES = {
         'description': 'Full access to everything',
         'permissions': {scope: 'edit' for scope in SCOPES},
     },
+    'extractor': {
+        'label': 'Extractor',
+        'description': 'Extraction pipeline only — upload, process, review. '
+                       'No analytics or property data. Tied to an extraction '
+                       'seat on the org license.',
+        'permissions': {
+            'property.operations': 'none',
+            'property.debt': 'none',
+            'property.valuation': 'none',
+            'property.documents': 'edit',   # must see/link what they extract
+            'property.units': 'none',
+            'extraction.upload': 'edit',
+            'extraction.batch': 'edit',
+            'extraction.review': 'edit',
+            'admin.users': 'none',
+            'admin.settings': 'none',
+        },
+    },
     'operator': {
         'label': 'Operator',
         'description': 'Manage properties and extraction, read financial data',
@@ -152,6 +170,38 @@ ROLE_TEMPLATES = {
         },
     },
 }
+
+
+# ─── Seat Classes ────────────────────────────────────────────────────
+#
+# A user's license seat class derives from their role template
+# (docs/PACKAGING_DESIGN.md §5). Extraction seats hold extraction rights
+# (local software, tied to the org license); access seats are web-only.
+# Policy: the FIRST admin is free (an org must be administrable);
+# additional admins consume extraction seats.
+
+EXTRACTION_SEAT_ROLES = ('admin', 'operator', 'extractor')
+ACCESS_SEAT_ROLES = ('analyst', 'viewer')
+
+SEAT_CLASS_LABELS = {'extraction': 'Extraction seat', 'access': 'Access seat'}
+
+
+def seat_class_for_role(role_template: str) -> str:
+    """Which seat class a role template consumes."""
+    return 'extraction' if role_template in EXTRACTION_SEAT_ROLES else 'access'
+
+
+def count_seats(role_templates: List[str]) -> Dict[str, int]:
+    """Seat consumption for a list of active users' role templates.
+    First admin is free; additional admins count as extraction seats."""
+    admins = sum(1 for r in role_templates if r == 'admin')
+    extraction = sum(1 for r in role_templates
+                     if seat_class_for_role(r) == 'extraction')
+    if admins:
+        extraction -= 1   # first admin free
+    access = sum(1 for r in role_templates
+                 if seat_class_for_role(r) == 'access')
+    return {'extraction': max(extraction, 0), 'access': access}
 
 
 # ─── Database Schema ─────────────────────────────────────────────────
@@ -310,17 +360,15 @@ class PermissionStore:
         """
         Initialize permissions for a new user.
 
-        Maps the legacy 'role' field to a permission role template:
-        - 'admin' → admin template
+        Accepts a role template name directly (admin/operator/extractor/
+        analyst/viewer) or a legacy 'role' value:
         - 'member' → operator template
-        - 'viewer' → viewer template
+        - anything unknown → viewer
         """
-        if role == 'admin':
-            template = 'admin'
+        if role in ROLE_TEMPLATES:
+            template = role
         elif role == 'member':
             template = 'operator'
-        elif role == 'viewer':
-            template = 'viewer'
         else:
             template = 'viewer'
 

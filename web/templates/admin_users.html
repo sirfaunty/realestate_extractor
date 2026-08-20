@@ -23,9 +23,11 @@
         <div class="form-group" style="margin-bottom: 0;">
             <label for="role">Role</label>
             <select id="role" name="role">
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-                <option value="viewer">Viewer</option>
+                <option value="viewer">Viewer — access seat</option>
+                <option value="analyst">Analyst — access seat</option>
+                <option value="extractor">Extractor — extraction seat</option>
+                <option value="operator">Operator — extraction seat</option>
+                <option value="admin">Admin — extraction seat (first admin free)</option>
             </select>
         </div>
         <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Add User</button>
