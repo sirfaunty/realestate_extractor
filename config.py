@@ -25,7 +25,12 @@ from pathlib import Path
 @dataclass
 class FeatureFlags:
     """Controls which features are available to an organization."""
-    max_users: int = 5
+    # Legacy total seat count — kept for stored-feature back-compat and as
+    # a display total. New code uses the per-class limits below
+    # (docs/PACKAGING_DESIGN.md §5).
+    max_users: int = 7
+    max_extraction_seats: int = 2   # local-software seats (device-bound, Phase 2)
+    max_access_seats: int = 5       # web-only report/dashboard users
     max_documents_per_month: int = 500
     document_types_enabled: List[str] = field(default_factory=lambda: [
         "lease", "loan", "closing", "guarantee",
@@ -51,7 +56,16 @@ class FeatureFlags:
     def from_dict(cls, data: Dict) -> 'FeatureFlags':
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in valid_fields}
-        return cls(**filtered)
+        flags = cls(**filtered)
+        # Back-compat: stored features written before the seat-class split
+        # have max_users but no per-class limits. Derive a conservative
+        # split (~1/3 extraction) so existing orgs keep working; admins can
+        # re-apply the plan to adopt the canonical split.
+        if 'max_extraction_seats' not in data and 'max_users' in data:
+            total = max(int(data['max_users']), 1)
+            flags.max_extraction_seats = max(total // 3, 1)
+            flags.max_access_seats = max(total - flags.max_extraction_seats, 0)
+        return flags
 
 
 @dataclass
@@ -92,7 +106,9 @@ class OrgProfile:
 
 PLAN_FEATURES = {
     "starter": FeatureFlags(
-        max_users=2,
+        max_users=3,
+        max_extraction_seats=1,
+        max_access_seats=2,
         max_documents_per_month=100,
         document_types_enabled=["lease", "rent_roll", "operating_statement"],
         ocr_enabled=True,
@@ -106,7 +122,9 @@ PLAN_FEATURES = {
         modules_enabled=[],  # extractor core only
     ),
     "standard": FeatureFlags(
-        max_users=5,
+        max_users=7,
+        max_extraction_seats=2,
+        max_access_seats=5,
         max_documents_per_month=500,
         ocr_enabled=True,
         llm_extraction_enabled=True,
@@ -122,7 +140,9 @@ PLAN_FEATURES = {
         ],
     ),
     "professional": FeatureFlags(
-        max_users=20,
+        max_users=23,
+        max_extraction_seats=3,
+        max_access_seats=20,
         max_documents_per_month=2000,
         ocr_enabled=True,
         llm_extraction_enabled=True,
@@ -141,6 +161,8 @@ PLAN_FEATURES = {
     ),
     "enterprise": FeatureFlags(
         max_users=999,
+        max_extraction_seats=999,
+        max_access_seats=999,
         max_documents_per_month=99999,
         ocr_enabled=True,
         llm_extraction_enabled=True,
@@ -326,13 +348,17 @@ class ConfigStore:
                     display_name: str, role: str = "member",
                     password_hash: str = None) -> UserProfile:
         """Create a user within an organization."""
-        # Check user limit
+        # Check total user limit (extraction + access seats + 1 free admin).
+        # Per-class enforcement happens at the admin routes, where the
+        # role template is known (permissions.count_seats).
         org = self.get_org(org_id)
         if org:
+            total_seats = (org.features.max_extraction_seats
+                           + org.features.max_access_seats + 1)
             current_users = len(self.list_users(org_id))
-            if current_users >= org.features.max_users:
+            if current_users >= total_seats:
                 raise ValueError(
-                    f"User limit reached ({org.features.max_users}) for "
+                    f"User limit reached ({total_seats} incl. admin) for "
                     f"plan '{org.plan}'. Upgrade to add more users."
                 )
 

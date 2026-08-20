@@ -20,8 +20,12 @@
 
         <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
-                <span>Max Users</span>
-                <strong>{{ org.features.max_users }}</strong>
+                <span>Extraction Seats <span style="color: var(--text-tertiary, #999); font-size: 11px;">(local software)</span></span>
+                <strong>{{ seat_usage.extraction }} / {{ seat_limits.extraction }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
+                <span>Access Seats <span style="color: var(--text-tertiary, #999); font-size: 11px;">(web reports &amp; dashboards)</span></span>
+                <strong>{{ seat_usage.access }} / {{ seat_limits.access }}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
                 <span>Documents / Month</span>
@@ -162,9 +166,15 @@
         </thead>
         <tbody>
             <tr>
-                <td>Max Users</td>
+                <td>Extraction Seats</td>
                 {% for name, feat in plan_features.items() %}
-                <td style="text-align: center; {% if name == org.plan %}font-weight: 600; color: var(--cap-primary);{% endif %}">{{ feat.max_users }}</td>
+                <td style="text-align: center; {% if name == org.plan %}font-weight: 600; color: var(--cap-primary);{% endif %}">{{ '∞' if feat.max_extraction_seats >= 999 else feat.max_extraction_seats }}</td>
+                {% endfor %}
+            </tr>
+            <tr>
+                <td>Access Seats</td>
+                {% for name, feat in plan_features.items() %}
+                <td style="text-align: center; {% if name == org.plan %}font-weight: 600; color: var(--cap-primary);{% endif %}">{{ '∞' if feat.max_access_seats >= 999 else feat.max_access_seats }}</td>
                 {% endfor %}
             </tr>
             <tr>
