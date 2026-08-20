@@ -1,6 +1,10 @@
 # Cloud Sync Plan — Remote Access to Extracted Data
 
-_Status: decided, not yet built. Revisit after the current client's format feedback closes._
+_Status: superseded in part by `PACKAGING_DESIGN.md` (2026-08-19) — the
+"never source documents" boundary is reversed (PDFs now sync; provenance is
+the product), and the build gate is satisfied (an in-the-wild user is
+imminent). One-way sync, local-as-system-of-record, and the finalize-first
+milestone all carry forward unchanged._
 _Last updated: 2026-07-08_
 
 ## Goal
