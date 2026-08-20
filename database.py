@@ -558,6 +558,22 @@ class Database:
                 "ALTER TABLE documents ADD COLUMN reviewed_at TIMESTAMP"
             )
 
+        # Finalize/publish flag (docs/PACKAGING_DESIGN.md §4): set when a
+        # document is approved in the Review Queue. A finalized document is
+        # the unit eligible for sync to the org's web instance.
+        if 'finalized_at' not in doc_cols:
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN finalized_at TIMESTAMP"
+            )
+            # Backfill: documents approved before this flag existed passed
+            # the same review — treat them as finalized as of their review
+            # date (or now, if reviewed_at was never populated).
+            self.conn.execute(
+                "UPDATE documents SET finalized_at = "
+                "COALESCE(reviewed_at, CURRENT_TIMESTAMP) "
+                "WHERE review_status = 'approved'"
+            )
+
         # Add classifier correction tracking columns
         if 'original_type' not in doc_cols:
             self.conn.execute(
@@ -1098,10 +1114,29 @@ class Database:
                                building_id: int = None, unit_id: int = None):
         """Approve a property match for a document."""
         self.link_document_to_property(doc_id, property_id, building_id, unit_id)
+        # Approval in the Review Queue IS finalization — the document
+        # becomes eligible for sync (docs/PACKAGING_DESIGN.md §4).
         self.conn.execute(
-            "UPDATE documents SET review_status = 'approved' WHERE id = ?",
+            "UPDATE documents SET review_status = 'approved', "
+            "finalized_at = CURRENT_TIMESTAMP WHERE id = ?",
             (doc_id,))
         self.conn.commit()
+
+    def list_finalized_documents(self, since: str = None) -> list:
+        """THE sync contract (docs/PACKAGING_DESIGN.md §4): documents
+        eligible to push to the org's web instance — approved in the
+        Review Queue (finalized_at set). `since` (ISO timestamp) limits to
+        documents finalized after the last successful push, giving the
+        push module delta semantics for free."""
+        q = ("SELECT * FROM documents WHERE review_status = 'approved' "
+             "AND finalized_at IS NOT NULL")
+        params = []
+        if since:
+            q += " AND finalized_at > ?"
+            params.append(since)
+        q += " ORDER BY finalized_at"
+        cur = self.conn.execute(q, params)
+        return [dict(row) for row in cur.fetchall()]
 
     def bulk_approve_matches(self, min_score: float = 0.7) -> int:
         """Approve all pending documents with a high-confidence property match.
@@ -1117,16 +1152,19 @@ class Database:
         return approved
 
     def skip_document_review(self, doc_id: int):
-        """Skip review for a document (can revisit later)."""
+        """Skip review for a document (can revisit later). Clears any
+        finalization — a skipped document is not sync-eligible."""
         self.conn.execute(
-            "UPDATE documents SET review_status = 'skipped' WHERE id = ?",
+            "UPDATE documents SET review_status = 'skipped', "
+            "finalized_at = NULL WHERE id = ?",
             (doc_id,))
         self.conn.commit()
 
     def reset_document_review(self, doc_id: int):
         """Put a skipped document back in the review queue."""
         self.conn.execute(
-            "UPDATE documents SET review_status = 'pending_review' WHERE id = ?",
+            "UPDATE documents SET review_status = 'pending_review', "
+            "finalized_at = NULL WHERE id = ?",
             (doc_id,))
         self.conn.commit()
 
