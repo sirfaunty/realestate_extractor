@@ -1183,11 +1183,14 @@ def document_detail(doc_id):
         rent_roll = db.get_rent_roll(document_id=doc_id)
         opstat = db.get_operating_statement(document_id=doc_id)
         gl = db.get_gl_entries(document_id=doc_id)
+        sync_history = (db.get_sync_history(doc_id)
+                        if doc.get('origin_device_id') else [])
     finally:
         db.close()
     return render_template('document_detail.html',
                            doc=doc, terms=terms, clauses=clauses,
-                           rent_roll=rent_roll, opstat=opstat, gl=gl)
+                           rent_roll=rent_roll, opstat=opstat, gl=gl,
+                           sync_history=sync_history)
 
 
 @app.route('/search')
@@ -1517,6 +1520,96 @@ def api_sync_ping():
         'fingerprint_pinned': g.device['fingerprint'] is not None,
         'server_time': datetime.now().isoformat(),
     })
+
+
+@app.route('/api/sync/manifest')
+@device_required
+def api_sync_manifest():
+    """What the instance already holds from this device — the client
+    diffs its finalized documents against this and pushes only deltas."""
+    db = get_org_db(g.device_org_id)
+    try:
+        return jsonify({'ok': True,
+                        'documents': db.sync_manifest(g.device['device_id'])})
+    finally:
+        db.close()
+
+
+@app.route('/api/sync/run', methods=['POST'])
+@device_required
+def api_sync_run():
+    """Receive finalized documents from an extraction device.
+
+    Body: {"documents": [{"document": {...}, "terms": [...]}, ...]}
+    Each document upserts keyed on (device, origin_doc_id); re-pushes
+    snapshot the prior version into sync_versions (history kept).
+    """
+    data = request.get_json(silent=True) or {}
+    items = data.get('documents', [])
+    if not items:
+        return jsonify({'error': 'no documents in payload'}), 400
+    db = get_org_db(g.device_org_id)
+    results, errors = [], []
+    try:
+        for item in items:
+            try:
+                results.append(db.upsert_synced_document(
+                    item.get('document') or {},
+                    item.get('terms') or [],
+                    g.device['device_id']))
+            except Exception as e:
+                errors.append({'origin_doc_id':
+                               (item.get('document') or {}).get('origin_doc_id'),
+                               'error': str(e)})
+        logger.info(f"sync/run from {g.device['device_id']}: "
+                    f"{len(results)} ok, {len(errors)} failed")
+        return jsonify({'ok': not errors, 'results': results,
+                        'errors': errors})
+    finally:
+        db.close()
+
+
+@app.route('/api/sync/pdf', methods=['POST'])
+@device_required
+def api_sync_pdf():
+    """Receive a source PDF for a previously pushed document.
+
+    Query args: origin_doc_id, sha256. Body: raw PDF bytes.
+    Content-addressed storage — identical files dedupe by hash; the
+    document's filepath is pointed at the stored file either way.
+    """
+    import hashlib as _hashlib
+    origin_doc_id = request.args.get('origin_doc_id')
+    claimed = (request.args.get('sha256') or '').lower()
+    if not origin_doc_id or not claimed:
+        return jsonify({'error': 'origin_doc_id and sha256 required'}), 400
+    blob = request.get_data()
+    if not blob:
+        return jsonify({'error': 'empty body'}), 400
+    actual = _hashlib.sha256(blob).hexdigest()
+    if actual != claimed:
+        return jsonify({'error': 'sha256 mismatch — transfer corrupted'}), 400
+
+    store_dir = os.path.join(DATA_DIR, 'synced_pdfs', g.device_org_id)
+    os.makedirs(store_dir, exist_ok=True)
+    fp = os.path.join(store_dir, f'{actual}.pdf')
+    deduped = os.path.exists(fp)
+    if not deduped:
+        with open(fp, 'wb') as f:
+            f.write(blob)
+
+    db = get_org_db(g.device_org_id)
+    try:
+        matched = db.attach_synced_pdf(g.device['device_id'],
+                                       origin_doc_id, fp)
+    finally:
+        db.close()
+    if not matched:
+        return jsonify({'error': f'no synced document with origin_doc_id '
+                                 f'{origin_doc_id} — push /api/sync/run '
+                                 f'first'}), 404
+    return jsonify({'ok': True, 'sha256': actual, 'deduped': deduped,
+                    'bytes': len(blob)})
 
 
 @app.route('/admin/devices', methods=['GET', 'POST'])
