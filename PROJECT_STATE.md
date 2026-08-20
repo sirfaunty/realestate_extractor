@@ -25,8 +25,18 @@ Shipped so far:
   with version-history snapshots into `sync_versions`, `/api/sync/pdf`
   sha256-deduped) + `sync_client.py` push CLI for extraction devices.
 
-Pending (see tasks): sync status UI, container packaging + TLS + backups,
-extraction-client installer, super admin (cross-workspace Capactive
+- **Phase 2 validated end-to-end** (2026-08-20 testing session): full
+  loopback sync of 140 documents, versioned re-push, PDF dedupe,
+  provenance UI browser-verified. Four bugs found+fixed in the run.
+- **Phase 3 built**: Dockerfile (instance image, waitress, no Ollama),
+  docker-compose (localhost-only by default; `--profile tls` adds Caddy
+  auto-HTTPS), `.dockerignore` client-data firewall, `deploy/backup.sh`,
+  **`docs/DEPLOY.md`** runbook for managed + client-hosted modes.
+  Untested against a real Docker host — see TESTING_CHECKLIST.md.
+
+Pending (see tasks): docker-host validation, extraction-client installer,
+filepath hygiene for legacy uploads (0/140 resolve — provenance blocker
+locally), sync status UI, super admin (cross-workspace Capactive
 operator) and a separate Capactive operator panel, tagline/brand rollout
 (brand guidelines doc still on Patrick's other device — get it into
 docs/BRAND.md).

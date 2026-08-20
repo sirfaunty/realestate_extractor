@@ -76,6 +76,22 @@ Bugs found + fixed during this run (all committed):
 - sync_client: silent on non-200 and connection refused → explicit errors;
   added `--limit N`.
 
+## Phase 3 — container (needs a Docker host; ideally a throwaway Linux VM)
+
+- [ ] `docker compose up -d --build` with a generated CAPACTIVE_SECRET_KEY
+  — image builds, app healthy (`docker compose ps`), setup flow reachable
+  on localhost:5000.
+- [ ] Compose refuses to start without CAPACTIVE_SECRET_KEY (error names
+  the variable).
+- [ ] Full smoke test per docs/DEPLOY.md: setup → org + admin → register
+  device → sync_client push from another machine → provenance card + PDF.
+- [ ] TLS profile on a VM with a real domain: `--profile tls`, cert
+  auto-provisions, HTTP→HTTPS.
+- [ ] `docker compose exec -T app sh deploy/backup.sh` → backups land in
+  the volume; restore drill once.
+- [ ] Restart container → sessions survive (secret key stable), data
+  intact (volume).
+
 Open findings for later:
 - [ ] **Filepath hygiene**: 0/140 finalized docs' filepaths resolve on
   disk — "View PDF" broken for legacy uploads (pre-existing). Needs a

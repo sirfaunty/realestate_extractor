@@ -1,0 +1,34 @@
+# Keep the image code-only. CLIENT DATA MUST NEVER ENTER A BUILD CONTEXT
+# (same policy as .gitignore — data moves via sync or export, never baked
+# into images).
+
+.git
+venv
+__pycache__
+**/__pycache__
+*.pyc
+
+# runtime state (mounted as a volume, never baked in)
+data
+uploads
+capactive_config.db
+capactive_sync.ini
+
+# client source data
+portfolio_ownership
+barrington_db
+southtown_db
+midway_db
+Ownership Deliverables
+
+# large local artifacts
+*.zip
+*.db
+*.duckdb
+*.msg
+*.log
+
+# dev/test detritus
+.vscode
+.idea
+TESTING_CHECKLIST.md

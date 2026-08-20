@@ -1,0 +1,49 @@
+# Capactive org instance — one deployable, two operating modes
+# (docs/DEPLOY.md):
+#
+#   Plain HTTP (behind the client's own load balancer / VPN):
+#       CAPACTIVE_SECRET_KEY=... docker compose up -d
+#
+#   With TLS via Caddy (managed hosting or a client VM with a domain):
+#       CAPACTIVE_SECRET_KEY=... CAPACTIVE_DOMAIN=client.capactive.app \
+#           docker compose --profile tls up -d
+#
+# CAPACTIVE_SECRET_KEY is REQUIRED (compose refuses to start without it):
+# the in-code fallback regenerates per process and would log every user
+# out on restart. Generate once per instance:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      CAPACTIVE_SECRET_KEY: ${CAPACTIVE_SECRET_KEY:?set CAPACTIVE_SECRET_KEY (see header comment)}
+    volumes:
+      - capactive_data:/app/realestate_extractor/data
+    ports:
+      # bound to localhost only — reach it via Caddy (tls profile), an
+      # SSH tunnel, or the client's own reverse proxy. Change to
+      # "5000:5000" ONLY on a private network you trust.
+      - "127.0.0.1:5000:5000"
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["tls"]
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      CAPACTIVE_DOMAIN: ${CAPACTIVE_DOMAIN:?set CAPACTIVE_DOMAIN for the tls profile}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  capactive_data:
+  caddy_data:
+  caddy_config:
