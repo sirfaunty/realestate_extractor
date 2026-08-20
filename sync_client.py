@@ -91,6 +91,9 @@ def main():
     ap.add_argument('--push', action='store_true', help='push the delta')
     ap.add_argument('--no-pdfs', action='store_true',
                     help='skip source-PDF upload')
+    ap.add_argument('--limit', type=int, default=None,
+                    help='push at most N documents (testing / incremental '
+                         'first push)')
     args = ap.parse_args()
     if not (args.status or args.push):
         ap.error('choose --status or --push')
@@ -98,7 +101,14 @@ def main():
     url, token = load_config(args)
     s = session_for(token)
 
-    r = s.get(f'{url}/api/sync/ping', timeout=30)
+    try:
+        r = s.get(f'{url}/api/sync/ping', timeout=30)
+    except requests.exceptions.ConnectionError:
+        sys.exit(f'Cannot reach {url} — is the instance running and the '
+                 f'URL correct?')
+    except requests.exceptions.Timeout:
+        sys.exit(f'{url} did not respond within 30s — check the '
+                 f'connection and try again.')
     if r.status_code != 200:
         sys.exit(f'Handshake failed ({r.status_code}): {r.text[:200]}')
     ping = r.json()
@@ -116,6 +126,9 @@ def main():
           f'instance, {len(to_push)} to push')
     if args.status or not to_push:
         return
+    if args.limit:
+        to_push = to_push[:args.limit]
+        print(f'--limit {args.limit}: pushing first {len(to_push)}')
 
     # ── push structured data in batches ──
     pushed = failed = 0
@@ -133,6 +146,9 @@ def main():
                    timeout=300)
         body = r.json() if r.headers.get('content-type', '').startswith(
             'application/json') else {}
+        if r.status_code != 200:
+            print(f'  batch {i // BATCH + 1}: HTTP {r.status_code} — '
+                  f'{str(body or r.text)[:300]}')
         pushed += len(body.get('results', []))
         for e in body.get('errors', []):
             failed += 1
