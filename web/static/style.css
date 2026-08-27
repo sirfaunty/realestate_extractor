@@ -90,8 +90,8 @@ a:hover {
 }
 
 .sidebar-brand {
-    padding: 24px 20px 20px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .sidebar-brand .brand-logo {
@@ -118,25 +118,26 @@ a:hover {
 
 .sidebar-nav {
     list-style: none;
-    padding: 12px 0;
+    padding: 8px 8px;
     flex: 1;
 }
 
 .sidebar-nav a {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 20px;
+    gap: 9px;
+    padding: 6px 12px;
+    margin-bottom: 1px;
+    border-radius: 6px;
     color: var(--cap-light);
     text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 150ms ease;
-    border-left: 3px solid transparent;
+    font-size: 13px;
+    font-weight: 450;
+    transition: background 120ms ease, color 120ms ease;
 }
 
 .sidebar-nav a:hover {
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.07);
     color: #FFFFFF;
 }
 
@@ -144,14 +145,15 @@ a:hover {
     background: rgba(255,255,255,0.12);
     color: #FFFFFF;
     font-weight: 600;
-    border-left-color: var(--cap-active);
 }
 
 .sidebar-nav .icon {
-    width: 20px;
+    width: 18px;
     text-align: center;
-    font-size: 15px;
-    opacity: 0.8;
+    font-size: 14px;
+    opacity: 0.75;
+    display: inline-flex;
+    justify-content: center;
 }
 
 .sidebar-nav a.active .icon {
@@ -820,14 +822,14 @@ select:focus {
 /* ─── Sidebar User & Admin ─── */
 
 .sidebar-section-label {
-    padding: 16px 20px 6px;
+    padding: 14px 20px 4px;
     font-size: 10px;
     font-weight: 600;
     color: var(--cap-light);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    opacity: 0.6;
-    border-top: 1px solid rgba(255,255,255,0.1);
+    opacity: 0.5;
+    /* whitespace separates sections — no rules (Cloudflare/Vercel idiom) */
 }
 
 .sidebar-nav-admin {
