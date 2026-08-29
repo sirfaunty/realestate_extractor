@@ -110,9 +110,13 @@ Bugs found + fixed during this run (all committed):
   /operator redirects to login when signed out.
 
 Open findings for later:
-- [ ] **Filepath hygiene**: 0/140 finalized docs' filepaths resolve on
-  disk — "View PDF" broken for legacy uploads (pre-existing). Needs a
-  re-link or re-upload pass before source access matters locally.
+- [~] **Filepath hygiene**: root cause found — DB migrated from the Mac
+  with frozen absolute paths; ALL 424 files still exist under local
+  uploads/. `relink_documents.py` built + rehearsed on a DB copy
+  (424/424 resolved, prefix swap). TO RUN natively:
+  `venv/Scripts/python relink_documents.py --apply`, then spot-check
+  View PDF. Tool is a keeper — same situation will occur at client
+  machine migrations.
 - [ ] Devices page: "reset fingerprint" action (avoid revoke+re-register
   on machine rebuild).
 - [ ] synced_pdfs orphan sweep (404'd uploads leave unreferenced hashes).
