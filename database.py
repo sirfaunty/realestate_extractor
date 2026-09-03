@@ -1199,11 +1199,28 @@ class Database:
         term_cols = [r[1] for r in self.conn.execute(
             "PRAGMA table_info(financial_terms)")]
 
+        # Foreign keys are LOCAL to the sending device's database — the
+        # instance has its own id space. Drop them, then re-resolve the
+        # property by name (find-or-create) so the doc lands attached.
+        local_fks = ('id', 'property_id', 'building_id', 'unit_id',
+                     'portfolio_id')
         payload = {k: v for k, v in doc.items()
-                   if k in doc_cols and k not in ('id',)}
+                   if k in doc_cols and k not in local_fks}
         payload['origin_device_id'] = device_id
         payload['origin_doc_id'] = origin_id
         payload['synced_at'] = _dt.now().isoformat()
+        pname = (doc.get('property_name') or '').strip()
+        if pname:
+            row = self.conn.execute(
+                "SELECT id FROM properties WHERE lower(name) = lower(?)",
+                (pname,)).fetchone()
+            if row:
+                payload['property_id'] = row[0]
+            else:
+                cur = self.conn.execute(
+                    "INSERT INTO properties (name, address) VALUES (?, ?)",
+                    (pname, doc.get('property_address')))
+                payload['property_id'] = cur.lastrowid
 
         cur = self.conn.execute(
             "SELECT * FROM documents WHERE origin_device_id = ? "

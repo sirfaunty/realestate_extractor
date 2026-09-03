@@ -94,6 +94,9 @@ def main():
     ap.add_argument('--limit', type=int, default=None,
                     help='push at most N documents (testing / incremental '
                          'first push)')
+    ap.add_argument('--ids', default=None,
+                    help='push only these local document ids, comma-separated '
+                         '(e.g. --ids 466,467) — for targeted tests')
     args = ap.parse_args()
     if not (args.status or args.push):
         ap.error('choose --status or --push')
@@ -124,6 +127,10 @@ def main():
     to_push = delta(finalized, manifest)
     print(f'{len(finalized)} finalized locally, {len(manifest)} known to '
           f'instance, {len(to_push)} to push')
+    if args.ids:
+        want = {int(x) for x in args.ids.split(',') if x.strip()}
+        to_push = [d for d in to_push if d['id'] in want]
+        print(f'--ids: {len(to_push)} of the requested {len(want)} are in the delta')
     if args.status or not to_push:
         return
     if args.limit:
