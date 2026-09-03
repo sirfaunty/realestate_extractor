@@ -1,5 +1,19 @@
 # Docker Validation Session — Runbook
 
+> **Progress (2026-09-02 evening):** Steps 1–3 DONE. Hetzner CX23
+> (Nuremberg, Ubuntu 24.04) at `91.98.30.65`, firewall 22/80/443, Docker
+> installed, repo cloned to `~/capactive` on branch
+> `track-a/extractor-training`, `.env` has SECRET_KEY + DOMAIN=localhost,
+> image built in 63s (4.3 MB context — no data), container **healthy**.
+> Negative check passed (refused without secret key). Found + fixed:
+> compose nagged for CAPACTIVE_DOMAIN in plain mode → now defaults to
+> localhost (commit from ASUS, `git pull` on VM before continuing).
+> **Resume at Step 4** below: `ssh -A root@91.98.30.65` (after
+> `eval $(ssh-agent -s); ssh-add ~/.ssh/id_ed25519`), tunnel from a second
+> window with `ssh -L 5050:127.0.0.1:5000 root@91.98.30.65`, browse
+> http://localhost:5050 for the setup flow. No DNS record yet — set one up
+> before Step 2/TLS (or skip TLS this round).
+
 _Goal: prove the container story end to end on a real host, as a dress
 rehearsal for provisioning client #1. Companion: `docs/DEPLOY.md` (the
 runbook being validated) and the Phase 3 section of

@@ -78,11 +78,12 @@ Bugs found + fixed during this run (all committed):
 
 ## Phase 3 — container (needs a Docker host; ideally a throwaway Linux VM)
 
-- [ ] `docker compose up -d --build` with a generated CAPACTIVE_SECRET_KEY
-  — image builds, app healthy (`docker compose ps`), setup flow reachable
-  on localhost:5000.
-- [ ] Compose refuses to start without CAPACTIVE_SECRET_KEY (error names
-  the variable).
+- [x] `docker compose up -d --build`: PASS 2026-09-02 on Hetzner CX23 —
+  63s build, 4.3 MB context, waitress serving, container healthy, no
+  import errors on Linux. (Setup-flow check pending — Step 4.)
+- [x] Compose refuses without CAPACTIVE_SECRET_KEY: PASS 2026-09-02.
+  Side-find: CAPACTIVE_DOMAIN was also demanded in plain mode → defaulted
+  to localhost in compose.
 - [ ] Full smoke test per docs/DEPLOY.md: setup → org + admin → register
   device → sync_client push from another machine → provenance card + PDF.
 - [ ] TLS profile on a VM with a real domain: `--profile tls`, cert
