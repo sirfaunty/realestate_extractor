@@ -34,7 +34,9 @@ services:
     depends_on:
       - app
     environment:
-      CAPACTIVE_DOMAIN: ${CAPACTIVE_DOMAIN:?set CAPACTIVE_DOMAIN for the tls profile}
+      # defaulted so plain mode isn't nagged (compose interpolates inactive
+      # profiles too); TLS mode MUST set a real domain or Caddy can't get a cert
+      CAPACTIVE_DOMAIN: ${CAPACTIVE_DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
