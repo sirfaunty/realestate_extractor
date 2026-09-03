@@ -146,9 +146,21 @@ def main():
             terms = [dict(t) for t in db.conn.execute(
                 'SELECT * FROM financial_terms WHERE document_id = ?',
                 (d['id'],))]
+            clauses = [dict(t) for t in db.conn.execute(
+                'SELECT * FROM clauses WHERE document_id = ?', (d['id'],))]
             doc = dict(d)
             doc['origin_doc_id'] = d['id']
-            items.append({'document': doc, 'terms': terms})
+            # the instance resolves properties by NAME (its ids differ);
+            # the documents row often carries only property_id locally
+            if d.get('property_id') and not d.get('property_name'):
+                p = db.conn.execute(
+                    'SELECT name, address FROM properties WHERE id = ?',
+                    (d['property_id'],)).fetchone()
+                if p:
+                    doc['property_name'] = p['name']
+                    doc['property_address'] = doc.get('property_address') or p['address']
+            items.append({'document': doc, 'terms': terms,
+                          'clauses': clauses})
         r = s.post(f'{url}/api/sync/run', json={'documents': items},
                    timeout=300)
         body = r.json() if r.headers.get('content-type', '').startswith(

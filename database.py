@@ -1183,21 +1183,24 @@ class Database:
                 for r in cur.fetchall()}
 
     def upsert_synced_document(self, doc: dict, terms: list,
-                               device_id: str) -> dict:
-        """Insert or update a pushed document (+ its financial terms),
-        keyed on (origin_device_id, origin_doc_id). On update, the prior
-        document row and terms are snapshotted into sync_versions first —
-        history is kept, never silently overwritten."""
+                               device_id: str, clauses: list = None) -> dict:
+        """Insert or update a pushed document (+ its financial terms and
+        clauses), keyed on (origin_device_id, origin_doc_id). On update,
+        the prior document row, terms and clauses are snapshotted into
+        sync_versions first — history is kept, never silently overwritten."""
         import json as _json
         from datetime import datetime as _dt
         origin_id = doc.get('origin_doc_id') or doc.get('id')
         if origin_id is None:
             raise ValueError('document payload missing origin_doc_id')
+        clauses = clauses or []
 
         doc_cols = [r[1] for r in self.conn.execute(
             "PRAGMA table_info(documents)")]
         term_cols = [r[1] for r in self.conn.execute(
             "PRAGMA table_info(financial_terms)")]
+        clause_cols = [r[1] for r in self.conn.execute(
+            "PRAGMA table_info(clauses)")]
 
         # Foreign keys are LOCAL to the sending device's database — the
         # instance has its own id space. Drop them, then re-resolve the
@@ -1233,6 +1236,8 @@ class Database:
             old_terms = [dict(r) for r in self.conn.execute(
                 "SELECT * FROM financial_terms WHERE document_id = ?",
                 (doc_id,))]
+            old_clauses = [dict(r) for r in self.conn.execute(
+                "SELECT * FROM clauses WHERE document_id = ?", (doc_id,))]
             ver = self.conn.execute(
                 "SELECT COALESCE(MAX(version_no), 0) + 1 FROM sync_versions "
                 "WHERE document_id = ?", (doc_id,)).fetchone()[0]
@@ -1241,7 +1246,8 @@ class Database:
                 "snapshot, origin_device_id) VALUES (?, ?, ?, ?)",
                 (doc_id, ver,
                  _json.dumps({'document': dict(existing),
-                              'financial_terms': old_terms}, default=str),
+                              'financial_terms': old_terms,
+                              'clauses': old_clauses}, default=str),
                  device_id))
             # keep the instance-side filepath (PDF may already be synced)
             payload.pop('filepath', None)
@@ -1252,6 +1258,8 @@ class Database:
             self.conn.execute(
                 "DELETE FROM financial_terms WHERE document_id = ?",
                 (doc_id,))
+            self.conn.execute(
+                "DELETE FROM clauses WHERE document_id = ?", (doc_id,))
             action = 'updated'
         else:
             payload.setdefault('filepath', '(awaiting pdf sync)')
@@ -1273,10 +1281,20 @@ class Database:
                 f"INSERT INTO financial_terms ({cols}) VALUES ({ph})",
                 tuple(trow.values()))
 
+        for c in clauses:
+            crow = {k: v for k, v in c.items()
+                    if k in clause_cols and k not in ('id', 'document_id')}
+            crow['document_id'] = doc_id
+            cols = ", ".join(crow)
+            ph = ", ".join("?" * len(crow))
+            self.conn.execute(
+                f"INSERT INTO clauses ({cols}) VALUES ({ph})",
+                tuple(crow.values()))
+
         self.conn.commit()
         return {'action': action, 'document_id': doc_id,
                 'origin_doc_id': origin_id,
-                'terms': len(terms or [])}
+                'terms': len(terms or []), 'clauses': len(clauses)}
 
     def get_sync_history(self, doc_id: int) -> list:
         """Provenance trail for a synced document, newest first:

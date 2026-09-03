@@ -1568,7 +1568,8 @@ def api_sync_run():
                 results.append(db.upsert_synced_document(
                     item.get('document') or {},
                     item.get('terms') or [],
-                    g.device['device_id']))
+                    g.device['device_id'],
+                    clauses=item.get('clauses') or []))
             except Exception as e:
                 errors.append({'origin_doc_id':
                                (item.get('document') or {}).get('origin_doc_id'),
