@@ -568,7 +568,15 @@ const capModal = {
             const btn = document.createElement('button');
             btn.className = 'btn ' + (b.className || 'btn-secondary');
             btn.textContent = b.label;
-            btn.onclick = () => { this._close(); if (b.action) b.action(); };
+            // The button's own action owns the promise: detach _resolve
+            // BEFORE closing, otherwise _close() settles it with false
+            // first and the confirm's resolve(true) is silently ignored.
+            btn.onclick = () => {
+                const act = b.action;
+                this._resolve = null;
+                this._close();
+                if (act) act();
+            };
             actions.appendChild(btn);
         });
 
