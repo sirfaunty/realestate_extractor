@@ -24,6 +24,24 @@ rehearsal for provisioning client #1. Companion: `docs/DEPLOY.md` (the
 runbook being validated) and the Phase 3 section of
 `TESTING_CHECKLIST.md`._
 
+## NEXT 20-min session: move the standalone scorecard here
+
+Prereq: a DNS A record (e.g. `demo.<yourdomain>`) → 91.98.30.65.
+
+1. **Auth gate check (must pass first):** logged out, open
+   `http://localhost:5050/scorecard` via tunnel → expect redirect to /login.
+2. **TLS on:** VM `cd ~/capactive && git pull && echo "CAPACTIVE_DOMAIN=<host>" >> .env && docker compose --profile tls up -d --build`
+   → https://<host> loads with a valid cert.
+3. **Data over (ASUS, ~260 MB):** `scp data/costar_q4_export.* root@91.98.30.65:/root/costar/`
+   then VM: `docker cp /root/costar/. capactive-app-1:/app/realestate_extractor/data/ && docker compose restart app`
+4. **Org:** operator console → provision "Capactive Demo" on **Professional**
+   (scorecard is in that tier). Log in as its admin.
+5. **Viewers:** Admin → Users → one Viewer per trusted person (access
+   seats). Send each their login; retire the shared password.
+6. Verify https://<host>/scorecard renders (first load warms caches).
+7. Optional before killing the old server: diff the standalone scorecard
+   repo against `modules/scorecard/` to confirm nothing newer lives there.
+
 ## Before the session (~15 min, do anytime)
 
 - [ ] Spin up a throwaway VM: Ubuntu 24.04, 2 vCPU / 4 GB / 40 GB

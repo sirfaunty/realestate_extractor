@@ -133,10 +133,12 @@ Findings from the Docker session (2026-09-03/04):
 - [x] **Confirm-modal bug (FIXED)**: `capModal.confirm` resolved false on
   every confirm click (`_close()` settled the promise first) — Re-extract
   and Admin→Users deactivate had never actually fired from the UI.
-- [ ] **Re-extract changes document identity**: it deletes + re-creates
-  the row (605→606→608), resetting review status and breaking sync
-  continuity (instance sees a new doc, not a new version). Should preserve
-  id, or sync should key on content hash. Design item before client use.
+- [x] **Re-extract changes document identity (FIXED 2026-09-04)**: now
+  refreshes the same row in place (`reuse_doc_id`) — id, property link and
+  sync origin survive; child data cleared; review state reset so the
+  changed content must be re-approved before it syncs as a versioned
+  update. Unit-tested. LIVE CHECK: Re-extract a doc locally → URL id
+  unchanged, Review Queue shows it again.
 - [ ] Sample-doc analysis never produced terms/clauses via upload or
   per-doc Re-extract (`analysis_status: ingested`); the lease pipeline
   runs from the property-level Analyze. Clarify the intended operator

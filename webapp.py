@@ -2779,12 +2779,14 @@ def api_update_term(term_id):
 @app.route('/api/document/<int:doc_id>/reextract', methods=['POST'])
 @login_required
 def api_reextract(doc_id):
-    """Delete a document's extracted data and reprocess it."""
+    """Clear a document's extracted data and reprocess it IN PLACE —
+    the document keeps its id, property link and sync origin, so the
+    instance later receives a versioned update rather than a new doc."""
     org_id = session['org_id']
     user_id = session['user_id']
     db = get_org_db(org_id)
     try:
-        info = db.delete_document_extractions(doc_id)
+        info = db.delete_document_extractions(doc_id, keep_document=True)
         if not info:
             return jsonify({'error': 'Document not found'}), 404
 
@@ -2830,7 +2832,8 @@ def api_reextract(doc_id):
                 result = processor.process_single(
                     filepath,
                     document_type=None,  # let classifier re-detect
-                    property_name=info.get('property_name')
+                    property_name=info.get('property_name'),
+                    reuse_doc_id=doc_id,  # same row, same identity
                 )
                 on_step('complete', 'Re-ingested')
                 jobs[job_id]['results'] = [_result_to_dict(result)]

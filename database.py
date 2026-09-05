@@ -2134,14 +2134,33 @@ class Database:
                         property_name: str = None, property_address: str = None,
                         page_count: int = None, is_scanned: bool = False,
                         ocr_confidence: float = None, file_hash: str = None,
-                        metadata: dict = None, auto_create_property: bool = True) -> int:
+                        metadata: dict = None, auto_create_property: bool = True,
+                        reuse_doc_id: int = None) -> int:
         """Insert a new document record. Returns the document ID.
 
         If property_name is provided:
         1. Tries exact match (case-insensitive)
         2. Tries fuzzy/substring match
         3. If auto_create_property=True and no match, creates the property
+
+        reuse_doc_id: refresh THAT existing row in place instead of
+        inserting (re-extract). Identity, property links, review state
+        and sync origin are left untouched; content fields are replaced.
         """
+        if reuse_doc_id is not None:
+            self.conn.execute("""
+                UPDATE documents SET filename = ?, filepath = ?,
+                    document_type = ?, page_count = ?, is_scanned = ?,
+                    ocr_confidence = ?, file_hash = ?, metadata = ?,
+                    original_type = ?, analysis_status = 'ingested',
+                    processed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (filename, filepath, document_type, page_count, is_scanned,
+                  ocr_confidence, file_hash,
+                  json.dumps(metadata) if metadata else None,
+                  document_type, reuse_doc_id))
+            self.conn.commit()
+            return reuse_doc_id
         # Auto-link to property if name provided
         property_id = None
         portfolio_id = None
@@ -2195,12 +2214,19 @@ class Database:
         cur = self.conn.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
 
-    def delete_document_extractions(self, doc_id: int) -> Dict:
+    def delete_document_extractions(self, doc_id: int,
+                                    keep_document: bool = False) -> Dict:
         """
-        Delete a document and all its extracted data so it can be reprocessed.
+        Delete a document's extracted data so it can be reprocessed.
 
-        Returns dict with the original document's filepath, document_type,
-        and property_name so the caller can re-run extraction.
+        keep_document=True (re-extract): the documents row itself SURVIVES —
+        same id, same property link, same sync origin — with its review
+        state reset (content is about to change, so it must be re-approved
+        before it syncs again; the instance then receives a versioned
+        update of the same document rather than a stranger).
+        keep_document=False: legacy full delete.
+
+        Returns dict with filepath, document_type, property_name, doc_id.
         """
         # Grab the document info before deleting
         doc = self.get_document(doc_id)
@@ -2208,6 +2234,7 @@ class Database:
             return None
 
         info = {
+            'doc_id': doc_id,
             'filepath': doc['filepath'],
             'document_type': doc.get('document_type'),
             'property_name': doc.get('property_name'),
@@ -2230,8 +2257,15 @@ class Database:
         self.conn.execute("DELETE FROM document_tables WHERE document_id = ?", (doc_id,))
         self.conn.execute("DELETE FROM document_fulltext WHERE document_id = ?", (str(doc_id),))
 
-        # Delete the document record itself
-        self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        if keep_document:
+            # identity survives; review state resets (content will change)
+            self.conn.execute(
+                "UPDATE documents SET review_status = 'pending_review', "
+                "finalized_at = NULL, extraction_review = 'pending', "
+                "analysis_status = 'ingested' WHERE id = ?", (doc_id,))
+        else:
+            # Delete the document record itself
+            self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
         self.conn.commit()
 
         return info
