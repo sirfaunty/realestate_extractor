@@ -112,6 +112,20 @@ Bugs found + fixed during this run (all committed):
 VM: Hetzner CX23 Nuremberg 91.98.30.65, ~$7/mo — KEEP as the standing
 staging instance (demo target, future TLS test, client rehearsals).
 
+## Demo portfolio (built 2026-09-04)
+
+`demo_portfolio.py` — 3 fictional properties, 12 leases, 3 amendments,
+2 loan agreements + manifest.json ground truth. Segmenter regression:
+12/12 expiration + SF exact, no LLM (verified at build).
+- [ ] Seed a local demo org: `venv/Scripts/python demo_portfolio.py --ingest --approve --db data/org_demo.db`
+  → 17 docs ingested + approved; run property Analyze on each of the 3
+  properties (LLM) → terms/clauses populate; compare against manifest.
+- [ ] Push to staging demo org: register a device in the demo org on the
+  instance, then `sync_client.py --db data/org_demo.db --url https://<host> --token cap_... --push`
+  → staging has a full fictional portfolio for demos + screenshots.
+- [ ] Landing-page screenshots come from the staging demo org (never
+  client data).
+
 ## Operator console (super admin — built 2026-08-20)
 
 - [ ] Bootstrap: `venv/Scripts/python create_operator.py you@capactive.com "Patrick"`
