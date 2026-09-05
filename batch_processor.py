@@ -77,7 +77,8 @@ class BatchProcessor:
 
     def process_single(self, filepath: str,
                        document_type: str = None,
-                       property_name: str = None) -> ProcessingResult:
+                       property_name: str = None,
+                       reuse_doc_id: int = None) -> ProcessingResult:
         """
         Ingest a single PDF — extract text + tables, classify by keywords,
         and store everything in the database. No LLM calls, no structured
@@ -98,7 +99,9 @@ class BatchProcessor:
             # Step 1: Check for duplicates
             self._emit_step('ingesting', f'Reading {result.filename}...')
             file_hash = compute_file_hash(filepath)
-            if self.db.document_exists(file_hash):
+            # reuse_doc_id = re-extract of an existing row: the "duplicate"
+            # IS the row we're refreshing, so the check doesn't apply
+            if reuse_doc_id is None and self.db.document_exists(file_hash):
                 result.error = "Duplicate document (already processed)"
                 logger.info(f"Skipping duplicate: {filepath}")
                 return result
@@ -133,7 +136,8 @@ class BatchProcessor:
             self._emit_step('storing', 'Saving to database...')
             doc_id = self._store_document_record(
                 doc, doc_type, property_name, file_hash,
-                classification_confidence=classification_confidence
+                classification_confidence=classification_confidence,
+                reuse_doc_id=reuse_doc_id
             )
             result.document_id = doc_id
 
@@ -279,9 +283,13 @@ class BatchProcessor:
 
     def _store_document_record(self, doc: DocumentContent, doc_type: str,
                                 property_name: str = None, file_hash: str = None,
-                                classification_confidence: float = None) -> int:
-        """Create a document record in the database."""
+                                classification_confidence: float = None,
+                                reuse_doc_id: int = None) -> int:
+        """Create a document record in the database (or refresh an
+        existing row in place when reuse_doc_id is given — re-extract
+        keeps the document's identity, property link and sync origin)."""
         return self.db.insert_document(
+            reuse_doc_id=reuse_doc_id,
             filename=doc.filename,
             filepath=doc.filepath,
             document_type=doc_type,
