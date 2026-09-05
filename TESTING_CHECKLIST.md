@@ -84,14 +84,27 @@ Bugs found + fixed during this run (all committed):
 - [x] Compose refuses without CAPACTIVE_SECRET_KEY: PASS 2026-09-02.
   Side-find: CAPACTIVE_DOMAIN was also demanded in plain mode → defaulted
   to localhost in compose.
-- [ ] Full smoke test per docs/DEPLOY.md: setup → org + admin → register
-  device → sync_client push from another machine → provenance card + PDF.
-- [ ] TLS profile on a VM with a real domain: `--profile tls`, cert
-  auto-provisions, HTTP→HTTPS.
-- [ ] `docker compose exec -T app sh deploy/backup.sh` → backups land in
-  the volume; restore drill once.
-- [ ] Restart container → sessions survive (secret key stable), data
-  intact (volume).
+- [x] Full smoke test: PASS 2026-09-04 — setup flow → staging-org + admin
+  → device registered → pushes from ASUS over SSH tunnel: new doc, PDF
+  served from instance, property find-or-create ("Test Property"),
+  versioned update ("1 prior version" + diff). Ingest also works directly
+  on the Linux container (accidental test, no Ollama).
+  **Bug found+fixed remotely:** device-local FK ids (property/building/
+  unit/portfolio) violated instance FKs → dropped + property resolved by
+  name. Protocol extended to carry `clauses`.
+- [ ] TLS profile — DEFERRED: no DNS record yet. Add A record → VM, then
+  `echo CAPACTIVE_DOMAIN=... >> .env && docker compose --profile tls up -d`.
+- [x] Backup drill: PASS 2026-09-04 — config/org/registry DBs + synced_pdfs
+  archive in timestamped folder. (Restore drill still to do once.)
+- [x] Restart: PASS 2026-09-04 — `docker compose restart app`, session
+  survived, data intact. Update drill also PASS (git pull + rebuild,
+  cached layers, <1s, volume untouched).
+- [x] Operator console on instance: PASS 2026-09-04 — create_operator.py
+  inside container, login, org listed, enter workspace (banner) / exit,
+  audit shows login + entered + exited.
+
+VM: Hetzner CX23 Nuremberg 91.98.30.65, ~$7/mo — KEEP as the standing
+staging instance (demo target, future TLS test, client rehearsals).
 
 ## Operator console (super admin — built 2026-08-20)
 
@@ -109,6 +122,19 @@ Bugs found + fixed during this run (all committed):
   and exit appear in the audit log.
 - [ ] Operator login required even in dev mode (no DEV_MODE bypass);
   /operator redirects to login when signed out.
+
+Findings from the Docker session (2026-09-03/04):
+- [x] **Confirm-modal bug (FIXED)**: `capModal.confirm` resolved false on
+  every confirm click (`_close()` settled the promise first) — Re-extract
+  and Admin→Users deactivate had never actually fired from the UI.
+- [ ] **Re-extract changes document identity**: it deletes + re-creates
+  the row (605→606→608), resetting review status and breaking sync
+  continuity (instance sees a new doc, not a new version). Should preserve
+  id, or sync should key on content hash. Design item before client use.
+- [ ] Sample-doc analysis never produced terms/clauses via upload or
+  per-doc Re-extract (`analysis_status: ingested`); the lease pipeline
+  runs from the property-level Analyze. Clarify the intended operator
+  path in the setup guide, or make upload trigger analysis.
 
 Open findings for later:
 - [~] **Filepath hygiene**: root cause found — DB migrated from the Mac
