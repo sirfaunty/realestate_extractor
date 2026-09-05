@@ -92,6 +92,12 @@ Bugs found + fixed during this run (all committed):
   **Bug found+fixed remotely:** device-local FK ids (property/building/
   unit/portfolio) violated instance FKs → dropped + property resolved by
   name. Protocol extended to carry `clauses`.
+- [ ] **BEFORE TLS / any public exposure**: verify the new global auth
+  gate on staging — logged out, hit /scorecard, /portfolio, /deliverables,
+  /api/jobs/active directly → all redirect to /login (or 401 JSON for
+  /api/*); /operator/* → operator login; /api/sync/ping still device-auth;
+  /api/status open (healthcheck). (Gap found 2026-09-04: module blueprints
+  had no login requirement; module gate fails open without a session.)
 - [ ] TLS profile — DEFERRED: no DNS record yet. Add A record → VM, then
   `echo CAPACTIVE_DOMAIN=... >> .env && docker compose --profile tls up -d`.
 - [x] Backup drill: PASS 2026-09-04 — config/org/registry DBs + synced_pdfs

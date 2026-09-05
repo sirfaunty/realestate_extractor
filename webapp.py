@@ -63,6 +63,39 @@ ARCHIVE_EXTENSIONS = {'zip'}
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
 
+# ─── Global authentication gate ──────────────────────────────────────
+# Module blueprints carry no per-route @login_required, and the module
+# gate only checks plan entitlement. This single hook makes the default
+# "authenticated" for EVERYTHING, with an explicit allowlist. Without it,
+# module pages (portfolio data!) are readable by anyone once the instance
+# has a public URL.
+
+_PUBLIC_PREFIXES = (
+    '/login', '/logout', '/setup', '/static/', '/favicon.ico',
+    '/operator/login',          # operator credential entry
+    '/api/sync/',               # device-token auth (own decorator)
+    '/api/status',              # healthcheck
+)
+
+
+@app.before_request
+def _require_authentication():
+    if DEV_MODE:
+        return None
+    path = request.path or '/'
+    if any(path == p.rstrip('/') or path.startswith(p) for p in _PUBLIC_PREFIXES):
+        return None
+    if path.startswith('/operator'):
+        if session.get('operator_id'):
+            return None
+        return redirect(url_for('operator_login'))
+    if session.get('user_id'):
+        return None
+    if path.startswith('/api/'):
+        return jsonify({'error': 'authentication required'}), 401
+    return redirect(url_for('login'))
+
+
 @app.after_request
 def _inject_global_progress(resp):
     """Inject the universal job-progress widget into every HTML page.
