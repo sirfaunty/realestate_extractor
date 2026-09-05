@@ -8,11 +8,16 @@
 > Negative check passed (refused without secret key). Found + fixed:
 > compose nagged for CAPACTIVE_DOMAIN in plain mode → now defaults to
 > localhost (commit from ASUS, `git pull` on VM before continuing).
-> **Resume at Step 4** below: `ssh -A root@91.98.30.65` (after
-> `eval $(ssh-agent -s); ssh-add ~/.ssh/id_ed25519`), tunnel from a second
-> window with `ssh -L 5050:127.0.0.1:5000 root@91.98.30.65`, browse
-> http://localhost:5050 for the setup flow. No DNS record yet — set one up
-> before Step 2/TLS (or skip TLS this round).
+> **2026-09-04: SESSION COMPLETE except TLS.** Setup flow, remote sync
+> (new doc + PDF + property + versioned update), update drill, restart
+> drill, backup, operator console all PASS on the VM. One remote-only bug
+> found+fixed (device-local FK ids). VM kept as standing staging instance.
+> **Remaining:** TLS (needs DNS A record → 91.98.30.65, then
+> `echo CAPACTIVE_DOMAIN=<host> >> .env && docker compose --profile tls up -d`)
+> and one restore drill. Reconnect recipe: `eval $(ssh-agent -s);
+> ssh-add ~/.ssh/id_ed25519; ssh -A root@91.98.30.65`; tunnel
+> `ssh -L 5050:127.0.0.1:5000 root@91.98.30.65`; operator login at
+> http://localhost:5050/operator/login.
 
 _Goal: prove the container story end to end on a real host, as a dress
 rehearsal for provisioning client #1. Companion: `docs/DEPLOY.md` (the
