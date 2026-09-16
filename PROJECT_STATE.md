@@ -34,12 +34,35 @@ Shipped so far:
   **`docs/DEPLOY.md`** runbook for managed + client-hosted modes.
   Untested against a real Docker host — see TESTING_CHECKLIST.md.
 
-Pending (see tasks): docker-host validation, extraction-client installer,
-filepath hygiene for legacy uploads (0/140 resolve — provenance blocker
-locally), sync status UI, super admin (cross-workspace Capactive
-operator) and a separate Capactive operator panel, tagline/brand rollout
-(brand guidelines doc still on Patrick's other device — get it into
-docs/BRAND.md).
+- **Docker validated on a real host (2026-09-03/04)**: Hetzner CX23
+  staging instance at 91.98.30.65 (`docs/DOCKER_SESSION.md`). Setup flow,
+  remote sync incl. PDFs + property attach + versioned update, update /
+  restart / backup drills, operator console — all pass. TLS pending a
+  DNS record. Kept as the standing staging box.
+- **Security**: global authentication gate added (`webapp.py
+  _require_authentication`) — module pages were previously open without
+  login. Verify on staging before any public exposure.
+- **Operator console** (`/operator`): staff credential class
+  (`create_operator.py`), org provisioning, plan changes, audited
+  impersonation with banner. Separate UI from the client app.
+- **Correctness fixes**: confirm-modal resolved false (Re-extract and
+  user-deactivate never fired); re-extract now preserves document
+  identity (in-place refresh); sync carries clauses and resolves
+  properties by name; `relink_documents.py` repairs stale filepaths after
+  machine migration (424/424 in rehearsal — run `--apply` locally).
+- **Demo portfolio** (`demo_portfolio.py`): 3 fictional properties, 12
+  leases, 3 amendments, 2 loans + ground-truth manifest. Segmenter
+  regression 12/12. Use for demos, screenshots, staging seed — never
+  client data.
+- **Client-facing docs**: `docs/EXTRACTION_CLIENT_SETUP.md` +
+  `client_doctor.py` (environment check); `docs/PITCH_BRIEF.md` for the
+  landing-page session.
+
+Pending (see tasks + TESTING_CHECKLIST.md): scorecard migration onto
+staging (20-min session; needs DNS → TLS), demo seed push to a staging
+demo org, `relink_documents.py --apply` locally, sync status UI,
+fingerprint reset, analysis-trigger UX decision (upload vs property-level
+Analyze), branch → main, Riley review, brand guidelines into docs/BRAND.md.
 
 **`TESTING_CHECKLIST.md`** holds all banked manual verification items —
 build sessions add to it; testing sessions work through it.
