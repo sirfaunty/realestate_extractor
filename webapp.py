@@ -992,6 +992,13 @@ def upload():
                 jobs[job_id]['failed_count'] = failed_count
                 if file_count == 1 and jobs[job_id]['results']:
                     jobs[job_id]['error'] = jobs[job_id]['results'][0].get('error')
+                # auto-queue property analysis for what just landed
+                try:
+                    q = _auto_queue_analysis_for_results(org_id, jobs[job_id]['results'])
+                    if q:
+                        jobs[job_id]['analysis_jobs'] = q
+                except Exception as ae:
+                    print(f"[WARN] auto-analysis trigger failed: {ae}", flush=True)
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
@@ -1172,6 +1179,13 @@ def batch():
                             'All files processed' if pdf_count > 1 else 'File processed')
                 jobs[job_id]['status'] = 'completed'
                 jobs[job_id]['failed_count'] = failed_count
+                # auto-queue property analysis for what just landed
+                try:
+                    q = _auto_queue_analysis_for_results(org_id, jobs[job_id]['results'])
+                    if q:
+                        jobs[job_id]['analysis_jobs'] = q
+                except Exception as ae:
+                    print(f"[WARN] auto-analysis trigger failed: {ae}", flush=True)
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
@@ -3193,32 +3207,48 @@ def api_bulk_reextract():
     })
 
 
-@app.route('/api/property/<int:property_id>/analyze', methods=['POST'])
-@login_required
-def api_analyze_property(property_id):
-    """Run Phase 2 analysis on all ingested documents for a property."""
-    org_id = session['org_id']
+def _queue_property_analysis(org_id, property_id, trigger='manual'):
+    """Queue Phase 2 (LLM) analysis for a property's documents.
 
-    # Verify property exists and has documents
+    Shared by the manual Analyze button and the auto-trigger that fires
+    when an upload/batch finishes (product decision 2026-09-16: operators
+    should never need to know about a second button; analysis stays
+    property-scoped so amendment chains are reasoned about together).
+
+    Returns (job_id, doc_count) or (None, reason).
+    """
     db = get_org_db(org_id)
     try:
         prop = db.get_property(property_id)
         if not prop:
-            return jsonify({'error': 'Property not found'}), 404
+            return None, 'Property not found'
         docs = db.get_property_documents(property_id)
         if not docs:
-            return jsonify({'error': 'No documents linked to this property'}), 400
+            return None, 'No documents linked to this property'
     finally:
         db.close()
 
+    # one analysis per property at a time — a second upload while the
+    # first analysis is running just rides along on the next trigger
+    for j in jobs.values():
+        if (j.get('org_id') == org_id and j.get('type') == 'analysis'
+                and j.get('property_id') == property_id
+                and j.get('status') in ('processing', 'queued')):
+            return j['id'], len(docs)
+
     _cleanup_expired_jobs()
     job_id = str(uuid.uuid4())[:8]
+    label = f'Analyzing {prop["name"]}'
+    if trigger == 'auto':
+        label += ' (auto)'
     jobs[job_id] = {
         'id': job_id,
         'org_id': org_id,
         'status': 'processing',
         'type': 'analysis',
-        'filename': f'Analyzing {prop["name"]}',
+        'property_id': property_id,
+        'trigger': trigger,
+        'filename': label,
         'total': len(docs),
         'progress': 0,
         'results': [],
@@ -3268,8 +3298,44 @@ def api_analyze_property(property_id):
                 db2.close()
 
     enqueue_job(job_id, process_async)
+    return job_id, len(docs)
 
-    return jsonify({'success': True, 'job_id': job_id, 'doc_count': len(docs)})
+
+def _auto_queue_analysis_for_results(org_id, results):
+    """After an upload/batch job: queue analysis for every property that
+    received a document. Property ids come from the stored documents, so
+    this works whether the property was named at upload or auto-linked."""
+    doc_ids = [r.get('document_id') for r in results
+               if r.get('success') and r.get('document_id')]
+    if not doc_ids:
+        return []
+    db = get_org_db(org_id)
+    try:
+        ph = ','.join('?' * len(doc_ids))
+        rows = db.conn.execute(
+            f"SELECT DISTINCT property_id FROM documents "
+            f"WHERE id IN ({ph}) AND property_id IS NOT NULL",
+            doc_ids).fetchall()
+    finally:
+        db.close()
+    queued = []
+    for (pid,) in rows:
+        job_id, _n = _queue_property_analysis(org_id, pid, trigger='auto')
+        if job_id:
+            queued.append(job_id)
+    return queued
+
+
+@app.route('/api/property/<int:property_id>/analyze', methods=['POST'])
+@login_required
+def api_analyze_property(property_id):
+    """Run Phase 2 analysis on all ingested documents for a property."""
+    job_id, info = _queue_property_analysis(session['org_id'], property_id,
+                                            trigger='manual')
+    if not job_id:
+        status = 404 if info == 'Property not found' else 400
+        return jsonify({'error': info}), status
+    return jsonify({'success': True, 'job_id': job_id, 'doc_count': info})
 
 
 @app.route('/api/property/<int:property_id>/analysis')

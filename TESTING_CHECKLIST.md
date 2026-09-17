@@ -153,10 +153,13 @@ Findings from the Docker session (2026-09-03/04):
   changed content must be re-approved before it syncs as a versioned
   update. Unit-tested. LIVE CHECK: Re-extract a doc locally → URL id
   unchanged, Review Queue shows it again.
-- [ ] Sample-doc analysis never produced terms/clauses via upload or
-  per-doc Re-extract (`analysis_status: ingested`); the lease pipeline
-  runs from the property-level Analyze. Clarify the intended operator
-  path in the setup guide, or make upload trigger analysis.
+- [x] **Analysis trigger (DECIDED + BUILT 2026-09-16)**: upload/batch
+  completion auto-queues property-level analysis (per property touched;
+  deduped against running analysis jobs; labeled "(auto)" in the pill).
+  Manual Analyze remains for re-runs. Setup guide updated.
+  LIVE CHECK: upload a demo lease naming a property → after ingest, an
+  "Analyzing <property> (auto)" job appears; terms/clauses populate.
+- [x] relink_documents.py --apply: RUN 2026-09-16 — 405 fixed, 0 unresolved.
 
 Open findings for later:
 - [~] **Filepath hygiene**: root cause found — DB migrated from the Mac
