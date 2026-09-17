@@ -78,9 +78,14 @@ Expect `instance handshake … PASS` with the device name and org shown.
 
 ## 6. Daily workflow
 
-1. Upload / batch-process documents in the local app (File Extractor).
+1. Upload / batch-process documents in the local app (File Extractor),
+   naming the property. When the upload finishes, Capactive
+   **automatically queues the AI analysis** for that property (watch the
+   progress pill; a few minutes per document). Nothing else to click —
+   the property page's Analyze button is only for re-runs.
 2. Review: the **Review Queue** links each document to its property —
-   **approving there is what finalizes it** for sync.
+   **approving there is what finalizes it** for sync. Approve after the
+   analysis has finished so the extracted terms travel with the document.
 3. Push:
    ```bash
    venv/Scripts/python sync_client.py --status   # what would go
