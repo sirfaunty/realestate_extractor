@@ -109,13 +109,68 @@
              style="width:180px">
       <input name="admin_email" type="email" placeholder="Admin email"
              required style="width:220px">
-      <input name="admin_password" type="password"
-             placeholder="Temp password (they change it)" required
+    </div>
+    <div class="row" style="align-items:center">
+      <input name="admin_password" type="password" class="pw"
+             placeholder="Admin password (8+ chars)" required minlength="8"
              style="width:220px">
+      <input name="admin_password2" type="password" class="pw"
+             placeholder="Confirm password" required minlength="8"
+             style="width:220px">
+      <label style="font-size:11px;color:#8595ab;cursor:pointer">
+        <input type="checkbox" onchange="togglePw(this)"> show
+      </label>
     </div>
     <button class="btn btn-primary" type="submit">Provision</button>
   </form>
 </div>
+
+<h2>Reset a user's password</h2>
+<div class="provision">
+  <form method="POST" id="reset-form"
+        onsubmit="this.action = '/operator/org/' + this.org.value + '/reset-password';">
+    <div class="row" style="align-items:center">
+      <select name="org" id="reset-org" onchange="fillUsers(this.value)">
+        {% for o in orgs %}<option value="{{ o.org_id }}">{{ o.org_name }}</option>{% endfor %}
+      </select>
+      <select name="user_id" id="reset-user" style="min-width:260px"></select>
+    </div>
+    <div class="row" style="align-items:center">
+      <input name="new_password" type="password" class="pw"
+             placeholder="New password (8+ chars)" required minlength="8"
+             style="width:220px">
+      <input name="new_password2" type="password" class="pw"
+             placeholder="Confirm" required minlength="8" style="width:220px">
+      <label style="font-size:11px;color:#8595ab;cursor:pointer">
+        <input type="checkbox" onchange="togglePw(this)"> show
+      </label>
+    </div>
+    <button class="btn" type="submit"
+            onclick="return confirm('Reset this user\'s password? This is audited.');">
+      Reset password</button>
+  </form>
+</div>
+<script>
+  const ORG_USERS = {{ orgs | tojson }};
+  function fillUsers(orgId) {
+    const o = ORG_USERS.find(x => x.org_id === orgId);
+    const sel = document.getElementById('reset-user');
+    sel.innerHTML = '';
+    (o ? o.user_list : []).forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.user_id;
+      opt.textContent = `${u.email} (${u.role || 'member'})`;
+      sel.appendChild(opt);
+    });
+  }
+  // show/hide toggles every password box in the same form
+  function togglePw(cb) {
+    cb.closest('form').querySelectorAll('input.pw')
+      .forEach(i => i.type = cb.checked ? 'text' : 'password');
+  }
+  const first = document.getElementById('reset-org');
+  if (first && first.value) fillUsers(first.value);
+</script>
 
 <h2>Recent operator activity</h2>
 <table class="audit">

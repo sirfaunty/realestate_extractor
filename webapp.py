@@ -1773,6 +1773,8 @@ def operator_dashboard():
                 'is_active': org.is_active,
                 'org_key': org.org_key,
                 'users': len(users),
+                'user_list': [{'user_id': u['user_id'], 'email': u['email'],
+                               'role': u.get('role')} for u in users],
                 'devices': sum(1 for d in devices if d['is_active']),
                 'extraction_seats': org.features.max_extraction_seats,
                 'access_seats': org.features.max_access_seats,
@@ -1825,8 +1827,15 @@ def operator_provision():
     admin_name = request.form.get('admin_name', '').strip()
     admin_email = request.form.get('admin_email', '').strip()
     admin_password = request.form.get('admin_password', '')
+    admin_password2 = request.form.get('admin_password2', '')
     if not all([org_name, admin_name, admin_email, admin_password]):
         flash('All provisioning fields are required.', 'error')
+        return redirect(url_for('operator_dashboard'))
+    if admin_password != admin_password2:
+        flash('Admin passwords do not match — nothing was provisioned.', 'error')
+        return redirect(url_for('operator_dashboard'))
+    if len(admin_password) < 8:
+        flash('Admin password must be at least 8 characters.', 'error')
         return redirect(url_for('operator_dashboard'))
     if plan not in PLAN_FEATURES:
         plan = 'standard'
@@ -1858,6 +1867,39 @@ def operator_provision():
         pstore.close()
     flash(f'Provisioned {org_name} ({org_id}) on {plan}. '
           f'License key: {license_key}', 'success')
+    return redirect(url_for('operator_dashboard'))
+
+
+@app.route('/operator/org/<org_id>/reset-password', methods=['POST'])
+@operator_required
+def operator_reset_password(org_id):
+    """Operator sets a new password for any user in an org (support
+    reality: admins fat-finger their first password). Audited."""
+    from werkzeug.security import generate_password_hash
+    user_id = request.form.get('user_id', '').strip()
+    pw = request.form.get('new_password', '')
+    pw2 = request.form.get('new_password2', '')
+    if not user_id or not pw:
+        flash('User and new password are required.', 'error')
+        return redirect(url_for('operator_dashboard'))
+    if pw != pw2:
+        flash('Passwords do not match — nothing changed.', 'error')
+        return redirect(url_for('operator_dashboard'))
+    if len(pw) < 8:
+        flash('Password must be at least 8 characters.', 'error')
+        return redirect(url_for('operator_dashboard'))
+    store = get_config_store()
+    try:
+        user = store.get_user(user_id)
+        if not user or user.get('org_id') != org_id:
+            flash('User not found in that organization.', 'error')
+            return redirect(url_for('operator_dashboard'))
+        store.set_user_password(user_id, generate_password_hash(pw))
+        store.log_operator_action(session['operator_id'], 'password_reset',
+                                  org_id, f'user {user_id}')
+    finally:
+        store.close()
+    flash(f'Password reset for {user["email"]} ({org_id}).', 'success')
     return redirect(url_for('operator_dashboard'))
 
 

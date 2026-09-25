@@ -544,6 +544,14 @@ class ConfigStore:
         self.conn.commit()
         return device
 
+    def set_user_password(self, user_id: str, password_hash: str) -> bool:
+        """Replace a user's password hash (operator reset / self-service)."""
+        cur = self.conn.execute(
+            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            (password_hash, user_id))
+        self.conn.commit()
+        return cur.rowcount > 0
+
     def get_user(self, user_id: str) -> Optional[Dict]:
         """Get user by ID, including org info."""
         cur = self.conn.execute("""
