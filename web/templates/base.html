@@ -179,7 +179,7 @@
         </ul>
         {% endif %}
 
-        {% if module_enabled('portfolio_ownership') or module_enabled('residential') %}
+        {% if module_enabled('portfolio_ownership') or module_enabled('residential') or module_enabled('deliverables') %}
         <div class="sidebar-section-label">Portfolio</div>
         <ul class="sidebar-nav" style="padding-top: 0;">
             {% if module_enabled('portfolio_ownership') %}
@@ -234,11 +234,16 @@
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 14h5M8 11v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </span> Devices
             </a></li>
+            {% if session.get('operator_id') %}
+            {# Module activation is a Capactive-operator function (plan
+               entitlement) — org admins never see it. Shown here only during
+               an operator impersonation session for convenience. #}
             <li><a href="{{ url_for('admin_modules') }}" class="{% if request.endpoint == 'admin_modules' %}active{% endif %}">
                 <span class="icon">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
-                </span> Modules
+                </span> Modules <span style="opacity:.6;font-size:10px">(operator)</span>
             </a></li>
+            {% endif %}
             <li><a href="{{ url_for('admin_audit') }}" class="{% if request.endpoint == 'admin_audit' %}active{% endif %}">
                 <span class="icon">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
