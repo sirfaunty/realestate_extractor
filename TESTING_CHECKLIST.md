@@ -98,7 +98,24 @@ Bugs found + fixed during this run (all committed):
   /api/*); /operator/* → operator login; /api/sync/ping still device-auth;
   /api/status open (healthcheck). (Gap found 2026-09-04: module blueprints
   had no login requirement; module gate fails open without a session.)
-- [ ] TLS profile — DEFERRED: no DNS record yet. Add A record → VM, then
+- [x] **TLS profile: PASS 2026-09-17** — demo.capactive.co (GoDaddy A
+  record → 91.98.30.65), Let's Encrypt cert auto-provisioned, padlock.
+- [x] **Auth gate on staging: PASS 2026-09-17** — logged-out /scorecard →
+  login; /api/jobs/active → 401 JSON.
+- [x] **Scorecard migrated: PASS 2026-09-25** — CoStar files chunk-copied
+  into the volume (flaky uplink; see chunked-upload to-do), "Capactive
+  Demo" org on Professional, scorecard renders + runs at
+  https://demo.capactive.co/scorecard. Railway staging can be retired.
+- [x] Operator console: password confirm + show toggle on provisioning;
+  audited per-user password reset (used live to recover a mistyped admin
+  password).
+- [ ] Add Viewer accounts for trusted scorecard users (Admin → Users in
+  Capactive Demo), send logins, then shut down Railway.
+- [ ] VM housekeeping: `apt update && apt upgrade -y && reboot` (kernel
+  update pending since 09-17); containers auto-restart.
+- [ ] **Build: chunked/resumable PDF upload in sync_client** — Patrick's
+  uplink resets long transfers every ~8–16 MB; a single-POST 90 MB scan
+  would fail the same way at a client site. Add A record → VM, then
   `echo CAPACTIVE_DOMAIN=... >> .env && docker compose --profile tls up -d`.
 - [x] Backup drill: PASS 2026-09-04 — config/org/registry DBs + synced_pdfs
   archive in timestamped folder. (Restore drill still to do once.)
