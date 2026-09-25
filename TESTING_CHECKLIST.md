@@ -121,6 +121,15 @@ Bugs found + fixed during this run (all committed):
   `docker compose exec app rm data/registry.db` then restart.
 - [x] Closing Books "Unexpected token '<'": warehouse-missing now returns
   JSON 503 + a clean empty-state message instead of an HTML 500.
+- [x] **FINDING + FIX 2026-09-25: /admin/modules was reachable by org
+  admins** — could enable ANY module regardless of plan (entitlement
+  bypass) and exposed other clients' deal names. Now operator-only;
+  verified as org admin: GET/POST → operator login, deal modules stay 403.
+- [x] Deliverables missing from sidebar when portfolio modules off → fixed.
+- [x] Portfolio Ownership / Residential: client-neutral empty states;
+  removed from Professional default (warehouse-bound, operator-enabled).
+- [x] Full staging click-through as demo admin (Claude, in Chrome): no
+  client names or errors on any rendered page; all gated URLs lock.
 - [ ] Add Viewer accounts for trusted scorecard users (Admin → Users in
   Capactive Demo), send logins, then shut down Railway.
 - [ ] VM housekeeping: `apt update && apt upgrade -y && reboot` (kernel
