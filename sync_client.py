@@ -34,6 +34,65 @@ import requests
 HERE = os.path.dirname(os.path.abspath(__file__))
 INI = os.path.join(HERE, 'capactive_sync.ini')
 BATCH = 25          # documents per /api/sync/run request
+CHUNK = 4 * 1024 * 1024   # PDF upload chunk size (4 MB — survives flaky uplinks)
+CHUNK_RETRIES = 8
+
+
+def upload_pdf(s, url, origin_doc_id, path):
+    """Chunked, resumable upload. Returns (status, detail):
+    'uploaded' | 'deduped' | 'resumed' | 'error'."""
+    import time
+    with open(path, 'rb') as f:
+        blob = f.read()
+    sha = hashlib.sha256(blob).hexdigest()
+    total = max(1, -(-len(blob) // CHUNK))          # ceil
+
+    # what does the instance already have?
+    try:
+        st = s.get(f'{url}/api/sync/pdf/status', params={'sha256': sha},
+                   timeout=60).json()
+    except Exception as e:
+        return 'error', f'status check failed: {e}'
+    have = set(st.get('chunks', []))
+    already_complete = st.get('complete', False)
+
+    sent = 0
+    if not already_complete:
+        for i in range(total):
+            if i in have:
+                continue
+            part = blob[i * CHUNK:(i + 1) * CHUNK]
+            for attempt in range(1, CHUNK_RETRIES + 1):
+                try:
+                    r = s.post(f'{url}/api/sync/pdf/chunk',
+                               params={'sha256': sha, 'index': i, 'total': total},
+                               data=part,
+                               headers={'Content-Type': 'application/octet-stream'},
+                               timeout=120)
+                    if r.status_code == 200:
+                        sent += 1
+                        break
+                    last = f'HTTP {r.status_code}: {r.text[:100]}'
+                except requests.exceptions.RequestException as e:
+                    last = str(e)[:100]
+                if attempt == CHUNK_RETRIES:
+                    return 'error', f'chunk {i + 1}/{total} failed: {last}'
+                time.sleep(min(2 ** attempt, 20))   # backoff: 2,4,8,16,20…
+
+    try:
+        r = s.post(f'{url}/api/sync/pdf/complete',
+                   params={'sha256': sha, 'origin_doc_id': origin_doc_id,
+                           'total': total}, timeout=300)
+    except requests.exceptions.RequestException as e:
+        return 'error', f'complete failed: {e}'
+    if r.status_code != 200:
+        return 'error', f'complete: HTTP {r.status_code}: {r.text[:120]}'
+    body = r.json()
+    if body.get('deduped') or already_complete:
+        return 'deduped', f'{len(blob) // 1024} KB already on instance'
+    if have:
+        return 'resumed', f'{sent} of {total} chunks sent ({len(have)} were already there)'
+    return 'uploaded', f'{total} chunk{"s" if total != 1 else ""}, {len(blob) // 1024} KB'
 
 
 def fingerprint() -> str:
@@ -174,31 +233,24 @@ def main():
             print(f"  ERROR doc {e.get('origin_doc_id')}: {e.get('error')}")
         print(f'  batch {i // BATCH + 1}: {len(body.get("results", []))} ok')
 
-    # ── push source PDFs ──
+    # ── push source PDFs (chunked + resumable) ──
     if not args.no_pdfs:
-        sent = skipped = missing = 0
+        tally = {'uploaded': 0, 'resumed': 0, 'deduped': 0, 'error': 0}
+        missing = 0
         for d in to_push:
             fp = d.get('filepath') or ''
             if not fp or not os.path.exists(fp):
                 missing += 1
                 continue
-            with open(fp, 'rb') as f:
-                blob = f.read()
-            sha = hashlib.sha256(blob).hexdigest()
-            r = s.post(f'{url}/api/sync/pdf',
-                       params={'origin_doc_id': d['id'], 'sha256': sha},
-                       data=blob,
-                       headers={'Content-Type': 'application/pdf'},
-                       timeout=600)
-            if r.status_code == 200:
-                if r.json().get('deduped'):
-                    skipped += 1
-                else:
-                    sent += 1
-            else:
-                print(f'  PDF ERROR doc {d["id"]}: {r.text[:120]}')
-        print(f'PDFs: {sent} uploaded, {skipped} deduped, '
-              f'{missing} missing locally')
+            status, detail = upload_pdf(s, url, d['id'], fp)
+            tally[status] += 1
+            if status == 'error':
+                print(f'  PDF ERROR doc {d["id"]} ({os.path.basename(fp)}): {detail}')
+            elif status == 'resumed':
+                print(f'  PDF resumed doc {d["id"]}: {detail}')
+        print(f"PDFs: {tally['uploaded']} uploaded, {tally['resumed']} resumed, "
+              f"{tally['deduped']} deduped, {tally['error']} failed, "
+              f"{missing} missing locally")
 
     print(f'Done: {pushed} documents pushed, {failed} failed.')
 
