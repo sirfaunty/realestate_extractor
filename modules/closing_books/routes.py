@@ -21,6 +21,17 @@ def _get_engine():
     return _engine
 
 
+@closing_books_bp.errorhandler(FileNotFoundError)
+def _warehouse_missing(e):
+    """The closing-books warehouse is a per-deployment data file. When it
+    isn't present (fresh instance, no deal loaded) the API must answer in
+    JSON — the page's JS otherwise chokes on an HTML 500."""
+    if request.path.startswith(f'{closing_books_bp.url_prefix}/api/'):
+        return jsonify({'error': 'No closing-books warehouse is loaded on '
+                                 'this instance.', 'empty': True}), 503
+    return render_template('closing_books.html', warehouse_missing=True), 200
+
+
 def register_closing_books_routes(app):
     """Register the closing_books blueprint with the Flask app."""
     app.register_blueprint(closing_books_bp)

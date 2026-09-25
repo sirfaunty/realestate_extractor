@@ -109,6 +109,18 @@ Bugs found + fixed during this run (all committed):
 - [x] Operator console: password confirm + show toggle on provisioning;
   audited per-user password reset (used live to recover a mistyped admin
   password).
+- [x] **FINDING 2026-09-25 (staging click-through)**: fresh Professional org
+  showed Chamberlain's real deal economics in TIF/Distribution/Debt/
+  Partnership — engine defaults are KA's numbers, and registry/seed.json
+  auto-seeded KA entities globally. MITIGATED: deal/retail modules removed
+  from default plan tiers (operator enables per org); registry seed now
+  opt-in (dev mode or CAPACTIVE_SEED_REGISTRY=1). Proper fix tracked as a
+  task (defaults → gitignored per-org data). ALSO on staging: Admin →
+  Modules for Capactive Demo — confirm deal modules are OFF, and the
+  existing seeded registry.db on the instance should be cleared:
+  `docker compose exec app rm data/registry.db` then restart.
+- [x] Closing Books "Unexpected token '<'": warehouse-missing now returns
+  JSON 503 + a clean empty-state message instead of an HTML 500.
 - [ ] Add Viewer accounts for trusted scorecard users (Admin → Users in
   Capactive Demo), send logins, then shut down Railway.
 - [ ] VM housekeeping: `apt update && apt upgrade -y && reboot` (kernel

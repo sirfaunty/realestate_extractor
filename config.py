@@ -134,10 +134,14 @@ PLAN_FEATURES = {
         api_access_enabled=False,
         custom_templates_enabled=False,
         max_pages_per_document=500,
-        modules_enabled=[  # deal-document modules
-            "closing_books", "tif_analysis", "distribution", "debt_analysis",
-            "partnership_dashboard", "barrington", "southtown", "midway",
-        ],
+        # Deal-analytics + retail engines (closing_books, tif_analysis,
+        # distribution, debt_analysis, partnership_dashboard, barrington,
+        # southtown, midway) are BESPOKE builds carrying a specific client's
+        # deal assumptions as defaults. They are never default-on for a new
+        # org — an operator enables them per org (Admin → Modules) once
+        # that org has its own deal data. (Found 2026-09-25: a fresh
+        # Professional org rendered Chamberlain's numbers.)
+        modules_enabled=["deliverables"],
     ),
     "professional": FeatureFlags(
         max_users=23,
@@ -152,11 +156,10 @@ PLAN_FEATURES = {
         api_access_enabled=True,
         custom_templates_enabled=True,
         max_pages_per_document=1000,
-        modules_enabled=[  # deal modules + market analytics + deliverables
-            "closing_books", "tif_analysis", "distribution", "debt_analysis",
-            "partnership_dashboard", "barrington", "southtown", "midway",
+        modules_enabled=[  # market analytics + deliverables + portfolio
             "inventory", "sales_comps", "scorecard", "lease_analysis",
             "market_intel", "office", "deliverables",
+            "portfolio_ownership", "residential",
         ],
     ),
     "enterprise": FeatureFlags(

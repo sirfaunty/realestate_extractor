@@ -47,7 +47,12 @@ def get_registry() -> RegistryStore:
         if _store is None:
             store = RegistryStore(_DB_PATH)
             store.connect()
-            if store.is_empty():
+            # seed.json holds KA's deal entities (Chamberlain, Barrington,
+            # Southtown, Midway). A packaged instance must start EMPTY —
+            # seeding is opt-in: on in dev mode, or CAPACTIVE_SEED_REGISTRY=1.
+            seed_ok = (os.environ.get('CAPACTIVE_SEED_REGISTRY',
+                       '1' if os.environ.get('CAPACTIVE_DEV_MODE') == '1' else '0') == '1')
+            if store.is_empty() and seed_ok:
                 store.seed_from(_load_seed_entities())
             _store = store
         return _store

@@ -223,6 +223,14 @@
     fetch(API + '/stats')
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        if (data && data.empty) {
+          document.getElementById('cbLoading').innerHTML =
+            '<strong>No closing-books warehouse is loaded for this ' +
+            'organization.</strong><br><span style="color:var(--text-secondary)">' +
+            'This module renders a deal’s closing-book document set once one ' +
+            'has been loaded by Capactive. Nothing to show yet.</span>';
+          return;
+        }
         statsData = data;
         renderStats(data);
         document.getElementById('cbLoading').style.display = 'none';
