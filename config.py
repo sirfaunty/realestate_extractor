@@ -156,10 +156,13 @@ PLAN_FEATURES = {
         api_access_enabled=True,
         custom_templates_enabled=True,
         max_pages_per_document=1000,
-        modules_enabled=[  # market analytics + deliverables + portfolio
+        # Market analytics (public/licensed market data) + deliverables.
+        # portfolio_ownership / residential read a per-org verified
+        # warehouse and are enabled by an operator once one is loaded —
+        # same rule as the deal modules.
+        modules_enabled=[
             "inventory", "sales_comps", "scorecard", "lease_analysis",
             "market_intel", "office", "deliverables",
-            "portfolio_ownership", "residential",
         ],
     ),
     "enterprise": FeatureFlags(
