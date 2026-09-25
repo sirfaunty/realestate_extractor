@@ -63,7 +63,7 @@ def _norm_date(s):
 def refi_data(property_id):
     m = master()
     if m is None:
-        raise RuntimeError('KA master warehouse not found')
+        raise RuntimeError('No portfolio warehouse is loaded for this organization')
     prop = m.execute(
         "SELECT property_key, entity_code, property_name, owning_entity, fund, "
         "product_type, lender, property_manager FROM dim_property "

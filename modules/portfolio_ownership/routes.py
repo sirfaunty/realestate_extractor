@@ -105,9 +105,11 @@ def _missing_page():
     return _page("Portfolio Ownership", """
       <h1>Portfolio Ownership</h1>
       <div class='missing'>
-        <p><b>Master warehouse not found.</b></p>
-        <p class='note'>Expected <span class='cite'>portfolio_ownership/…/portfolio_warehouse.db</span>
-        inside the workspace. Extract the KA master package there and reload.</p>
+        <p><b>No portfolio warehouse is loaded for this organization.</b></p>
+        <p class='note'>Portfolio Ownership renders a verified portfolio
+        warehouse — property rosters, page-cited lease provisions, loans,
+        financials and vacancy — once one has been loaded by Capactive.
+        Nothing to show yet.</p>
       </div>""")
 
 

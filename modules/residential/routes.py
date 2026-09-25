@@ -107,9 +107,11 @@ def _pct(v, scale=1.0):
 def index():
     eng = _get_engine()
     if not eng.available():
-        return _page('Residential', "<div class='missing'><b>Residential package not found.</b>"
-                     "<p class='note'>Expected portfolio_ownership/residential/handoff_package/"
-                     " in the workspace.</p></div>")
+        return _page('Residential', "<div class='missing'><b>No residential portfolio "
+                     "is loaded for this organization.</b>"
+                     "<p class='note'>This module renders a residential portfolio "
+                     "package — roster, NOI bridge, valuation, comps — once one has "
+                     "been loaded by Capactive. Nothing to show yet.</p></div>")
     roster = eng.roster()
     bridge, totals = eng.noi_bridge()
 

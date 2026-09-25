@@ -140,7 +140,7 @@ def compendium_data(property_id):
     """Everything the compendium builder needs, in render order."""
     m = master()
     if m is None:
-        raise RuntimeError('KA master warehouse not found')
+        raise RuntimeError('No portfolio warehouse is loaded for this organization')
     prop = m.execute(
         "SELECT property_key, entity_code, property_name, owning_entity, fund, "
         "product_type, property_manager FROM dim_property WHERE property_key=?",
