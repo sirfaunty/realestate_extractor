@@ -71,6 +71,8 @@
     <a class="btn btn-primary" href="{{ url_for('operator_enter', org_id=o.org_id) }}"
        onclick="return confirm('Enter {{ o.org_name }} as its admin? This is audited.');">
        Enter workspace</a>
+    <a class="btn" href="{{ url_for('operator_enter', org_id=o.org_id, to='modules') }}"
+       title="Enable/disable modules for this org (plan override)">Modules</a>
     <form class="inline" method="POST"
           action="{{ url_for('operator_org_action', org_id=o.org_id) }}">
       <input type="hidden" name="action" value="set_plan">

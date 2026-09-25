@@ -2056,6 +2056,9 @@ def operator_enter(org_id):
                                   f"as {target['user_id']}")
     finally:
         store.close()
+    # ?to=modules lands straight on the (operator-only) module activation page
+    if request.args.get('to') == 'modules':
+        return redirect(url_for('admin_modules'))
     return redirect(url_for('index'))
 
 
@@ -2099,8 +2102,15 @@ def admin_license():
 
 @app.route('/admin/modules', methods=['GET', 'POST'])
 @admin_required
+@operator_required
 def admin_modules():
-    """Per-org module activation (tier overrides)."""
+    """Per-org module activation (tier overrides).
+
+    OPERATOR-ONLY (2026-09-25): this page can enable any module regardless
+    of plan — an org admin reaching it was an entitlement bypass, and it
+    lists bespoke modules named after other clients' deals. Reachable only
+    inside an operator impersonation session (org context + operator
+    credential); the operator console is the front door."""
     from .modules.gating import MODULE_GROUPS, MODULE_ROUTES
     from .modules import registry as module_registry
     org_id = session['org_id']
