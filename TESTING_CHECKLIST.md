@@ -113,9 +113,13 @@ Bugs found + fixed during this run (all committed):
   Capactive Demo), send logins, then shut down Railway.
 - [ ] VM housekeeping: `apt update && apt upgrade -y && reboot` (kernel
   update pending since 09-17); containers auto-restart.
-- [ ] **Build: chunked/resumable PDF upload in sync_client** — Patrick's
-  uplink resets long transfers every ~8–16 MB; a single-POST 90 MB scan
-  would fail the same way at a client site. Add A record → VM, then
+- [x] **Chunked/resumable PDF upload (BUILT 2026-09-25)**: 4 MB chunks,
+  per-chunk retry w/ backoff, resume via /api/sync/pdf/status, sha256
+  verified on assembly, content-addressed dedupe. Flask-client tested:
+  drop+resume, 409 missing-list, corruption rejected, auth enforced.
+  LIVE CHECK: push a real PDF to https://demo.capactive.co (no tunnel) →
+  "PDFs: 1 uploaded"; ideally one large scan to see "resumed" fire on the
+  flaky uplink. Add A record → VM, then
   `echo CAPACTIVE_DOMAIN=... >> .env && docker compose --profile tls up -d`.
 - [x] Backup drill: PASS 2026-09-04 — config/org/registry DBs + synced_pdfs
   archive in timestamped folder. (Restore drill still to do once.)
