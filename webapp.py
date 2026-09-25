@@ -1672,6 +1672,136 @@ def api_sync_pdf():
                     'bytes': len(blob)})
 
 
+# ─── Chunked / resumable PDF upload ──────────────────────────────────
+# Real-world uplinks reset long transfers (observed: every 8–16 MB on a
+# residential connection). A 90 MB scanned lease as one POST would never
+# land. Protocol: client asks which chunks the instance already holds,
+# sends only the missing ones (each independently retryable), then asks
+# for assembly + sha256 verification. Content-addressed like the
+# single-shot path, so identical files still dedupe.
+
+def _pdf_store(org_id):
+    d = os.path.join(DATA_DIR, 'synced_pdfs', org_id)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _partial_dir(org_id, sha):
+    d = os.path.join(_pdf_store(org_id), '.partial', sha)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _attach_pdf(org_id, device_id, origin_doc_id, fp):
+    db = get_org_db(org_id)
+    try:
+        return db.attach_synced_pdf(device_id, origin_doc_id, fp)
+    finally:
+        db.close()
+
+
+@app.route('/api/sync/pdf/status')
+@device_required
+def api_sync_pdf_status():
+    """What the instance already holds for this sha: complete file, or
+    which chunk indices have landed so far (resume point)."""
+    import re as _re
+    sha = (request.args.get('sha256') or '').lower()
+    if not _re.fullmatch(r'[0-9a-f]{64}', sha):
+        return jsonify({'error': 'sha256 required'}), 400
+    final = os.path.join(_pdf_store(g.device_org_id), f'{sha}.pdf')
+    if os.path.exists(final):
+        return jsonify({'ok': True, 'complete': True, 'chunks': []})
+    pdir = os.path.join(_pdf_store(g.device_org_id), '.partial', sha)
+    have = []
+    if os.path.isdir(pdir):
+        for name in os.listdir(pdir):
+            if name.endswith('.part'):
+                try:
+                    have.append(int(name[:-5]))
+                except ValueError:
+                    pass
+    return jsonify({'ok': True, 'complete': False, 'chunks': sorted(have)})
+
+
+@app.route('/api/sync/pdf/chunk', methods=['POST'])
+@device_required
+def api_sync_pdf_chunk():
+    """Store one chunk. Idempotent — re-sending an index overwrites."""
+    import re as _re
+    sha = (request.args.get('sha256') or '').lower()
+    try:
+        index = int(request.args.get('index', ''))
+        total = int(request.args.get('total', ''))
+    except ValueError:
+        return jsonify({'error': 'index and total required'}), 400
+    if not _re.fullmatch(r'[0-9a-f]{64}', sha) or index < 0 or index >= total:
+        return jsonify({'error': 'bad sha256/index/total'}), 400
+    blob = request.get_data()
+    if not blob:
+        return jsonify({'error': 'empty chunk'}), 400
+    pdir = _partial_dir(g.device_org_id, sha)
+    tmp = os.path.join(pdir, f'{index}.tmp')
+    with open(tmp, 'wb') as f:
+        f.write(blob)
+    os.replace(tmp, os.path.join(pdir, f'{index}.part'))   # atomic
+    return jsonify({'ok': True, 'index': index, 'bytes': len(blob)})
+
+
+@app.route('/api/sync/pdf/complete', methods=['POST'])
+@device_required
+def api_sync_pdf_complete():
+    """Assemble chunks, verify sha256, store content-addressed, attach to
+    the document. Also the attach-only path when the file already exists
+    (dedupe) — the client calls this regardless."""
+    import hashlib as _hashlib
+    import re as _re
+    import shutil as _shutil
+    sha = (request.args.get('sha256') or '').lower()
+    origin_doc_id = request.args.get('origin_doc_id')
+    total = request.args.get('total')
+    if not _re.fullmatch(r'[0-9a-f]{64}', sha) or not origin_doc_id:
+        return jsonify({'error': 'sha256 and origin_doc_id required'}), 400
+
+    store = _pdf_store(g.device_org_id)
+    final = os.path.join(store, f'{sha}.pdf')
+    deduped = os.path.exists(final)
+
+    if not deduped:
+        try:
+            total = int(total)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'total required to assemble'}), 400
+        pdir = os.path.join(store, '.partial', sha)
+        missing = [i for i in range(total)
+                   if not os.path.exists(os.path.join(pdir, f'{i}.part'))]
+        if missing:
+            return jsonify({'error': 'chunks missing', 'missing': missing}), 409
+        h = _hashlib.sha256()
+        tmp_final = final + '.assembling'
+        with open(tmp_final, 'wb') as out:
+            for i in range(total):
+                with open(os.path.join(pdir, f'{i}.part'), 'rb') as part:
+                    data = part.read()
+                    h.update(data)
+                    out.write(data)
+        if h.hexdigest() != sha:
+            os.remove(tmp_final)
+            _shutil.rmtree(pdir, ignore_errors=True)
+            return jsonify({'error': 'sha256 mismatch after assembly — '
+                                     'chunks discarded, re-upload'}), 400
+        os.replace(tmp_final, final)
+        _shutil.rmtree(pdir, ignore_errors=True)
+
+    if not _attach_pdf(g.device_org_id, g.device['device_id'],
+                       origin_doc_id, final):
+        return jsonify({'error': f'no synced document with origin_doc_id '
+                                 f'{origin_doc_id} — push /api/sync/run '
+                                 f'first'}), 404
+    return jsonify({'ok': True, 'sha256': sha, 'deduped': deduped,
+                    'bytes': os.path.getsize(final)})
+
+
 @app.route('/admin/devices', methods=['GET', 'POST'])
 @admin_required
 def admin_devices():
