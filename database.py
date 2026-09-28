@@ -492,7 +492,18 @@ class Database:
         self.conn.execute("PRAGMA synchronous=NORMAL")         # faster writes, still safe with WAL
         self.conn.execute("PRAGMA cache_size=-64000")          # 64MB page cache
         self.conn.execute("PRAGMA wal_autocheckpoint=1000")    # checkpoint every 1000 pages
-        self._create_schema()
+        # Schema/migrations/views are WRITES. Running them on every connect
+        # meant any page load failed with "database is locked" while a
+        # background analysis held the write lock (found 2026-09-28, once
+        # uploads began auto-queuing analysis). Do it once per database per
+        # process; after that, connecting is read-only.
+        key = os.path.abspath(self.db_path) if self.db_path != ':memory:' else None
+        if key is None or key not in Database._schema_ready:
+            self._create_schema()
+            if key is not None:
+                Database._schema_ready.add(key)
+
+    _schema_ready = set()   # db paths whose schema is initialized this process
 
     def _create_schema(self):
         """Create all tables and indexes if they don't exist."""
