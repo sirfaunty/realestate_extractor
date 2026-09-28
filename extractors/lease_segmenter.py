@@ -896,21 +896,129 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
                       'value_unit': 'sqft', 'confidence': 0.85,
                       'section_ref': f'p{sf[1]}', 'page_number': sf[1]})
 
-    # rent (informational)
-    for s in tgt['rent']:
-        r = _ask(llm, s['text'],
-                 '{"base_monthly_rent": ..., "annual_rent": ...}',
-                 f'rent p{s["page_start"]}')
-        v = r.get('base_monthly_rent') or r.get('annual_rent')
-        if v:
-            terms.append({'term_type': 'base_rent',
-                          'term_label': 'Base rent (segmented)',
-                          'value_raw': str(v), 'confidence': 0.7,
-                          'section_ref': f'p{s["page_start"]}',
-                          'page_number': s['page_start']})
-        break
+    # ── deterministic fields (2026-09-28 tie-out) ──
+    # The demo-portfolio harness showed these were either missing or
+    # supplied WRONG by the legacy whole-document rule layer (tenant and
+    # landlord swapped, commencement = expiration). Read them from the
+    # text the way a person would; the LLM is a fallback, not the source.
+    terms.extend(_deterministic_lease_fields(pages, tgt,
+                                             {t['term_type'] for t in terms}))
+    have = {t['term_type'] for t in terms}
+
+    # rent (informational) — LLM only when the schedule parse found nothing
+    if 'base_rent' not in have:
+        for s in tgt['rent']:
+            r = _ask(llm, s['text'],
+                     '{"base_monthly_rent": ..., "annual_rent": ...}',
+                     f'rent p{s["page_start"]}')
+            v = r.get('base_monthly_rent') or r.get('annual_rent')
+            if v:
+                terms.append({'term_type': 'base_rent',
+                              'term_label': 'Base rent (segmented)',
+                              'value_raw': str(v), 'confidence': 0.7,
+                              'section_ref': f'p{s["page_start"]}',
+                              'page_number': s['page_start']})
+            break
 
     return terms
+
+
+_MONTHS = ('January|February|March|April|May|June|July|August|September|'
+           'October|November|December')
+_LONG_DATE = rf'(?:{_MONTHS})\s+\d{{1,2}},\s+\d{{4}}'
+
+
+def _page_of(pages, needle):
+    for pg, t in pages:
+        if needle and needle in re.sub(r'\s+', ' ', t or ''):
+            return pg
+    return None
+
+
+def _party(flat, role):
+    """Name defined as ("Landlord"/"Tenant"). Handles the dominant
+    label-AFTER convention:  X, a Minnesota LLC ("Landlord")."""
+    # Anchor on the connective that introduces the party ("between X" /
+    # "and Y") so a mixed-case name can't collapse to its suffix — the
+    # first version returned "LLC" as the tenant on real Sponsor leases.
+    m = re.search(
+        r'(?:\bbetween|\band)\s+(?:the\s+)?([A-Z][^()"“]{2,160}?)\s*'
+        rf'\(\s*(?:hereinafter\s+(?:called|referred\s+to\s+as)\s+)?'
+        rf'(?:the\s+)?["“]{role}["”]', flat)
+    if not m:
+        return None
+    name = m.group(1)
+    # cut the entity description: ", a Minnesota limited liability company"
+    name = re.split(r',\s*(?:an?|as|its|whose|with)\s', name, maxsplit=1)[0]
+    name = re.sub(r'\s+', ' ', name).strip(' ,.;:')
+    suffixes = {'llc', 'inc', 'co', 'corp', 'ltd', 'lp', 'llp', 'pa', 'pc',
+                'company', 'corporation', 'partnership', 'limited', 'the'}
+    words = [w for w in re.findall(r"[A-Za-z0-9&'’]+", name)
+             if w.lower().rstrip('.') not in suffixes]
+    if not words or len(name) < 3 or len(name) > 90:
+        return None
+    return name
+
+
+def _deterministic_lease_fields(pages, tgt, have):
+    flat = re.sub(r'\s+', ' ', '\n'.join(t for _pg, t in pages))
+    head = flat[:20000]
+    out = []
+
+    def add(tt, label, raw, needle, conf=0.9, num=None, unit=None):
+        pg = _page_of(pages, needle)
+        d = {'term_type': tt, 'term_label': f'{label} (deterministic)',
+             'value_raw': raw, 'confidence': conf,
+             'section_ref': f'p{pg}' if pg else 'body scan', 'page_number': pg}
+        if num is not None:
+            d['value_numeric'] = num
+        if unit:
+            d['value_unit'] = unit
+        out.append(d)
+
+    ll = _party(head, 'Landlord')
+    if ll and 'landlord_name' not in have:
+        add('landlord_name', 'Landlord', ll, ll)
+    tn = _party(head, 'Tenant')
+    if tn and 'tenant_identity' not in have:
+        add('tenant_identity', 'Tenant', tn, tn, conf=0.85)
+
+    if 'lease_commencement' not in have:
+        # all candidate dates; the EARLIEST wins — renewal/option periods
+        # also "commence", always later than the original term
+        cands = []
+        for rx in (rf'commenc\w*\s+(?:on\s+)?({_LONG_DATE})',
+                   rf'["“]Commencement Date["”][^.]{{0,60}}?({_LONG_DATE})',
+                   rf'({_LONG_DATE})\s*\(\s*(?:the\s+)?["“]Commencement Date'):
+            for mm in re.finditer(rx, flat, re.I):
+                try:
+                    cands.append((datetime.datetime.strptime(
+                        re.sub(r'\s+', ' ', mm.group(1)), '%B %d, %Y'), mm.group(1)))
+                except ValueError:
+                    pass
+        if cands:
+            d, raw = min(cands)
+            add('lease_commencement', 'Commencement', f'{d.month}/{d.day}/{d.year}',
+                raw, conf=0.8)
+
+    # Year-1 base rent from a rent schedule, else a stated monthly rent
+    rent_txt = re.sub(r'\s+', ' ', ' '.join(s['text'] for s in tgt.get('rent', []))) or flat
+    m = re.search(r'(?:Lease\s+)?Year\s*1\b[^$]{0,60}?(?:\$[\d,]+\.\d{2}\s*per\s*sq[^$]{0,20})?'
+                  r'\$\s*([\d,]+\.\d{2})\s*per\s*month', rent_txt, re.I) or \
+        re.search(r'(?:monthly\s+(?:base\s+)?rent|Base\s+Rent)[^$]{0,80}\$\s*([\d,]+\.\d{2})\s*'
+                  r'(?:per\s+month|monthly)', rent_txt, re.I)
+    if m:
+        v = float(m.group(1).replace(',', ''))
+        add('base_rent', 'Base rent, Year 1 monthly', f'${v:,.2f}', m.group(1),
+            num=v, unit='monthly')
+
+    m = re.search(r'(?:increase|escalat)\w*[^.]{0,80}?by\s+([\d.]+)\s*percent', flat, re.I) or \
+        re.search(r'(?:increase|escalat)\w*[^.]{0,80}?\(\s*([\d.]+)\s*%\s*\)', flat, re.I)
+    if m:
+        v = float(m.group(1).rstrip('.'))
+        add('escalation_rate', 'Annual escalation', f'{v:g}%', m.group(0)[:40],
+            num=v, unit='percent')
+    return out
 
 
 def summarize(instruments):

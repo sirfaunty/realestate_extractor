@@ -24,6 +24,28 @@ from .llm_client import LocalLLMClient
 logger = logging.getLogger(__name__)
 
 
+
+def _kw_hit(keywords, context):
+    """Whole-word keyword test against ORIGINAL-case context.
+
+    Plain substring matching ('ti' in ctx) let the alias "TI" match inside
+    "escalation", "Section", "parties" — every lease got an invented TI
+    allowance (2026-09-28 demo tie-out). Short aliases (<=3 chars, e.g.
+    TI/CAM/SF) must appear as an uppercase acronym; longer ones match
+    case-insensitively on word boundaries.
+    """
+    for kw in keywords:
+        kw = (kw or '').strip()
+        if not kw:
+            continue
+        if len(kw) <= 3:
+            if re.search(rf'(?<![A-Za-z]){re.escape(kw.upper())}(?![A-Za-z])', context):
+                return True
+        elif re.search(rf'(?<![A-Za-z]){re.escape(kw.lower())}(?![A-Za-z])',
+                       context.lower()):
+            return True
+    return False
+
 class ExtractionEngine:
     """Main extraction engine that routes documents through the appropriate pipeline."""
 
@@ -127,6 +149,17 @@ class ExtractionEngine:
         found = {t['term_type'] for t in rule_terms}
         rule_terms.extend(
             self._extract_prose_patterns(doc, template, found, rule_terms))
+        # The legacy value-first rule layer guesses a field from nearby
+        # words. For leases it is demonstrably wrong on identity and dates
+        # (2026-09-28 demo tie-out: tenant/landlord swapped 12/12,
+        # commencement = expiration 12/12, SF = the CAM rate). The segment
+        # engine reads those from the governing clause — the rule layer may
+        # not supply them at all, even as a fallback.
+        _SEGMENT_OWNED = {'tenant_name', 'landlord_name', 'lease_commencement',
+                          'lease_expiration', 'expiration_date',
+                          'square_footage', 'base_rent', 'escalation_rate'}
+        rule_terms = [t for t in rule_terms
+                      if t['term_type'] not in _SEGMENT_OWNED]
 
         llm = self.llm if self.llm_available else None
         seg_terms = extract_targeted(pages, instruments, llm)
@@ -751,8 +784,7 @@ class ExtractionEngine:
                     date_keywords.extend(['made this', 'executed', 'effective', 'dated as of', 'closing'])
 
                 for dm in date_matches:
-                    ctx = dm['context'].lower()
-                    if any(kw in ctx for kw in date_keywords):
+                    if _kw_hit(date_keywords, dm['context']):
                         raw_date = dm['raw']
                         normalized = self._normalize_date(raw_date)
                         terms.append({
@@ -774,8 +806,7 @@ class ExtractionEngine:
     def _find_best_dollar_match(self, field_def, dollar_matches, field_keywords) -> Optional[Dict]:
         """Find the best dollar amount match for a field, preferring written amounts."""
         for dm in dollar_matches:
-            ctx = dm['full_context'].lower()
-            if any(kw in ctx for kw in field_keywords):
+            if _kw_hit(field_keywords, dm['full_context']):
                 conf = 0.90 if dm.get('source') == 'written' else 0.65
                 return {
                     "term_type": field_def.name,
@@ -789,8 +820,7 @@ class ExtractionEngine:
     def _find_best_pct_match(self, field_def, pct_matches, field_keywords) -> Optional[Dict]:
         """Find the best percentage match for a field, preferring written amounts."""
         for pm in pct_matches:
-            ctx = pm['context'].lower()
-            if any(kw in ctx for kw in field_keywords):
+            if _kw_hit(field_keywords, pm['context']):
                 conf = 0.90 if pm.get('source') == 'written' else 0.65
                 return {
                     "term_type": field_def.name,
@@ -893,8 +923,7 @@ class ExtractionEngine:
 
         # General entity matching via keywords in context
         for em in entity_matches:
-            ctx = em['context'].lower()
-            if any(kw in ctx for kw in field_keywords):
+            if _kw_hit(field_keywords, em['context']):
                 return {
                     "term_type": field_def.name,
                     "term_label": field_def.name.replace('_', ' '),
