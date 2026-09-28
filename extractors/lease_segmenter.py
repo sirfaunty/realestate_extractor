@@ -765,6 +765,23 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
         tmonths = tmonths or _term_months(r.get('term_length'))
         if e:
             governing_exp, governing_src = e, f'lease p{s["page_start"]}'
+    # A date the lease STATES beats one we COMPUTE. Previously the
+    # computation (commencement + term) ran first and the deterministic
+    # stated-expiration scan only as a last resort — so when the LLM took
+    # the signing date for the commencement (it IS in the text, so it
+    # passes verification), every expiration came out wrong (2026-09-28
+    # demo tie-out: 0/12 with LLM, 12/12 without).
+    if not governing_exp:
+        e, src = _scan_expiration(instruments)
+        if e:
+            governing_exp, governing_src = e, f'deterministic: {src}'
+    if not governing_exp and commencement:
+        # prefer the commencement the lease literally defines ("commencing
+        # on …", earliest candidate) over the model's read
+        det = [t for t in _deterministic_lease_fields(pages, tgt, set())
+               if t['term_type'] == 'lease_commencement']
+        if det:
+            commencement = _to_mdy(det[0]['value_raw']) or commencement
     if not governing_exp and commencement and tmonths:
         if contingent:
             terms.append({'term_type': 'commencement_contingent',
