@@ -286,8 +286,8 @@ function renderStats(sc) {
   const cards = [
     { label:'Deal IRR', value:fmtPct(dm.deal_irr), cls:'highlight', link:capactive.moduleLink('/distribution/') },
     { label:'Deal EM', value:fmtX(dm.deal_em), cls:'highlight', link:capactive.moduleLink('/distribution/') },
-    { label:`${P1} Equity Multiple`, value:fmtX(dm.sponsor_em), sub:`IRR ${fmtPct(dm.sponsor_irr)}`, link:capactive.moduleLink('/distribution/') },
-    { label:`${P2} Equity Multiple`, value:fmtX(dm.investor_em), sub:`IRR ${fmtPct(dm.investor_irr)}`, link:capactive.moduleLink('/distribution/') },
+    { label:`${P1} Equity Multiple`, value:fmtX(dm.p1_em), sub:`IRR ${fmtPct(dm.p1_irr)}`, link:capactive.moduleLink('/distribution/') },
+    { label:`${P2} Equity Multiple`, value:fmtX(dm.p2_em), sub:`IRR ${fmtPct(dm.p2_irr)}`, link:capactive.moduleLink('/distribution/') },
     { label:'Min DSCR', value:dm.min_dscr.toFixed(2)+'x', cls: dm.min_dscr < 1.15 ? 'caution-card' : '', link:capactive.moduleLink('/debt/') },
     { label:'Avg DSCR', value:dm.avg_dscr.toFixed(2)+'x', link:capactive.moduleLink('/debt/') },
     { label:'Total Distributions', value:fmtUSD(dm.total_distributions), link:capactive.moduleLink('/distribution/') },
@@ -362,7 +362,7 @@ function renderAnnualTable(sc) {
 
   for (const r of rows) {
     totNoi += r.noi; totDs += r.debt_service; totCf += r.levered_cf;
-    totKa += r.distributions_ka; totIdp += r.distributions_idp;
+    totKa += r.distributions_p1; totIdp += r.distributions_p2;
     totNote += r.surplus_note_payment;
 
     const dscrCls = r.dscr < 1.15 ? ' style="color:var(--danger)"' : (r.dscr < 1.25 ? ' style="color:var(--warning)"' : '');
@@ -372,11 +372,11 @@ function renderAnnualTable(sc) {
       <td class="right">${fmtK(r.debt_service)}</td>
       <td class="right"${dscrCls}><a href="${capactive.moduleLink('/debt/')}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--muted)">${r.dscr.toFixed(2)}x</a></td>
       <td class="right">${fmtK(r.levered_cf)}</td>
-      <td class="right">${fmtK(r.distributions_ka)}</td>
-      <td class="right">${fmtK(r.distributions_idp)}</td>
+      <td class="right">${fmtK(r.distributions_p1)}</td>
+      <td class="right">${fmtK(r.distributions_p2)}</td>
       <td class="right">${fmtK(r.surplus_note_payment)}</td>
-      <td class="right">${fmtPct(r.coc_ka)}</td>
-      <td class="right">${fmtPct(r.coc_idp)}</td>
+      <td class="right">${fmtPct(r.coc_p1)}</td>
+      <td class="right">${fmtPct(r.coc_p2)}</td>
     </tr>`;
   }
 
@@ -409,8 +409,8 @@ function renderCharts(sc) {
     data: {
       labels: years,
       datasets: [
-        { label: P1, data: sc.annual_summary.map(r => r.distributions_ka), backgroundColor: '#185FA5', stack: 'dist' },
-        { label: P2, data: sc.annual_summary.map(r => r.distributions_idp), backgroundColor: '#85B7EB', stack: 'dist' },
+        { label: P1, data: sc.annual_summary.map(r => r.distributions_p1), backgroundColor: '#185FA5', stack: 'dist' },
+        { label: P2, data: sc.annual_summary.map(r => r.distributions_p2), backgroundColor: '#85B7EB', stack: 'dist' },
       ]
     },
     options: {
@@ -466,8 +466,8 @@ function renderComparison() {
         <div class="sc-metrics">
           ${scMetric('Deal IRR', fmtPct(row.deal_irr), d.deal_irr)}
           ${scMetric('Deal EM', fmtX(row.deal_em), d.deal_em)}
-          ${scMetric(`${P1} EM`, fmtX(row.sponsor_em), d.sponsor_em)}
-          ${scMetric(`${P2} EM`, fmtX(row.investor_em), d.investor_em)}
+          ${scMetric(`${P1} EM`, fmtX(row.p1_em), d.p1_em)}
+          ${scMetric(`${P2} EM`, fmtX(row.p2_em), d.p2_em)}
           ${scMetric('Min DSCR', row.min_dscr.toFixed(2)+'x', d.min_dscr)}
           ${scMetric('Total Dist', fmtUSD(row.total_distributions), d.total_distributions, true)}
         </div>

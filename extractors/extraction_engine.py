@@ -20,6 +20,17 @@ from ..templates.document_templates import (
     DocumentTemplate, ExtractionMode, FieldDefinition, FieldPriority, get_template
 )
 from .llm_client import LocalLLMClient
+from ..modules import deal_seed as _deal_seed
+
+
+def _seed_extraction(key: str) -> tuple:
+    """Deployment-specific extraction hints from the gitignored deal seed
+    (e.g. a client's report-header company names). Empty on a clean install."""
+    try:
+        return tuple(str(v).lower() for v in
+                     (_deal_seed.section('extraction').get(key) or []))
+    except Exception:
+        return ()
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +56,15 @@ def _kw_hit(keywords, context):
                        context.lower()):
             return True
     return False
+
+def _seed_extraction_map(key: str) -> dict:
+    """{doc_type: [extra positive keywords]} from the deal seed (clean: {})."""
+    try:
+        raw = _deal_seed.section('extraction').get(key) or {}
+        return {k: [str(v).lower() for v in vs] for k, vs in raw.items()}
+    except Exception:
+        return {}
+
 
 class ExtractionEngine:
     """Main extraction engine that routes documents through the appropriate pipeline."""
@@ -1392,8 +1412,9 @@ class ExtractionEngine:
                 break
 
         # Skip header patterns
-        skip_prefixes = ('database:', 'entity:', 'sponsor', 'staff', 'accrual',
-                         'actual', 'budget', 'reforecast', 'page:')
+        skip_prefixes = ('database:', 'entity:', 'accrual',
+                         'actual', 'budget', 'reforecast', 'page:') \
+            + _seed_extraction('statement_skip_prefixes')
 
         seen_lines = set()  # deduplicate across pages
 
@@ -2722,7 +2743,7 @@ class DocumentClassifier:
                 "in place rents", "unit type", "market rent",
                 "weekly residential", "senior housing",
                 "portfolio weekly", "property performance",
-                "proforma_engine", "net effective", "asking rent",
+                "net effective", "asking rent",
                 "exposure", "application", "approved", "denied",
             ],
             "negative": [
@@ -2846,8 +2867,9 @@ class DocumentClassifier:
         title_text = doc.full_text[:500].lower()
 
         scores = {}  # raw scores (not normalised)
+        extra_kws = _seed_extraction_map('type_keywords')
         for doc_type, kw_config in self.TYPE_KEYWORDS.items():
-            positive_kws = kw_config["positive"]
+            positive_kws = list(kw_config["positive"]) + extra_kws.get(doc_type, [])
             negative_kws = kw_config["negative"]
 
             score = 0

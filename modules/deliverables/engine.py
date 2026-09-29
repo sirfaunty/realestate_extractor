@@ -1,6 +1,6 @@
 """
 Deliverables Engine — assembles deliverable-ready data from the verified
-Sponsor portfolio warehouse plus the canonical module DBs (rent roll).
+portfolio warehouse plus the canonical module DBs (rent roll).
 
 Read-only everywhere: the master is maintained exclusively by the
 aggregation workflow; the rent-roll module DB is canonical per its README.

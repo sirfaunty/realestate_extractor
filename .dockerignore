@@ -31,6 +31,8 @@ _compare_scorecard
 *.xlsx
 cre_fundamentals.html
 git_push.sh
+scripts
+export_for_mac.py
 
 # large local artifacts
 *.zip

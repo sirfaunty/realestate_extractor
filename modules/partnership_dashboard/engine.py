@@ -142,12 +142,12 @@ class YearSummary:
     debt_service: float
     levered_cf: float
     dscr: float
-    distributions_ka: float
-    distributions_idp: float
+    distributions_p1: float
+    distributions_p2: float
     distributions_total: float
     surplus_note_payment: float
-    coc_ka: float
-    coc_idp: float
+    coc_p1: float
+    coc_p2: float
     ltv: Optional[float] = None
     mip: float = 0.0
 
@@ -159,12 +159,12 @@ class YearSummary:
             'debt_service': round(self.debt_service, 2),
             'levered_cf': round(self.levered_cf, 2),
             'dscr': round(self.dscr, 3),
-            'distributions_ka': round(self.distributions_ka, 2),
-            'distributions_idp': round(self.distributions_idp, 2),
+            'distributions_p1': round(self.distributions_p1, 2),
+            'distributions_p2': round(self.distributions_p2, 2),
             'distributions_total': round(self.distributions_total, 2),
             'surplus_note_payment': round(self.surplus_note_payment, 2),
-            'coc_ka': round(self.coc_ka, 4),
-            'coc_idp': round(self.coc_idp, 4),
+            'coc_p1': round(self.coc_p1, 4),
+            'coc_p2': round(self.coc_p2, 4),
             'ltv': round(self.ltv, 4) if self.ltv is not None else None,
             'mip': round(self.mip, 2),
         }
@@ -176,10 +176,10 @@ class DecisionMetrics:
     # Returns
     deal_irr: Optional[float]
     deal_em: float
-    sponsor_irr: Optional[float]
-    sponsor_em: float
-    investor_irr: Optional[float]
-    investor_em: float
+    p1_irr: Optional[float]
+    p1_em: float
+    p2_irr: Optional[float]
+    p2_em: float
     # Risk
     min_dscr: float
     avg_dscr: float
@@ -193,17 +193,17 @@ class DecisionMetrics:
     total_mip: float
     net_sale_proceeds: float
     # Pref status
-    sponsor_unpaid_pref: float
-    investor_unpaid_pref: float
+    p1_unpaid_pref: float
+    p2_unpaid_pref: float
 
     def to_dict(self) -> dict:
         return {
             'deal_irr': round(self.deal_irr, 6) if self.deal_irr else None,
             'deal_em': round(self.deal_em, 4),
-            'sponsor_irr': round(self.sponsor_irr, 6) if self.sponsor_irr else None,
-            'sponsor_em': round(self.sponsor_em, 4),
-            'investor_irr': round(self.investor_irr, 6) if self.investor_irr else None,
-            'investor_em': round(self.investor_em, 4),
+            'p1_irr': round(self.p1_irr, 6) if self.p1_irr else None,
+            'p1_em': round(self.p1_em, 4),
+            'p2_irr': round(self.p2_irr, 6) if self.p2_irr else None,
+            'p2_em': round(self.p2_em, 4),
             'min_dscr': round(self.min_dscr, 3),
             'avg_dscr': round(self.avg_dscr, 3),
             'dscr_breach_count': self.dscr_breach_count,
@@ -214,8 +214,8 @@ class DecisionMetrics:
             'total_surplus_note': round(self.total_surplus_note, 2),
             'total_mip': round(self.total_mip, 2),
             'net_sale_proceeds': round(self.net_sale_proceeds, 2),
-            'sponsor_unpaid_pref': round(self.sponsor_unpaid_pref, 2),
-            'investor_unpaid_pref': round(self.investor_unpaid_pref, 2),
+            'p1_unpaid_pref': round(self.p1_unpaid_pref, 2),
+            'p2_unpaid_pref': round(self.p2_unpaid_pref, 2),
         }
 
 
@@ -453,11 +453,11 @@ class PartnershipDashboardEngine:
 
             dyr = dist_by_year.get(y)
             p1, p2 = dist_eng.partner_ids()
-            dist_ka = dyr.distributions_by_partner.get(p1, 0.0) if dyr else 0.0
-            dist_idp = dyr.distributions_by_partner.get(p2, 0.0) if dyr else 0.0
+            dist_p1 = dyr.distributions_by_partner.get(p1, 0.0) if dyr else 0.0
+            dist_p2 = dyr.distributions_by_partner.get(p2, 0.0) if dyr else 0.0
             note_pmt = dyr.surplus_cash_note_payment if dyr else 0.0
-            coc_ka = dyr.coc_by_partner.get(p1, 0.0) if dyr else 0.0
-            coc_idp = dyr.coc_by_partner.get(p2, 0.0) if dyr else 0.0
+            coc_p1 = dyr.coc_by_partner.get(p1, 0.0) if dyr else 0.0
+            coc_p2 = dyr.coc_by_partner.get(p2, 0.0) if dyr else 0.0
 
             annual.append(YearSummary(
                 year=y,
@@ -466,23 +466,23 @@ class PartnershipDashboardEngine:
                 debt_service=ds,
                 levered_cf=lcf,
                 dscr=dscr_by_year_map.get(y, 0.0),
-                distributions_ka=dist_ka,
-                distributions_idp=dist_idp,
-                distributions_total=dist_ka + dist_idp,
+                distributions_p1=dist_p1,
+                distributions_p2=dist_p2,
+                distributions_total=dist_p1 + dist_p2,
                 surplus_note_payment=note_pmt,
-                coc_ka=coc_ka,
-                coc_idp=coc_idp,
+                coc_p1=coc_p1,
+                coc_p2=coc_p2,
                 ltv=ltv_by_year_map.get(y),
                 mip=mip_by_year.get(y, 0.0),
             ))
 
         # ── 5. Decision metrics ────────────────────────────────────
-        # sponsor_*/investor_* fields = managing class / investor class (first/second
+        # p1_*/p2_* fields = managing class / investor class (first/second
         # partner of the deal); labels come from partner_ids in the payload.
         p1, p2 = dist_eng.partner_ids()
         deal_ret = dist_result.returns.get('deal', {})
-        sponsor_ret = dist_result.returns.get('by_partner', {}).get(p1, {})
-        investor_ret = dist_result.returns.get('by_partner', {}).get(p2, {})
+        p1_ret = dist_result.returns.get('by_partner', {}).get(p1, {})
+        p2_ret = dist_result.returns.get('by_partner', {}).get(p2, {})
 
         total_noi = sum(a.noi for a in annual)
         total_dist = sum(a.distributions_total for a in annual)
@@ -491,10 +491,10 @@ class PartnershipDashboardEngine:
         decision = DecisionMetrics(
             deal_irr=deal_ret.get('irr'),
             deal_em=deal_ret.get('equity_multiple', 0.0),
-            sponsor_irr=sponsor_ret.get('irr'),
-            sponsor_em=sponsor_ret.get('equity_multiple', 0.0),
-            investor_irr=investor_ret.get('irr'),
-            investor_em=investor_ret.get('equity_multiple', 0.0),
+            p1_irr=p1_ret.get('irr'),
+            p1_em=p1_ret.get('equity_multiple', 0.0),
+            p2_irr=p2_ret.get('irr'),
+            p2_em=p2_ret.get('equity_multiple', 0.0),
             min_dscr=min_dscr,
             avg_dscr=avg_dscr,
             dscr_breach_count=breaches,
@@ -505,9 +505,9 @@ class PartnershipDashboardEngine:
             total_surplus_note=total_note,
             total_mip=total_mip,
             net_sale_proceeds=snap.net_sale_proceeds if snap else 0.0,
-            sponsor_unpaid_pref=dist_result.final_accounts.get(p1).unpaid_pref
+            p1_unpaid_pref=dist_result.final_accounts.get(p1).unpaid_pref
                 if p1 in dist_result.final_accounts else 0.0,
-            investor_unpaid_pref=dist_result.final_accounts.get(p2).unpaid_pref
+            p2_unpaid_pref=dist_result.final_accounts.get(p2).unpaid_pref
                 if p2 in dist_result.final_accounts else 0.0,
         )
 
@@ -575,10 +575,10 @@ class PartnershipDashboardEngine:
                 'tif_scenario': sc.tif_scenario,
                 'deal_irr': dm.deal_irr,
                 'deal_em': dm.deal_em,
-                'sponsor_irr': dm.sponsor_irr,
-                'sponsor_em': dm.sponsor_em,
-                'investor_irr': dm.investor_irr,
-                'investor_em': dm.investor_em,
+                'p1_irr': dm.p1_irr,
+                'p1_em': dm.p1_em,
+                'p2_irr': dm.p2_irr,
+                'p2_em': dm.p2_em,
                 'min_dscr': dm.min_dscr,
                 'avg_dscr': dm.avg_dscr,
                 'total_distributions': dm.total_distributions,
@@ -591,8 +591,8 @@ class PartnershipDashboardEngine:
                 row['delta'] = {
                     'deal_irr': _delta(dm.deal_irr, bdm.deal_irr),
                     'deal_em': round(dm.deal_em - bdm.deal_em, 4),
-                    'sponsor_em': round(dm.sponsor_em - bdm.sponsor_em, 4),
-                    'investor_em': round(dm.investor_em - bdm.investor_em, 4),
+                    'p1_em': round(dm.p1_em - bdm.p1_em, 4),
+                    'p2_em': round(dm.p2_em - bdm.p2_em, 4),
                     'min_dscr': round(dm.min_dscr - bdm.min_dscr, 3),
                     'total_distributions': round(
                         dm.total_distributions - bdm.total_distributions, 2),

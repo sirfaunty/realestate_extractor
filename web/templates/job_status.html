@@ -384,7 +384,7 @@ function updatePipelineUI(currentStep) {
 function updateElapsed() {
     const el = document.getElementById('elapsed-time');
     if (!el || !polling) return;
-    const secs = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+    const secs = Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000));
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     el.textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;

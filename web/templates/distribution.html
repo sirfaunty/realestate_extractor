@@ -28,8 +28,8 @@
   --success: #10B981;
   --danger: #dc2626;
   --warning: #d97706;
-  --sponsor-color: #185FA5;
-  --investor-color: #d97706;
+  --p1-color: #185FA5;
+  --p2-color: #d97706;
   --mono: 'SF Mono', Consolas, monospace;
   --font: 'Inter', system-ui, -apple-system, sans-serif;
 
@@ -56,8 +56,8 @@
   font-size: 11px; color: var(--muted); text-transform: uppercase;
   letter-spacing: 0.4px; margin-top: 2px;
 }
-.dist-root .stat-card.sponsor .stat-value { color: var(--sponsor-color); }
-.dist-root .stat-card.investor .stat-value { color: var(--investor-color); }
+.dist-root .stat-card.p1 .stat-value { color: var(--p1-color); }
+.dist-root .stat-card.p2 .stat-value { color: var(--p2-color); }
 
 /* ── Section Panels ── */
 .dist-root .panel {
@@ -135,8 +135,8 @@
   display: inline-block; padding: 2px 8px; border-radius: 4px;
   font-size: 11px; font-weight: 600;
 }
-.dist-root .partner-tag.sponsor { background: #E6F1FB; color: var(--sponsor-color); }
-.dist-root .partner-tag.investor { background: #FEF3C7; color: var(--investor-color); }
+.dist-root .partner-tag.p1 { background: #E6F1FB; color: var(--p1-color); }
+.dist-root .partner-tag.p2 { background: #FEF3C7; color: var(--p2-color); }
 
 /* ── Toggle ── */
 .dist-root .toggle-btn {
@@ -406,8 +406,8 @@
   function renderStats(d) {
     const ret = d.returns;
     const deal = ret.deal;
-    const sponsor = ret.by_partner[P1] || {};
-    const investor = ret.by_partner[P2] || {};
+    const c1 = ret.by_partner[P1] || {};
+    const c2 = ret.by_partner[P2] || {};
     const ctx = d.proforma_context;
     let saleHtml = '';
     if (ctx && ctx.net_sale_proceeds > 0 && _includeSale) {
@@ -425,20 +425,20 @@
         <div class="stat-value">${fmtX(deal.equity_multiple)}</div>
         <div class="stat-label">Deal EM</div>
       </div>
-      <div class="stat-card sponsor">
-        <div class="stat-value">${fmtX(sponsor.equity_multiple)}</div>
+      <div class="stat-card p1">
+        <div class="stat-value">${fmtX(c1.equity_multiple)}</div>
         <div class="stat-label">${P1} Equity Multiple</div>
       </div>
-      <div class="stat-card investor">
-        <div class="stat-value">${fmtX(investor.equity_multiple)}</div>
+      <div class="stat-card p2">
+        <div class="stat-value">${fmtX(c2.equity_multiple)}</div>
         <div class="stat-label">${P2} Equity Multiple</div>
       </div>
-      <div class="stat-card sponsor">
-        <div class="stat-value">${fmtPct(sponsor.irr)}</div>
+      <div class="stat-card p1">
+        <div class="stat-value">${fmtPct(c1.irr)}</div>
         <div class="stat-label">${P1} IRR</div>
       </div>
-      <div class="stat-card investor">
-        <div class="stat-value">${fmtPct(investor.irr)}</div>
+      <div class="stat-card p2">
+        <div class="stat-value">${fmtPct(c2.irr)}</div>
         <div class="stat-label">${P2} IRR</div>
       </div>
       ${saleHtml}
@@ -494,20 +494,20 @@
 
   function renderReturns(ret, ctx) {
     const deal = ret.deal;
-    const sponsor = ret.by_partner[P1] || {};
-    const investor = ret.by_partner[P2] || {};
+    const c1 = ret.by_partner[P1] || {};
+    const c2 = ret.by_partner[P2] || {};
 
     let html = '<table class="dist-table"><thead><tr>';
     html += '<th>Metric</th><th class="right">Deal</th>';
-    html += `<th class="right"><span class="partner-tag sponsor">${P1}</span></th>`;
-    html += `<th class="right"><span class="partner-tag investor">${P2}</span></th>`;
+    html += `<th class="right"><span class="partner-tag p1">${P1}</span></th>`;
+    html += `<th class="right"><span class="partner-tag p2">${P2}</span></th>`;
     html += '</tr></thead><tbody>';
 
-    html += row('Total Equity', fmt(deal.total_equity), fmt(sponsor.initial_equity), fmt(investor.initial_equity));
-    html += row('Total Distributions', fmt(deal.total_distributed), fmt(sponsor.total_distributions), fmt(investor.total_distributions));
-    html += row('Equity Multiple', fmtX(deal.equity_multiple), fmtX(sponsor.equity_multiple), fmtX(investor.equity_multiple));
-    html += row('IRR', fmtPct(deal.irr), fmtPct(sponsor.irr), fmtPct(investor.irr));
-    html += row('Avg Cash-on-Cash', '—', fmtPct(sponsor.avg_cash_on_cash), fmtPct(investor.avg_cash_on_cash));
+    html += row('Total Equity', fmt(deal.total_equity), fmt(c1.initial_equity), fmt(c2.initial_equity));
+    html += row('Total Distributions', fmt(deal.total_distributed), fmt(c1.total_distributions), fmt(c2.total_distributions));
+    html += row('Equity Multiple', fmtX(deal.equity_multiple), fmtX(c1.equity_multiple), fmtX(c2.equity_multiple));
+    html += row('IRR', fmtPct(deal.irr), fmtPct(c1.irr), fmtPct(c2.irr));
+    html += row('Avg Cash-on-Cash', '—', fmtPct(c1.avg_cash_on_cash), fmtPct(c2.avg_cash_on_cash));
 
     if (ctx) {
       html += '<tr><td colspan="4" style="border-top:2px solid var(--border);font-size:11px;color:var(--muted);padding-top:8px">Proforma Benchmarks</td></tr>';
@@ -531,22 +531,22 @@
     if (hasCtx) html += '<th class="right" style="color:var(--muted)">NOI</th><th class="right" style="color:var(--muted)">Debt Svc</th>';
     html += '<th class="right">Distributable CF</th>';
     html += '<th class="right">Surplus Note</th><th class="right">Net Distributable</th>';
-    html += `<th class="right"><span class="partner-tag sponsor">${P1}</span></th>`;
-    html += `<th class="right"><span class="partner-tag investor">${P2}</span></th>`;
+    html += `<th class="right"><span class="partner-tag p1">${P1}</span></th>`;
+    html += `<th class="right"><span class="partner-tag p2">${P2}</span></th>`;
     html += `<th class="right">${P1} CoC</th><th class="right">${P2} CoC</th>`;
     if (_showTierDetail) html += '<th>Tier Breakdown</th>';
     html += '</tr></thead><tbody>';
 
-    let totals = { cf: 0, note: 0, net: 0, sponsor: 0, investor: 0 };
+    let totals = { cf: 0, note: 0, net: 0, c1: 0, c2: 0 };
 
     years.forEach(yr => {
-      const sponsor = yr.distributions_by_partner[P1] || 0;
-      const investor = yr.distributions_by_partner[P2] || 0;
+      const c1 = yr.distributions_by_partner[P1] || 0;
+      const c2 = yr.distributions_by_partner[P2] || 0;
       totals.cf += yr.distributable_cash;
       totals.note += yr.surplus_cash_note_payment;
       totals.net += yr.net_distributable;
-      totals.sponsor += sponsor;
-      totals.investor += investor;
+      totals.c1 += c1;
+      totals.c2 += c2;
 
       html += `<tr>
         <td style="font-weight:600">Y${yr.year} <span style="color:var(--muted);font-weight:400">(${yr.calendar_year})</span></td>`;
@@ -560,8 +560,8 @@
         <td class="right">${fmt(yr.distributable_cash)}</td>
         <td class="right" style="color:var(--warning)">${fmt(yr.surplus_cash_note_payment)}</td>
         <td class="right">${fmt(yr.net_distributable)}</td>
-        <td class="right">${fmt(sponsor)}</td>
-        <td class="right">${fmt(investor)}</td>
+        <td class="right">${fmt(c1)}</td>
+        <td class="right">${fmt(c2)}</td>
         <td class="right">${fmtPct(yr.coc_by_partner[P1])}</td>
         <td class="right">${fmtPct(yr.coc_by_partner[P2])}</td>`;
       if (_showTierDetail) {
@@ -580,8 +580,8 @@
       <td class="right">${fmt(totals.cf)}</td>
       <td class="right">${fmt(totals.note)}</td>
       <td class="right">${fmt(totals.net)}</td>
-      <td class="right">${fmt(totals.sponsor)}</td>
-      <td class="right">${fmt(totals.investor)}</td>
+      <td class="right">${fmt(totals.c1)}</td>
+      <td class="right">${fmt(totals.c2)}</td>
       <td class="right">—</td><td class="right">—</td>
       ${_showTierDetail ? '<td>—</td>' : ''}
     </tr>`;
@@ -591,8 +591,8 @@
 
   function renderChart(years) {
     const labels = years.map(y => y.calendar_year);
-    const kaData = years.map(y => Math.round(y.distributions_by_partner[P1] || 0));
-    const idpData = years.map(y => Math.round(y.distributions_by_partner[P2] || 0));
+    const p1Data = years.map(y => Math.round(y.distributions_by_partner[P1] || 0));
+    const p2Data = years.map(y => Math.round(y.distributions_by_partner[P2] || 0));
     const noteData = years.map(y => Math.round(y.surplus_cash_note_payment || 0));
 
     if (_chart) _chart.destroy();
@@ -601,8 +601,8 @@
       data: {
         labels,
         datasets: [
-          { label: `${P1} Distribution`, data: kaData, backgroundColor: '#185FA5', stack: 'dist' },
-          { label: `${P2} Distribution`, data: idpData, backgroundColor: '#d97706', stack: 'dist' },
+          { label: `${P1} Distribution`, data: p1Data, backgroundColor: '#185FA5', stack: 'dist' },
+          { label: `${P2} Distribution`, data: p2Data, backgroundColor: '#d97706', stack: 'dist' },
           { label: 'Surplus Cash Note', data: noteData, backgroundColor: '#dc262688', stack: 'note' },
         ]
       },

@@ -1,5 +1,5 @@
 """
-Deliverables Module — document generation from the verified Sponsor portfolio
+Deliverables Module — document generation from the verified portfolio
 warehouse and canonical module DBs (read-only sources).
 
 First deliverable: the per-property Lease Abstract Compendium (.docx) —

@@ -920,7 +920,7 @@ def upload():
             'progress': 0,
             'total': file_count,
             'results': [],
-            'started': datetime.now().isoformat(),
+            'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
             'step': 'ingesting',
             'step_detail': f'Reading {first_filename}...',
             'steps_log': [{'step': 'ingesting', 'detail': f'Reading {first_filename}...', 'time': datetime.now().isoformat()}],
@@ -1110,7 +1110,7 @@ def batch():
             'progress': 0,
             'total': pdf_count,
             'results': [],
-            'started': datetime.now().isoformat(),
+            'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
             'step': 'ingesting',
             'step_detail': 'Starting batch...',
             'steps_log': [{'step': 'ingesting', 'detail': 'Starting batch...', 'time': datetime.now().isoformat()}],
@@ -3010,7 +3010,7 @@ def api_reextract(doc_id):
             'progress': 0,
             'results': [],
             'error': None,
-            'started': datetime.now().isoformat(),
+            'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
             'step': 'ingesting',
             'step_detail': f'Reading {filename}...',
             'steps_log': [{'step': 'ingesting', 'detail': f'Reading {filename}...', 'time': datetime.now().isoformat()}],
@@ -3077,7 +3077,7 @@ def api_versioned_reanalyze(property_id):
         'progress': 0,
         'results': [],
         'error': None,
-        'started': datetime.now().isoformat(),
+        'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
         'step': 'analyzing',
         'step_detail': 'Starting versioned re-analysis...',
         'steps_log': [{'step': 'analyzing',
@@ -3344,7 +3344,7 @@ def api_bulk_reextract():
         'progress': 0,
         'results': [],
         'error': None,
-        'started': datetime.now().isoformat(),
+        'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
         'step': 'reprocessing',
         'step_detail': f'Queued {total} documents for re-extraction...',
         'steps_log': [{'step': 'reprocessing',
@@ -3441,7 +3441,7 @@ def _queue_property_analysis(org_id, property_id, trigger='manual'):
         'progress': 0,
         'results': [],
         'error': None,
-        'started': datetime.now().isoformat(),
+        'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
         'step': 'analyzing',
         'step_detail': f'Analyzing {len(docs)} documents...',
         'steps_log': [{'step': 'analyzing', 'detail': f'Starting analysis for {prop["name"]}...', 'time': datetime.now().isoformat()}],
@@ -3906,7 +3906,7 @@ def api_analyze_selective(property_id):
         'progress': 0,
         'results': [],
         'error': None,
-        'started': datetime.now().isoformat(),
+        'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
         'step': 'analyzing',
         'step_detail': f'{mode_label}: processing {len(process_ids)} of {len(docs)} documents...',
         'steps_log': [{

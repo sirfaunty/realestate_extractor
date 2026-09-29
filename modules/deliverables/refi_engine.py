@@ -1,6 +1,6 @@
 """
 Refi-package data assembly — everything a refinance diligence packet needs
-for one property, read-only from the Sponsor master + rent-roll module.
+for one property, read-only from the portfolio master + rent-roll module.
 
 Two-key discipline: the loan layer keys facilities by EITHER the composite
 property key (ENGELS-2010) or the bare entity code (1603) — always join on

@@ -1,5 +1,5 @@
 """
-Deliverables routes — generate verified-source documents from the Sponsor
+Deliverables routes — generate verified-source documents from the
 portfolio warehouse (read-only) into data/deliverables/, list and download.
 """
 
@@ -55,8 +55,8 @@ a { color:var(--accent); text-decoration:none; }
 </style></head><body>
 <div class='crumb'><a href='/'>&larr; Dashboard</a></div>
 <h1>Deliverables</h1>
-<div class='sub'>Generated from the verified Sponsor portfolio warehouse
-(page-cited provisions) + the canonical MRI rent-roll module. Read-only
+<div class='sub'>Generated from the verified portfolio warehouse
+(page-cited provisions) + the rent-roll module. Read-only
 sources; documents land in <span class='badge'>data/deliverables/</span>.</div>
 
 <div id='status'></div>
@@ -199,7 +199,7 @@ def _register_job(pid, mode):
             'progress': 0, 'total': 1,
             'step': 'rendering',
             'step_detail': labels.get(mode, mode),
-            'started': datetime.now().isoformat(),
+            'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
         }
         return jobs, job_id
     except Exception:

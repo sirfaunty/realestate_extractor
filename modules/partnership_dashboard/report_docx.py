@@ -261,9 +261,9 @@ def _annual_cash_flow(doc, sc, p1, p2):
         fill = FILL_ALT if i % 2 == 0 else None
         dscr = yr.get('dscr') or 0.0
         vals = [str(yr.get('calendar_year')), fmt_k(yr.get('noi')), fmt_k(yr.get('debt_service')),
-                f'{dscr:.2f}x', fmt_k(yr.get('levered_cf')), fmt_k(yr.get('distributions_ka')),
-                fmt_k(yr.get('distributions_idp')), fmt_k(yr.get('surplus_note_payment')),
-                fmt_pct(yr.get('coc_ka')), fmt_pct(yr.get('coc_idp'))]
+                f'{dscr:.2f}x', fmt_k(yr.get('levered_cf')), fmt_k(yr.get('distributions_p1')),
+                fmt_k(yr.get('distributions_p2')), fmt_k(yr.get('surplus_note_payment')),
+                fmt_pct(yr.get('coc_p1')), fmt_pct(yr.get('coc_p2'))]
         for j, (c, v) in enumerate(zip(_add_row(t, widths), vals)):
             color = None
             if j == 3:
@@ -273,8 +273,8 @@ def _annual_cash_flow(doc, sc, p1, p2):
         tot['noi'] += yr.get('noi') or 0
         tot['ds'] += yr.get('debt_service') or 0
         tot['cf'] += yr.get('levered_cf') or 0
-        tot['a'] += yr.get('distributions_ka') or 0
-        tot['b'] += yr.get('distributions_idp') or 0
+        tot['a'] += yr.get('distributions_p1') or 0
+        tot['b'] += yr.get('distributions_p2') or 0
         tot['note'] += yr.get('surplus_note_payment') or 0
     totals = ['Total', fmt_k(tot['noi']), fmt_k(tot['ds']), '—', fmt_k(tot['cf']),
               fmt_k(tot['a']), fmt_k(tot['b']), fmt_k(tot['note']), '—', '—']
@@ -318,7 +318,7 @@ def _scenario_comparison(doc, data, p1, p2):
                'The first column represents the baseline (no appeal) case.',
           color=GRAY, italic=True, after=6)
     metrics = [('Deal IRR', 'deal_irr', fmt_pct), ('Deal EM', 'deal_em', fmt_x),
-               (f'{p1} EM', 'sponsor_em', fmt_x), (f'{p2} EM', 'investor_em', fmt_x),
+               (f'{p1} EM', 'p1_em', fmt_x), (f'{p2} EM', 'p2_em', fmt_x),
                ('Min DSCR', 'min_dscr', fmt_x), ('Avg DSCR', 'avg_dscr', fmt_x),
                ('Total Distributions', 'total_distributions', fmt_usd),
                ('Net Sale Proceeds', 'net_sale_proceeds', fmt_usd)]
