@@ -1,6 +1,10 @@
 """
-TIF / Tax Model Engine -- translates Landlord's 14-tab Deal A TIF Excel
-model into a reusable Python scoring engine.
+TIF / Tax Model Engine -- a reusable Python port of a multi-tab TIF Excel
+model.
+
+Deal-specific assumptions and TMV scenarios come from the per-deal config or
+the deployment's deal seed (data/deal_seeds/, gitignored — see
+modules/deal_seed.py). Without either, neutral example values apply.
 
 Pure Python + dataclasses + math.  No web dependencies.
 
@@ -21,6 +25,8 @@ import math
 from dataclasses import dataclass, field, asdict, fields
 from typing import Any
 
+from .. import deal_seed
+
 
 # ---------------------------------------------------------------------------
 # Assumptions
@@ -30,12 +36,13 @@ from typing import Any
 class TIFAssumptions:
     """All tunable parameters for the TIF model.
 
-    Defaults match the Deal A project as of Pay-2026.
+    Field defaults are a neutral illustrative project — a deployment's real
+    values come from its deal seed via ``seeded_defaults()``.
     """
 
     # Classification & tax rates
-    class_rate: float = 0.0125            # MN 273.13 apartments
-    tax_capacity_rate: float = 1.27866    # composite local rate
+    class_rate: float = 0.0125            # MN 273.13 apartments (statutory)
+    tax_capacity_rate: float = 1.20       # composite local rate
 
     # Developer / admin splits
     developer_share: float = 1.0          # TIF Plan section IV
@@ -43,12 +50,12 @@ class TIFAssumptions:
     osa_fee_pct: float = 0.0036           # State Auditor TIF fee
 
     # Frozen base
-    original_ntc: float = 37_179.0
+    original_ntc: float = 30_000.0
 
     # TIF Note terms
     note_principal: float = 5_000_000.0
-    note_interest_rate: float = 0.046     # 4.60 %
-    note_start_balance: float = 5_000_000.0  # as of Pay-2026
+    note_interest_rate: float = 0.05
+    note_start_balance: float = 5_000_000.0
 
     # Contract floor
     maa_floor: float = 35_000_000.0       # contractual minimum TMV
@@ -88,25 +95,26 @@ class TIFAssumptions:
     # ------------------------------------------------------------------
 
     @classmethod
-    def proforma_engine_defaults(cls) -> TIFAssumptions:
-        """Factory for Deal A-specific assumptions (the defaults)."""
-        return cls()
+    def seeded_defaults(cls) -> TIFAssumptions:
+        """The deployment's deal seed overlaid on the neutral field defaults."""
+        return cls._overlay(cls(), deal_seed.section('tif').get('assumptions'))
+
+    @classmethod
+    def _overlay(cls, base: "TIFAssumptions", config: dict | None) -> "TIFAssumptions":
+        if config:
+            valid = {f.name for f in fields(cls)}
+            for key, value in config.items():
+                if key in valid:
+                    setattr(base, key, value)
+        return base
 
     @classmethod
     def from_config(cls, config: dict | None) -> "TIFAssumptions":
         """Build assumptions from an editable per-deal config, overlaying only
-        recognized fields onto the Deal A defaults. A missing/None config
-        returns the defaults unchanged, so the default deal is byte-for-byte
-        identical to the hardcoded behavior. Non-field keys (e.g. 'scenarios')
-        are ignored here and handled by the caller."""
-        base = cls()
-        if not config:
-            return base
-        valid = {f.name for f in fields(cls)}
-        for key, value in config.items():
-            if key in valid:
-                setattr(base, key, value)
-        return base
+        recognized fields onto the seeded defaults. A missing/None config
+        returns the seeded defaults unchanged. Non-field keys (e.g.
+        'scenarios') are ignored here and handled by the caller."""
+        return cls._overlay(cls.seeded_defaults(), config)
 
     def to_config(self) -> dict:
         """Serialize the stored (non-derived) fields for the editable config store."""
@@ -139,13 +147,23 @@ class ScenarioResult:
 # Engine
 # ---------------------------------------------------------------------------
 
-# Default Deal A scenarios (flat TMV across all years)
-DEAL_A_SCENARIOS: dict[str, float] = {
+# Neutral example scenarios (flat TMV across all years). The first entry is
+# the baseline. A deployment's real scenarios come from its deal seed.
+EXAMPLE_SCENARIOS: dict[str, float] = {
     'Current':    45_000_000.0,
-    'Mid':        52_150_000.0,
-    'Aggressive': 50_000_000.0,
+    'Mid':        42_500_000.0,
+    'Aggressive': 40_000_000.0,
     'MAA Floor':  35_000_000.0,
 }
+
+
+def default_scenarios() -> dict[str, float]:
+    """Deal-seed scenarios if present, else the neutral example."""
+    return dict(deal_seed.section('tif').get('scenarios') or EXAMPLE_SCENARIOS)
+
+
+# Module-level snapshot for callers that import a constant.
+DEFAULT_SCENARIOS: dict[str, float] = default_scenarios()
 
 
 class TIFEngine:
@@ -161,7 +179,7 @@ class TIFEngine:
     """
 
     def __init__(self, assumptions: TIFAssumptions | None = None):
-        self.a = assumptions or TIFAssumptions.proforma_engine_defaults()
+        self.a = assumptions or TIFAssumptions.seeded_defaults()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -344,7 +362,7 @@ class TIFEngine:
         Parameters
         ----------
         scenarios : dict mapping name -> TMV schedule, optional
-            Defaults to the four Deal A flat scenarios.
+            Defaults to the deal's flat scenarios (default_scenarios()).
 
         Returns
         -------
@@ -355,7 +373,7 @@ class TIFEngine:
         if scenarios is None:
             scenarios = {
                 name: self._make_flat_schedule(tmv)
-                for name, tmv in DEAL_A_SCENARIOS.items()
+                for name, tmv in default_scenarios().items()
             }
 
         results: dict[str, ScenarioResult] = {}
@@ -472,7 +490,7 @@ class TIFEngine:
             *steps* evenly spaced values from baseline down to MAA floor.
         baseline_tmv : float, optional
             The "current" TMV to compare against.  Defaults to
-            ``DEAL_A_SCENARIOS['Current']``.
+            the first (baseline) entry of ``default_scenarios()``.
         steps : int
             Number of steps when auto-generating the sweep range.
 
@@ -483,7 +501,7 @@ class TIFEngine:
         a = self.a
 
         if baseline_tmv is None:
-            baseline_tmv = DEAL_A_SCENARIOS['Current']
+            baseline_tmv = next(iter(default_scenarios().values()))
 
         if tmv_values is None:
             step_size = (baseline_tmv - a.maa_floor) / max(steps - 1, 1)

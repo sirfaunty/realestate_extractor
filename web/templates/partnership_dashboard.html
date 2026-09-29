@@ -104,9 +104,13 @@
 .pd-root .chart-box canvas { width:100%!important; max-height:260px; }
 
 /* ─── Export Button ───────────────────────────────────────────── */
-.pd-root .btn-export { display:inline-flex; align-items:center; padding:6px 14px; background:var(--brand-primary); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
-.pd-root .btn-export:hover { background:var(--brand-navy); }
-.pd-root .btn-export:disabled { background:var(--muted); cursor:wait; }
+.pd-root .btn-export { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 14px; white-space:nowrap; flex-shrink:0; background:var(--brand-primary); color:#fff; border:1px solid var(--brand-primary); border-radius:6px; font-size:13px; font-weight:600; line-height:1; cursor:pointer; transition:background .15s, border-color .15s; }
+.pd-root .btn-export svg { flex-shrink:0; }
+@keyframes pd-spin { to { transform: rotate(360deg); } }
+.pd-root .scenario-pick { flex-shrink:0; }
+.pd-root .scenario-pick label { white-space:nowrap; }
+.pd-root .btn-export:hover { background:var(--brand-navy); border-color:var(--brand-navy); }
+.pd-root .btn-export:disabled { background:var(--muted); border-color:var(--muted); cursor:wait; }
 
 @media (max-width:900px) {
   .pd-root .chart-row { grid-template-columns:1fr; }
@@ -121,15 +125,15 @@
   <div class="page-hdr">
     <div>
       <h1>Partnership Dashboard</h1>
-      <span class="entity" id="entityName">Example Partners LLC</span>
+      <span class="entity" id="entityName"></span>
     </div>
     <div class="scenario-pick" style="display:flex;align-items:center;gap:12px;">
-      <label style="font-size:12px;color:var(--muted);">TIF Scenario:</label>
+      <label for="scenarioSelect" style="font-size:12px;color:var(--muted);">TIF Scenario</label>
       <select id="scenarioSelect" onchange="switchScenario(this.value)">
         <option value="__all__">All Scenarios</option>
       </select>
       <button onclick="exportReport()" id="exportBtn" class="btn-export" title="Download investor report (.docx)">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:4px;"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Export Report
       </button>
     </div>
@@ -168,11 +172,11 @@
               <th class="right">Debt Svc</th>
               <th class="right">DSCR</th>
               <th class="right">Levered CF</th>
-              <th class="right">Sponsor Dist</th>
-              <th class="right">Investor Dist</th>
+              <th class="right"><span class="p1">P1</span> Dist</th>
+              <th class="right"><span class="p2">P2</span> Dist</th>
               <th class="right">Note Pmt</th>
-              <th class="right">Sponsor CoC</th>
-              <th class="right">Investor CoC</th>
+              <th class="right"><span class="p1">P1</span> CoC</th>
+              <th class="right"><span class="p2">P2</span> CoC</th>
             </tr>
           </thead>
           <tbody id="annualBody"></tbody>
@@ -211,10 +215,17 @@ document.addEventListener('DOMContentLoaded', () => {
   loadDashboard();
 });
 
+// Partner class ids (managing, investor) — from the dashboard payload.
+let P1 = 'P1', P2 = 'P2';
+
 async function loadDashboard() {
   try {
     const r = await fetch('/partnership/api/dashboard');
     _dashboard = await r.json();
+    const ids = _dashboard.partner_ids || [];
+    P1 = ids[0] || P1; P2 = ids[1] || P2;
+    document.querySelectorAll('.p1').forEach(e => e.textContent = P1);
+    document.querySelectorAll('.p2').forEach(e => e.textContent = P2);
     populateScenarioSelect();
     // Use TIF from URL param or default to first scenario
     const urlTif = capactive.getTif();
@@ -275,8 +286,8 @@ function renderStats(sc) {
   const cards = [
     { label:'Deal IRR', value:fmtPct(dm.deal_irr), cls:'highlight', link:capactive.moduleLink('/distribution/') },
     { label:'Deal EM', value:fmtX(dm.deal_em), cls:'highlight', link:capactive.moduleLink('/distribution/') },
-    { label:'Sponsor Equity Multiple', value:fmtX(dm.sponsor_em), sub:`IRR ${fmtPct(dm.sponsor_irr)}`, link:capactive.moduleLink('/distribution/') },
-    { label:'Investor Equity Multiple', value:fmtX(dm.investor_em), sub:`IRR ${fmtPct(dm.investor_irr)}`, link:capactive.moduleLink('/distribution/') },
+    { label:`${P1} Equity Multiple`, value:fmtX(dm.sponsor_em), sub:`IRR ${fmtPct(dm.sponsor_irr)}`, link:capactive.moduleLink('/distribution/') },
+    { label:`${P2} Equity Multiple`, value:fmtX(dm.investor_em), sub:`IRR ${fmtPct(dm.investor_irr)}`, link:capactive.moduleLink('/distribution/') },
     { label:'Min DSCR', value:dm.min_dscr.toFixed(2)+'x', cls: dm.min_dscr < 1.15 ? 'caution-card' : '', link:capactive.moduleLink('/debt/') },
     { label:'Avg DSCR', value:dm.avg_dscr.toFixed(2)+'x', link:capactive.moduleLink('/debt/') },
     { label:'Total Distributions', value:fmtUSD(dm.total_distributions), link:capactive.moduleLink('/distribution/') },
@@ -398,8 +409,8 @@ function renderCharts(sc) {
     data: {
       labels: years,
       datasets: [
-        { label: 'Sponsor', data: sc.annual_summary.map(r => r.distributions_ka), backgroundColor: '#185FA5', stack: 'dist' },
-        { label: 'Investor', data: sc.annual_summary.map(r => r.distributions_idp), backgroundColor: '#85B7EB', stack: 'dist' },
+        { label: P1, data: sc.annual_summary.map(r => r.distributions_ka), backgroundColor: '#185FA5', stack: 'dist' },
+        { label: P2, data: sc.annual_summary.map(r => r.distributions_idp), backgroundColor: '#85B7EB', stack: 'dist' },
       ]
     },
     options: {
@@ -455,8 +466,8 @@ function renderComparison() {
         <div class="sc-metrics">
           ${scMetric('Deal IRR', fmtPct(row.deal_irr), d.deal_irr)}
           ${scMetric('Deal EM', fmtX(row.deal_em), d.deal_em)}
-          ${scMetric('Sponsor EM', fmtX(row.sponsor_em), d.sponsor_em)}
-          ${scMetric('Investor EM', fmtX(row.investor_em), d.investor_em)}
+          ${scMetric(`${P1} EM`, fmtX(row.sponsor_em), d.sponsor_em)}
+          ${scMetric(`${P2} EM`, fmtX(row.investor_em), d.investor_em)}
           ${scMetric('Min DSCR', row.min_dscr.toFixed(2)+'x', d.min_dscr)}
           ${scMetric('Total Dist', fmtUSD(row.total_distributions), d.total_distributions, true)}
         </div>
@@ -517,7 +528,7 @@ async function exportReport() {
   const btn = document.getElementById('exportBtn');
   const origText = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:4px;animation:spin 1s linear infinite;"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="28" stroke-dashoffset="8"/></svg> Generating...';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="animation:pd-spin 1s linear infinite;"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="28" stroke-dashoffset="8"/></svg> Generating…';
 
   try {
     const tif = _activeScenario ? _activeScenario.tif_scenario : 'baseline';
@@ -531,7 +542,7 @@ async function exportReport() {
     const a = document.createElement('a');
     const disp = r.headers.get('content-disposition') || '';
     const match = disp.match(/filename="?([^"]+)"?/);
-    a.download = match ? match[1] : 'Deal A_Investor_Report.docx';
+    a.download = match ? match[1] : 'Investor_Report.docx';
     a.href = url;
     a.click();
     URL.revokeObjectURL(url);

@@ -1,5 +1,5 @@
 """
-Refinance Diligence Package builder (.docx) — the Sponsor Loan Overview
+Refinance Diligence Package builder (.docx) — the Loan Overview
 Platform's end product for one property: loan facilities with balances and
 balloons, loan-document provisions by lender category, lease rollover
 crossed against loan maturity, lender-relevant lease provisions, and the
@@ -13,7 +13,7 @@ import re
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 
-from .compendium import (SPONSOR_NAVY, SPONSOR_RED, SPONSOR_BLUE, GREY, NAVY_FILL,
+from .compendium import (BRAND_NAVY, BRAND_RED, BRAND_BLUE, GREY, NAVY_FILL,
                          CLOUD_FILL, RED_FILL, _shade, _footer, _center_line,
                          _red_rule, _kv_table, _fmt_money, _fmt_sf, _clean)
 
@@ -55,7 +55,7 @@ def _row(tbl, vals, widths, size=8.5, red_idx=None):
                                                      (None, '') else '—')))
         r.font.size = Pt(size)
         if red_idx is not None and i == red_idx and v not in (None, '', '—'):
-            r.font.color.rgb = SPONSOR_RED
+            r.font.color.rgb = BRAND_RED
             r.bold = True
     return cells
 
@@ -70,20 +70,21 @@ def build_refi_package(data, out_path):
     doc.styles["Normal"].font.size = Pt(10)
 
     # ── Title ──
-    _center_line(doc, "sponsor-ANDERSON", 22, SPONSOR_NAVY)
+    if data.get('prepared_for'):   # the org the package is for
+        _center_line(doc, data['prepared_for'], 22, BRAND_NAVY, upper=True)
     sub = f"Loan Overview Platform  |  {pname}"
     if prop.get('entity_code'):
         sub += f"  ·  Entity {prop['entity_code']}"
-    _center_line(doc, sub, 11, SPONSOR_BLUE, bold=False, after=10)
-    _center_line(doc, "Refinance Diligence Package", 18, SPONSOR_NAVY, after=2)
-    _center_line(doc, f"Generated {today} from the verified Sponsor portfolio "
+    _center_line(doc, sub, 11, BRAND_BLUE, bold=False, after=10)
+    _center_line(doc, "Refinance Diligence Package", 18, BRAND_NAVY, after=2)
+    _center_line(doc, f"Generated {today} from the verified portfolio "
                       f"warehouse (loan + lease layers, page-cited)",
                  9, GREY, bold=False, after=2)
     _red_rule(doc)
     banner = _center_line(
         doc, "COMPILED FROM VERIFIED, PAGE-CITED EXTRACTIONS — "
              "VERIFY AGAINST SOURCE INSTRUMENTS BEFORE LEGAL RELIANCE",
-        9, SPONSOR_RED, after=2)
+        9, BRAND_RED, after=2)
     banner.paragraph_format.space_before = Pt(8)
 
     # ── Executive snapshot ──
@@ -145,7 +146,7 @@ def build_refi_package(data, out_path):
             h = doc.add_heading(f"{label} ({len(data['loan_provisions'][cat])})",
                                 level=2)
             for run in h.runs:
-                run.font.color.rgb = SPONSOR_NAVY
+                run.font.color.rgb = BRAND_NAVY
             for p_ in data['loan_provisions'][cat]:
                 para = doc.add_paragraph()
                 para.paragraph_format.left_indent = Inches(0.15)
@@ -206,7 +207,7 @@ def build_refi_package(data, out_path):
         h = doc.add_heading(_clean(t['trade_name'] or t['tenant_key'])
                             + f"  ({len(provs)})", level=2)
         for run in h.runs:
-            run.font.color.rgb = SPONSOR_NAVY
+            run.font.color.rgb = BRAND_NAVY
         w3 = [2.1, 3.0, 1.4]
         tbl3 = _table(doc, ("Provision", "Note", "Source"), w3)
         for p_ in t['refi_provisions']:

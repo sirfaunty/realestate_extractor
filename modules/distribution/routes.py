@@ -14,7 +14,7 @@ Routes:
 import logging
 from flask import Blueprint, jsonify, request, render_template
 
-from .engine import DistributionEngine, DistributionAssumptions, DEAL_A_DEFAULT_CF
+from .engine import DistributionEngine, DistributionAssumptions, default_cf
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ from registry.deal_context import (
 
 def _get_engine(deal_id=None):
     """Build a distribution engine for the deal. None config (or unknown deal)
-    yields the Deal A defaults, so behavior is unchanged."""
+    yields the deployment's seeded defaults (neutral example without a seed)."""
     cfg = _deal_config(deal_id, 'distribution') if deal_id else None
     assumptions = DistributionAssumptions.from_config(cfg) if cfg else None
     return DistributionEngine(assumptions)
@@ -206,7 +206,7 @@ def api_sensitivity():
         base_cf = dict(snap.levered_cf_by_year)
         sale_proceeds = snap.net_sale_proceeds
     else:
-        base_cf = dict(DEAL_A_DEFAULT_CF)
+        base_cf = default_cf()
         sale_proceeds = 0.0
 
     # Generate multipliers
@@ -229,16 +229,12 @@ def api_sensitivity():
             'multiplier': round(mult, 2),
             'label': f'{mult:.0%}',
             'total_distributable': round(total_dist, 2),
-            'sponsor_total': round(result.final_accounts['Sponsor'].total_distributions, 2),
-            'investor_total': round(result.final_accounts['Investor'].total_distributions, 2),
-            'sponsor_em': round(result.final_accounts['Sponsor'].equity_multiple, 4),
-            'investor_em': round(result.final_accounts['Investor'].equity_multiple, 4),
-            'sponsor_unpaid_pref': round(result.final_accounts['Sponsor'].unpaid_pref, 2),
-            'investor_unpaid_pref': round(result.final_accounts['Investor'].unpaid_pref, 2),
+            **eng.class_summary(result),
         })
 
     return jsonify({
         'rows': results,
+        'partner_ids': list(eng.partner_ids()),
         'proforma_source': 'live' if snap else 'defaults',
         'tif_scenario': tif,
     })

@@ -12,7 +12,7 @@ Routes:
 import logging
 from flask import Blueprint, jsonify, request, render_template
 
-from .engine import TIFEngine, TIFAssumptions, DEAL_A_SCENARIOS
+from .engine import TIFEngine, TIFAssumptions, default_scenarios
 
 logger = logging.getLogger(__name__)
 
@@ -28,17 +28,17 @@ from registry.deal_context import (
 
 def _get_engine(deal_id=None):
     """Build a TIF engine for the given deal. Config-driven; None config (or an
-    unknown deal) yields the Deal A defaults, so behavior is unchanged."""
+    unknown deal) yields the seeded defaults (neutral example without a deal seed)."""
     cfg = _deal_config(deal_id, 'tif') if deal_id else None
     return TIFEngine(TIFAssumptions.from_config(cfg))
 
 
 def _scenario_tmvs(deal_id):
     """Base scenario TMVs for the deal: from config if present, else the
-    Deal A defaults."""
+    seeded defaults."""
     cfg = _deal_config(deal_id, 'tif')
     base = (cfg or {}).get('scenarios') if cfg else None
-    return base or DEAL_A_SCENARIOS
+    return base or default_scenarios()
 
 
 def register_tif_routes(app):
@@ -156,7 +156,7 @@ def api_scenarios():
     deal_id = _deal_id()
     eng = _get_engine(deal_id)
 
-    # Base scenario TMVs come from the deal's config (Deal A defaults if none);
+    # Base scenario TMVs come from the deal's config (seeded defaults if none);
     # each is still overridable via query params.
     scenarios = {}
     for key, default_tmv in _scenario_tmvs(deal_id).items():

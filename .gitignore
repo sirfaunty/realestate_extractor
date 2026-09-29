@@ -107,3 +107,10 @@ portfolio_ownership/PORTFOLIO_MASTER/
 portfolio_ownership/inbox/
 portfolio_ownership/residential/
 _compare_scorecard/
+
+# Client deal material — local only (was tracked before 2026-09-29; untrack with
+# `git rm -r --cached reference_data "Ownership Deliverables" properties.json proforma_engine/config`)
+reference_data/
+Ownership Deliverables/
+properties.json
+proforma_engine/config/*.yaml

@@ -207,6 +207,15 @@ def _register_job(pid, mode):
         return None, None
 
 
+def _org_name():
+    """Cover-page owner line: the signed-in org's display name."""
+    try:
+        from flask import session
+        return session.get('org_name') or ''
+    except Exception:
+        return ''
+
+
 def _finish_job(jobs, job_id, **fields):
     if jobs is None or job_id not in jobs:
         return
@@ -236,6 +245,7 @@ def generate():
             fname = refi_filename(name)
             _finish_job(jobs, job_id, filename=fname)
             out = os.path.join(OUTPUT_DIR, fname)
+            data['prepared_for'] = _org_name()
             rep = build_refi_package(data, out)
             logger.info(f'refi package generated: {out}')
             _finish_job(jobs, job_id, status='completed', progress=1,
@@ -255,6 +265,7 @@ def generate():
         fname = default_filename(name, mode)
         _finish_job(jobs, job_id, filename=fname)
         out = os.path.join(OUTPUT_DIR, fname)
+        data['prepared_for'] = _org_name()
         rep = build_compendium(data, out, mode=mode)
         logger.info(f'deliverable generated: {out} '
                     f'({rep["provisions"]} provisions)')

@@ -1,12 +1,10 @@
 """
 Closing Books Module — Document extraction warehouse explorer.
 
-Serves the Deal A Apartments closing-books warehouse built by
-the partner's extraction pipeline. SQLite-backed, read-only:
-  - 71 FileRecords across 6 closing-book PDFs
-  - 379 ContentBlocks with extracted text, dollar amounts, dates
-  - 156 ModuleMappings linking blocks to platform modules
-  - 16 GapRecords, 16 DuplicateVerdicts, 48 SearchQueries, 20 Learnings
+Serves a deal's closing-books warehouse (SQLite, read-only): file records,
+content blocks with extracted text / amounts / dates, module mappings, gap
+records, duplicate verdicts, search queries and learnings. Path resolution:
+see engine._default_db() — the warehouse itself is deployment data.
 """
 
 from ..base import AbstractModule

@@ -230,9 +230,9 @@ LOAN_DOCUMENT = DocumentTemplate(
                         required=True, priority=FieldPriority.CRITICAL,
                         aliases=["mortgagor", "obligor"],
                         prose_patterns=[
-                            # "Borrower: Deal A Apartments, LLC" (same line)
+                            # "Borrower: Example Apartments, LLC" (same line)
                             r"(?i)(?:Borrower|Mortgagor)\s*[:]\s+([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,}|Property)",
-                            # "Borrower Name and Address:\nDeal A Apartments, LLC" (next line)
+                            # "Borrower Name and Address:\nExample Apartments, LLC" (next line)
                             r"(?i)Borrower\s+Name\s+and\s+Address\s*[:]\s*(?:Property.*\n)?([A-Z][\w\s,.'&()-]+?)(?:\s*$|\s{2,})",
                         ]),
         FieldDefinition("lender", "Name of the lender/mortgagee",

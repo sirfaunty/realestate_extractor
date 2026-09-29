@@ -18,11 +18,38 @@ import threading
 
 from .store import RegistryStore, RegistryError  # noqa: F401
 
-# The deal shown when no ?deal= is supplied — preserves current behavior.
-DEFAULT_DEAL = os.environ.get("CAPACTIVE_DEFAULT_DEAL", "proforma_engine")
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_SEED_PATH = os.path.join(_HERE, "seed.json")
+# A deployment's real entities live in a gitignored local seed; the repo copy
+# is a neutral example.
+_LOCAL_SEED_PATH = os.path.join(os.path.dirname(_HERE), "data", "deal_seeds",
+                                "registry_seed.json")
+_SEED_PATH = (_LOCAL_SEED_PATH if os.path.exists(_LOCAL_SEED_PATH)
+              else os.path.join(_HERE, "seed.json"))
+
+
+def _default_deal_id() -> str:
+    """Deal shown when no ?deal= is supplied: env override, else the deal
+    seed's deal_id, else the first deal in the registry seed."""
+    env = os.environ.get("CAPACTIVE_DEFAULT_DEAL")
+    if env:
+        return env
+    try:
+        from modules import deal_seed
+        if deal_seed.load().get("deal_id"):
+            return deal_seed.load()["deal_id"]
+    except Exception:
+        pass
+    try:
+        with open(_SEED_PATH, "r", encoding="utf-8") as fh:
+            for e in json.load(fh).get("entities", []):
+                if e.get("type") == "deal":
+                    return e["id"]
+    except Exception:
+        pass
+    return "example_deal"
+
+
+DEFAULT_DEAL = _default_deal_id()
 _DB_PATH = os.environ.get(
     "CAPACTIVE_REGISTRY_DB",
     os.path.join(os.path.dirname(_HERE), "data", "registry.db"),
@@ -47,8 +74,8 @@ def get_registry() -> RegistryStore:
         if _store is None:
             store = RegistryStore(_DB_PATH)
             store.connect()
-            # seed.json holds Sponsor's deal entities (Deal A, Portfolio B,
-            # Center C, Center D). A packaged instance must start EMPTY —
+            # The local registry seed holds a deployment's real deal
+            # entities. A packaged instance must start EMPTY —
             # seeding is opt-in: on in dev mode, or CAPACTIVE_SEED_REGISTRY=1.
             seed_ok = (os.environ.get('CAPACTIVE_SEED_REGISTRY',
                        '1' if os.environ.get('CAPACTIVE_DEV_MODE') == '1' else '0') == '1')

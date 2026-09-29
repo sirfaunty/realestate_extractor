@@ -140,7 +140,7 @@ PLAN_FEATURES = {
         # deal assumptions as defaults. They are never default-on for a new
         # org — an operator enables them per org (Admin → Modules) once
         # that org has its own deal data. (Found 2026-09-25: a fresh
-        # Professional org rendered Deal A's numbers.)
+        # Professional org rendered a client deal's numbers.)
         modules_enabled=["deliverables"],
     ),
     "professional": FeatureFlags(

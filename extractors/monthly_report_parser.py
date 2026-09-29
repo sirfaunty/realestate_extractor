@@ -755,7 +755,7 @@ def parse_variance_report(ws, property_name: str = None) -> List[Dict[str, Any]]
     Handles two formats:
 
     NEW FORMAT (Oct 2025+):
-      Row 1: Property name ("The Deal A (cbl)")
+      Row 1: Property name ("The Example (abc)")
       Row 2: "Budget Comparison"
       Row 3: "Period = Mar 2026"
       Row 5: Headers (PTD Actual, PTD Budget, Variance, % Var, YTD Actual, ...)

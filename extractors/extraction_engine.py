@@ -1717,7 +1717,7 @@ class ExtractionEngine:
     def _parse_rent_roll_format_b(self, lines: List[str],
                                    page_numbers: Dict[int, int]) -> List[Dict]:
         """
-        Parse "Total"-delimited rent roll records (e.g., Yardi / Deal A-style).
+        Parse "Total"-delimited rent roll records (e.g., Yardi-style).
 
         Each record runs from a unit number line to a "Total" line + total amount.
         Fields within a record are identified by content pattern rather than

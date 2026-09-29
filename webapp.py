@@ -4157,16 +4157,16 @@ except Exception as e:
 
 # ─── Registry Registration ─────────────────────────────────────────
 # Shared entity registry (funds / sub-funds / portfolios / deals) + deal picker
-# API. Also seeds Deal A's editable per-deal config from the engine defaults
-# (idempotent) so the config path is populated for editing. Absolute imports keep
+# API. Also seeds the deployment's default deal config from its gitignored deal
+# seed (idempotent; no-op without one) so the config path is populated for editing. Absolute imports keep
 # a single registry singleton shared with the deal-analytics route helpers.
 
 try:
     from registry.routes import register_registry_routes
     from registry import get_registry
-    from registry.deal_config_seed import seed_proforma_engine_configs
+    from registry.deal_config_seed import seed_default_deal_configs
     register_registry_routes(app)
-    seed_proforma_engine_configs(get_registry())
+    seed_default_deal_configs(get_registry())
 except Exception as e:
     import logging
     logging.getLogger(__name__).warning(f'Registry registration failed: {e}')

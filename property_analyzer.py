@@ -1284,7 +1284,7 @@ class PropertyAnalyzer:
         Scan stored raw tables for template field matches.
 
         CRE spreadsheets commonly use two patterns:
-          1. Key-value rows:  ["", "Property Name", "Deal A Apartments"]
+          1. Key-value rows:  ["", "Property Name", "Example Apartments"]
           2. Labeled columns: header row defines labels, data rows below
 
         Returns a list of financial_term dicts ready for storage.
@@ -1524,21 +1524,21 @@ class PropertyAnalyzer:
     # (Request for Final Endorsement HUD-92023M, Cost Certification HUD-92330, etc.)
     #
     # OCR linearizes form fields in unpredictable order.  Common layouts:
-    #   "Project Name:\n\noject Number:\n000-00000\n\nThe Deal A"
-    #   "Date of Borrower:\nCommitment: Deal A Apartments, LLC\n05/29/2018"
+    #   "Project Name:\n\noject Number:\n000-00000\n\nThe Example"
+    #   "Date of Borrower:\nCommitment: Example Apartments, LLC\n01/01/2018"
     # So patterns must be flexible about newlines and OCR artifacts.
     _HUD_PATTERNS = [
-        # FHA project number: 000-00000
+        # FHA project number: 0XX-XXXXX
         # Must be preceded by word boundary/newline (not embedded in OMB "2502-0598").
         # FHA projects: 0XX-XXXXX format (first digit usually 0).
         ('fha_project_number', re.compile(
             r'(?:^|[\s\n:])(\d{3}-\d{5})(?:\s|$)', re.MULTILINE)),
         # Property / project name — text between FHA number and "Project Address"
-        # OCR layout: "000-00000\n\nThe Deal A\n\nProject Address:"
+        # OCR layout: "000-00000\n\nThe Example\n\nProject Address:"
         ('property_name', re.compile(
             r'\d{3}-\d{5}\s*\n+\s*((?:The\s+)?[A-Z][A-Za-z\s]+?)(?:\s*\n\s*\n|\s*Project)',
             re.IGNORECASE)),
-        # Fallback: "Project Name\nThe Deal A\nLocation" (Cost Cert layout)
+        # Fallback: "Project Name\nThe Example\nLocation" (Cost Cert layout)
         ('property_name', re.compile(
             r'Project\s*Name\s*:?\s*\n\s*((?:The\s+)?[A-Z][A-Za-z\s]{3,30}?)\s*\n\s*(?:Location|Address|Project)',
             re.IGNORECASE)),
@@ -1546,17 +1546,17 @@ class PropertyAnalyzer:
         ('property_name', re.compile(
             r'Project\s*Name\s*:.*?(?:\n.*?){0,3}\n\s*((?:The\s+)?[A-Z][A-Za-z]{3,}[A-Za-z\s]*?)(?:\s*\n)',
             re.IGNORECASE)),
-        # Property address — "Project Address: 6630 Richfield Parkway"
+        # Property address — "Project Address: 100 Example Parkway"
         ('property_address', re.compile(
             r'Project\s*Address\s*:?\s*(.+?)(?:\n)', re.IGNORECASE)),
         # Borrower — look for LLC/LP entity near "Borrower" or "Commitment"
-        # OCR layout: "Borrower:\nCommitment: Deal A Apartments, LLC"
+        # OCR layout: "Borrower:\nCommitment: Example Apartments, LLC"
         ('borrower', re.compile(
             r'(?:Borrower|Commitment)\s*:?\s*\n?\s*'
             r'([A-Z][A-Za-z\s,.\-]{5,60}(?:LLC|LP|Inc|Corp|Company)[A-Za-z.,\s]*)',
             re.IGNORECASE)),
-        # Mortgage / insurance amount — "sum of $.47,759,200.00"
-        # Note: OCR often produces "$.47,759,200" (stray period after $)
+        # Mortgage / insurance amount — "sum of $.12,345,600.00"
+        # Note: OCR often produces "$.12,345,600" (stray period after $)
         ('mortgage_amount', re.compile(
             r'(?:sum\s+of|total\s+sum|endorsement.*?sum)\s+\$?\.?\s*'
             r'([\d,]+(?:\.\d{2})?)', re.IGNORECASE)),

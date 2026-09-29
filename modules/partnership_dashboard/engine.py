@@ -252,10 +252,12 @@ class DashboardResult:
     scenario_names: list[str]
     comparison: dict  # cross-scenario delta analysis
     proforma_source: str = 'live'
+    partner_ids: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             'entity_name': self.entity_name,
+            'partner_ids': self.partner_ids,
             'scenarios': {k: v.to_dict() for k, v in self.scenarios.items()},
             'scenario_names': self.scenario_names,
             'comparison': self.comparison,
@@ -450,11 +452,12 @@ class PartnershipDashboardEngine:
             lcf = snap.levered_cf_by_year.get(y, 0.0) if snap else 0.0
 
             dyr = dist_by_year.get(y)
-            dist_ka = dyr.distributions_by_partner.get('Sponsor', 0.0) if dyr else 0.0
-            dist_idp = dyr.distributions_by_partner.get('Investor', 0.0) if dyr else 0.0
+            p1, p2 = dist_eng.partner_ids()
+            dist_ka = dyr.distributions_by_partner.get(p1, 0.0) if dyr else 0.0
+            dist_idp = dyr.distributions_by_partner.get(p2, 0.0) if dyr else 0.0
             note_pmt = dyr.surplus_cash_note_payment if dyr else 0.0
-            coc_ka = dyr.coc_by_partner.get('Sponsor', 0.0) if dyr else 0.0
-            coc_idp = dyr.coc_by_partner.get('Investor', 0.0) if dyr else 0.0
+            coc_ka = dyr.coc_by_partner.get(p1, 0.0) if dyr else 0.0
+            coc_idp = dyr.coc_by_partner.get(p2, 0.0) if dyr else 0.0
 
             annual.append(YearSummary(
                 year=y,
@@ -474,9 +477,12 @@ class PartnershipDashboardEngine:
             ))
 
         # ── 5. Decision metrics ────────────────────────────────────
+        # sponsor_*/investor_* fields = managing class / investor class (first/second
+        # partner of the deal); labels come from partner_ids in the payload.
+        p1, p2 = dist_eng.partner_ids()
         deal_ret = dist_result.returns.get('deal', {})
-        sponsor_ret = dist_result.returns.get('by_partner', {}).get('Sponsor', {})
-        investor_ret = dist_result.returns.get('by_partner', {}).get('Investor', {})
+        sponsor_ret = dist_result.returns.get('by_partner', {}).get(p1, {})
+        investor_ret = dist_result.returns.get('by_partner', {}).get(p2, {})
 
         total_noi = sum(a.noi for a in annual)
         total_dist = sum(a.distributions_total for a in annual)
@@ -499,10 +505,10 @@ class PartnershipDashboardEngine:
             total_surplus_note=total_note,
             total_mip=total_mip,
             net_sale_proceeds=snap.net_sale_proceeds if snap else 0.0,
-            sponsor_unpaid_pref=dist_result.final_accounts.get('Sponsor').unpaid_pref
-                if 'Sponsor' in dist_result.final_accounts else 0.0,
-            investor_unpaid_pref=dist_result.final_accounts.get('Investor').unpaid_pref
-                if 'Investor' in dist_result.final_accounts else 0.0,
+            sponsor_unpaid_pref=dist_result.final_accounts.get(p1).unpaid_pref
+                if p1 in dist_result.final_accounts else 0.0,
+            investor_unpaid_pref=dist_result.final_accounts.get(p2).unpaid_pref
+                if p2 in dist_result.final_accounts else 0.0,
         )
 
         return ScenarioResult(
@@ -539,7 +545,8 @@ class PartnershipDashboardEngine:
         comparison = self._build_comparison(scenarios, scenario_names)
 
         return DashboardResult(
-            entity_name='Example Partners LLC',
+            entity_name=self._get_dist_engine().a.entity_name,
+            partner_ids=list(self._get_dist_engine().partner_ids()),
             scenarios=scenarios,
             scenario_names=scenario_names,
             comparison=comparison,

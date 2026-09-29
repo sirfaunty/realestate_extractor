@@ -184,6 +184,7 @@
 /* ── Proforma Context Table ── */
 .dist-root .context-row td { font-size: 11px; color: var(--muted); }
 .dist-root .context-row td.val { color: var(--text); font-variant-numeric: tabular-nums; }
+.dist-root .scenario-selector label, .dist-root .sale-toggle label { white-space: nowrap; }
 </style>
 
 <div class="dist-root">
@@ -191,14 +192,14 @@
   <!-- Header -->
   <div class="dist-header">
     <h1>Distribution & Surplus Cash</h1>
-    <div class="subtitle">Example Partners LLC — Partnership Waterfall Analysis</div>
+    <div class="subtitle"><span id="entityName">Partnership</span> — Partnership Waterfall Analysis</div>
     <div class="source-attr">Source: LLC Agreement §5.2 &middot; Amended & Restated Surplus Cash Note &middot; <span id="sourceLabel"></span></div>
   </div>
 
   <!-- Controls Bar -->
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
     <div class="scenario-selector">
-      <label>TIF Scenario:</label>
+      <label for="tifSelect">TIF Scenario</label>
       <select id="tifSelect" onchange="onTifChange()">
         <option value="baseline">Baseline (No Appeal)</option>
       </select>
@@ -334,11 +335,15 @@
   let _chart = null;
   let _tifScenario = capactive.getTif();
   let _includeSale = true;
+  // Partner class ids (managing, investor) — from the deal's assumptions.
+  let P1 = 'P1', P2 = 'P2';
 
   async function loadAssumptions() {
     try {
       const r = await fetch('/distribution/api/assumptions');
       const data = await r.json();
+      if (data.partner_ids) { P1 = data.partner_ids[0] || P1; P2 = data.partner_ids[1] || P2; }
+      if (data.entity_name) $('#entityName').textContent = data.entity_name;
       if (data.tif_scenarios && data.tif_scenarios.length > 0) {
         const sel = $('#tifSelect');
         sel.innerHTML = '';
@@ -401,8 +406,8 @@
   function renderStats(d) {
     const ret = d.returns;
     const deal = ret.deal;
-    const sponsor = ret.by_partner.Sponsor || {};
-    const investor = ret.by_partner.Investor || {};
+    const sponsor = ret.by_partner[P1] || {};
+    const investor = ret.by_partner[P2] || {};
     const ctx = d.proforma_context;
     let saleHtml = '';
     if (ctx && ctx.net_sale_proceeds > 0 && _includeSale) {
@@ -422,19 +427,19 @@
       </div>
       <div class="stat-card sponsor">
         <div class="stat-value">${fmtX(sponsor.equity_multiple)}</div>
-        <div class="stat-label">Sponsor Equity Multiple</div>
+        <div class="stat-label">${P1} Equity Multiple</div>
       </div>
       <div class="stat-card investor">
         <div class="stat-value">${fmtX(investor.equity_multiple)}</div>
-        <div class="stat-label">Investor Equity Multiple</div>
+        <div class="stat-label">${P2} Equity Multiple</div>
       </div>
       <div class="stat-card sponsor">
         <div class="stat-value">${fmtPct(sponsor.irr)}</div>
-        <div class="stat-label">Sponsor IRR</div>
+        <div class="stat-label">${P1} IRR</div>
       </div>
       <div class="stat-card investor">
         <div class="stat-value">${fmtPct(investor.irr)}</div>
-        <div class="stat-label">Investor IRR</div>
+        <div class="stat-label">${P2} IRR</div>
       </div>
       ${saleHtml}
     `;
@@ -489,13 +494,13 @@
 
   function renderReturns(ret, ctx) {
     const deal = ret.deal;
-    const sponsor = ret.by_partner.Sponsor || {};
-    const investor = ret.by_partner.Investor || {};
+    const sponsor = ret.by_partner[P1] || {};
+    const investor = ret.by_partner[P2] || {};
 
     let html = '<table class="dist-table"><thead><tr>';
     html += '<th>Metric</th><th class="right">Deal</th>';
-    html += '<th class="right"><span class="partner-tag sponsor">Sponsor</span></th>';
-    html += '<th class="right"><span class="partner-tag investor">Investor</span></th>';
+    html += `<th class="right"><span class="partner-tag sponsor">${P1}</span></th>`;
+    html += `<th class="right"><span class="partner-tag investor">${P2}</span></th>`;
     html += '</tr></thead><tbody>';
 
     html += row('Total Equity', fmt(deal.total_equity), fmt(sponsor.initial_equity), fmt(investor.initial_equity));
@@ -526,17 +531,17 @@
     if (hasCtx) html += '<th class="right" style="color:var(--muted)">NOI</th><th class="right" style="color:var(--muted)">Debt Svc</th>';
     html += '<th class="right">Distributable CF</th>';
     html += '<th class="right">Surplus Note</th><th class="right">Net Distributable</th>';
-    html += '<th class="right"><span class="partner-tag sponsor">Sponsor</span></th>';
-    html += '<th class="right"><span class="partner-tag investor">Investor</span></th>';
-    html += '<th class="right">Sponsor CoC</th><th class="right">Investor CoC</th>';
+    html += `<th class="right"><span class="partner-tag sponsor">${P1}</span></th>`;
+    html += `<th class="right"><span class="partner-tag investor">${P2}</span></th>`;
+    html += `<th class="right">${P1} CoC</th><th class="right">${P2} CoC</th>`;
     if (_showTierDetail) html += '<th>Tier Breakdown</th>';
     html += '</tr></thead><tbody>';
 
     let totals = { cf: 0, note: 0, net: 0, sponsor: 0, investor: 0 };
 
     years.forEach(yr => {
-      const sponsor = yr.distributions_by_partner.Sponsor || 0;
-      const investor = yr.distributions_by_partner.Investor || 0;
+      const sponsor = yr.distributions_by_partner[P1] || 0;
+      const investor = yr.distributions_by_partner[P2] || 0;
       totals.cf += yr.distributable_cash;
       totals.note += yr.surplus_cash_note_payment;
       totals.net += yr.net_distributable;
@@ -557,8 +562,8 @@
         <td class="right">${fmt(yr.net_distributable)}</td>
         <td class="right">${fmt(sponsor)}</td>
         <td class="right">${fmt(investor)}</td>
-        <td class="right">${fmtPct(yr.coc_by_partner.Sponsor)}</td>
-        <td class="right">${fmtPct(yr.coc_by_partner.Investor)}</td>`;
+        <td class="right">${fmtPct(yr.coc_by_partner[P1])}</td>
+        <td class="right">${fmtPct(yr.coc_by_partner[P2])}</td>`;
       if (_showTierDetail) {
         const detail = yr.tier_detail.map(td =>
           `${td.tier}: <span class="partner-tag ${td.partner.toLowerCase()}">${td.partner}</span> ${fmt(td.amount)}`
@@ -586,8 +591,8 @@
 
   function renderChart(years) {
     const labels = years.map(y => y.calendar_year);
-    const kaData = years.map(y => Math.round(y.distributions_by_partner.Sponsor || 0));
-    const idpData = years.map(y => Math.round(y.distributions_by_partner.Investor || 0));
+    const kaData = years.map(y => Math.round(y.distributions_by_partner[P1] || 0));
+    const idpData = years.map(y => Math.round(y.distributions_by_partner[P2] || 0));
     const noteData = years.map(y => Math.round(y.surplus_cash_note_payment || 0));
 
     if (_chart) _chart.destroy();
@@ -596,8 +601,8 @@
       data: {
         labels,
         datasets: [
-          { label: 'Sponsor Distribution', data: kaData, backgroundColor: '#185FA5', stack: 'dist' },
-          { label: 'Investor Distribution', data: idpData, backgroundColor: '#d97706', stack: 'dist' },
+          { label: `${P1} Distribution`, data: kaData, backgroundColor: '#185FA5', stack: 'dist' },
+          { label: `${P2} Distribution`, data: idpData, backgroundColor: '#d97706', stack: 'dist' },
           { label: 'Surplus Cash Note', data: noteData, backgroundColor: '#dc262688', stack: 'note' },
         ]
       },
@@ -645,12 +650,12 @@
     scRow('Deal IRR', sc => fmtPct(sc.returns.deal.irr));
     scRow('Deal EM', sc => fmtX(sc.returns.deal.equity_multiple));
     scRow('Total Distributed', sc => fmtM(sc.returns.deal.total_distributed));
-    scRow('Sponsor Total', sc => fmt(sc.returns.by_partner.Sponsor.total_distributions));
-    scRow('Sponsor EM', sc => fmtX(sc.returns.by_partner.Sponsor.equity_multiple));
-    scRow('Sponsor IRR', sc => fmtPct(sc.returns.by_partner.Sponsor.irr));
-    scRow('Investor Total', sc => fmt(sc.returns.by_partner.Investor.total_distributions));
-    scRow('Investor EM', sc => fmtX(sc.returns.by_partner.Investor.equity_multiple));
-    scRow('Investor IRR', sc => fmtPct(sc.returns.by_partner.Investor.irr));
+    scRow(`${P1} Total`, sc => fmt(sc.returns.by_partner[P1].total_distributions));
+    scRow(`${P1} EM`, sc => fmtX(sc.returns.by_partner[P1].equity_multiple));
+    scRow(`${P1} IRR`, sc => fmtPct(sc.returns.by_partner[P1].irr));
+    scRow(`${P2} Total`, sc => fmt(sc.returns.by_partner[P2].total_distributions));
+    scRow(`${P2} EM`, sc => fmtX(sc.returns.by_partner[P2].equity_multiple));
+    scRow(`${P2} IRR`, sc => fmtPct(sc.returns.by_partner[P2].irr));
 
     if (data.proforma_source === 'live') {
       scRow('Proforma IRR', sc => sc.proforma_context ? fmtPct(sc.proforma_context.proforma_irr) : '—');
@@ -695,9 +700,9 @@
     const rows = data.rows || data;
     let html = '<thead><tr>';
     html += '<th>CF Level</th><th class="right">Total Dist.</th>';
-    html += '<th class="right">Sponsor Total</th><th class="right">Investor Total</th>';
-    html += '<th class="right">Sponsor EM</th><th class="right">Investor EM</th>';
-    html += '<th class="right">Sponsor Unpaid Pref</th>';
+    html += `<th class="right">${P1} Total</th><th class="right">${P2} Total</th>`;
+    html += `<th class="right">${P1} EM</th><th class="right">${P2} EM</th>`;
+    html += `<th class="right">${P1} Unpaid Pref</th>`;
     html += '</tr></thead><tbody>';
     rows.forEach(row => {
       const isBase = row.multiplier === 1.0;
@@ -705,11 +710,11 @@
       html += `<tr style="${style}">
         <td style="font-weight:600">${row.label}${isBase ? ' (Base)' : ''}</td>
         <td class="right">${fmtM(row.total_distributable)}</td>
-        <td class="right">${fmtM(row.sponsor_total)}</td>
-        <td class="right">${fmtM(row.investor_total)}</td>
-        <td class="right">${fmtX(row.sponsor_em)}</td>
-        <td class="right">${fmtX(row.investor_em)}</td>
-        <td class="right" style="color:${row.sponsor_unpaid_pref > 0 ? 'var(--warning)' : 'var(--success)'}">${fmt(row.sponsor_unpaid_pref)}</td>
+        <td class="right">${fmtM(row.p1_total)}</td>
+        <td class="right">${fmtM(row.p2_total)}</td>
+        <td class="right">${fmtX(row.p1_em)}</td>
+        <td class="right">${fmtX(row.p2_em)}</td>
+        <td class="right" style="color:${row.p1_unpaid_pref > 0 ? 'var(--warning)' : 'var(--success)'}">${fmt(row.p1_unpaid_pref)}</td>
       </tr>`;
     });
     html += '</tbody>';

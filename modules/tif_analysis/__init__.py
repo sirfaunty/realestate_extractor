@@ -1,7 +1,7 @@
 """
 TIF Analysis Module — Tax Increment Financing scenario modeling.
 
-Translates Landlord's 14-tab Deal A TIF Excel model into an interactive
+Ports a multi-tab TIF Excel model into an interactive
 platform module with multi-scenario comparison, breakeven analysis,
 sensitivity sweeps, and the Ehlers reconciliation.
 """

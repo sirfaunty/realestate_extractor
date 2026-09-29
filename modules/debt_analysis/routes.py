@@ -33,7 +33,7 @@ from registry.deal_context import (
 
 def _get_engine(deal_id=None):
     """Build a debt engine for the deal. None config (or unknown deal) yields the
-    Deal A defaults, so behavior is unchanged."""
+    seeded defaults (neutral example without a deal seed)."""
     cfg = _deal_config(deal_id, 'debt') if deal_id else None
     return DebtAnalysisEngine(cfg)
 

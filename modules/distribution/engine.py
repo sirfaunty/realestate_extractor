@@ -1,19 +1,18 @@
 """Distribution & Surplus Cash engine.
 
-Standalone waterfall engine that models the Deal A LLC distribution
-mechanics from the LLC Agreement §5.2:
+Standalone two-class waterfall engine (managing member + investor class):
 
-  Tier 1: Sponsor Escrow Recapture — 100% to Sponsor until escrow returned
-  Tier 2: 6.5% Preferred Return — pro-rata to unpaid pref balances
-  Tier 3: 75/25 Pari Passu — Sponsor 75% / Investor 25% on remaining
+  Tier 1: Escrow Recapture — 100% to the managing member until escrow returned
+  Tier 2: Preferred Return — pro-rata to unpaid pref balances
+  Tier 3: Pari Passu split on the remainder
 
-Also models:
-  - Surplus Cash Note: $22,641 semi-annual payments (Feb 1 / Aug 1)
-  - Capital account tracking with pref accrual
-  - Return metrics: IRR, Equity Multiple, Cash-on-Cash
+Also models a Surplus Cash Note, capital accounts with pref accrual, and
+return metrics (IRR, Equity Multiple, Cash-on-Cash).
 
-The engine uses Deal A-specific defaults but is parameterized for
-future multi-deal use.
+Deal-specific partners, tiers and cash flows come from the per-deal config or
+the deployment's deal seed (data/deal_seeds/, gitignored — see
+modules/deal_seed.py). With neither, a neutral example deal applies. The first
+partner is the managing class, the second the investor class.
 """
 
 from __future__ import annotations
@@ -21,58 +20,34 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
+from .. import deal_seed
 
-# ─── Deal A Defaults ──────────────────────────────────────────
 
-DEAL_A_PARTNERS = {
-    'Sponsor': {
-        'name': 'sponsor-Anderson, Incorporated',
-        'role': 'Managing Member',
-        'ownership_pct': 0.75,
-        'distribution_pct': 0.75,
-        'pref_rate': 0.065,
-        'pref_compounding': 'monthly',
-    },
-    'Investor': {
-        'name': 'Investor',
-        'role': 'Limited Partner',
-        'ownership_pct': 0.25,
-        'distribution_pct': 0.25,
-        'pref_rate': 0.065,
-        'pref_compounding': 'monthly',
-    },
+# ─── Neutral example defaults (no client data) ────────────────────
+
+EXAMPLE_ENTITY_NAME = 'Example Partners LLC'
+EXAMPLE_TOTAL_EQUITY = 10_000_000.0
+
+# Example distributable CF by year — a deployment's real figures come from its
+# live proforma or its deal seed.
+EXAMPLE_DEFAULT_CF = {
+    1: 500_000, 2: 520_000, 3: 540_000, 4: 560_000, 5: 580_000,
+    6: 600_000, 7: 620_000, 8: 640_000, 9: 660_000, 10: 680_000,
 }
 
-# Deal A equity: Total Cost Basis $40,000,000 - Acq Loan $30,000,000
-DEAL_A_TOTAL_EQUITY = 10_000_000.0
-DEAL_A_SPONSOR_EQUITY = DEAL_A_TOTAL_EQUITY * 0.75   # $6,628,419
-DEAL_A_INVESTOR_EQUITY = DEAL_A_TOTAL_EQUITY * 0.25  # $2,209,473
 
-# Surplus Cash Note
-DEAL_A_SURPLUS_CASH_NOTE = {
-    'principal': 0.0,
-    'rate': 0.02,
-    'annual_payment': 45_282.0,        # $22,641 × 2
-    'semi_annual_payment': 22_641.0,
-    'payment_months': [2, 8],           # Feb 1 and Aug 1
-    'source': 'Amended & Restated Surplus Cash Note',
-    'note': '75% of Surplus Cash per HUD Regulatory Agreement',
-}
+def _seeded_cf() -> dict[int, float]:
+    raw = deal_seed.section('distribution').get('default_cf')
+    return {int(k): v for k, v in raw.items()} if raw else dict(EXAMPLE_DEFAULT_CF)
 
-# Default distributable CF by year (from proforma base scenario estimates)
-# These are approximate levered CF values for Deal A — users can override
-DEAL_A_DEFAULT_CF = {
-    1: 450_000,
-    2: 510_000,
-    3: 580_000,
-    4: 620_000,
-    5: 660_000,
-    6: 700_000,
-    7: 740_000,
-    8: 780_000,
-    9: 820_000,
-    10: 860_000,
-}
+
+def default_cf() -> dict[int, float]:
+    """Default distributable CF: deal seed if present, else the example."""
+    return _seeded_cf()
+
+
+# Module-level snapshot for callers that import a constant.
+DEFAULT_CF = default_cf()
 
 
 # ─── Data Classes ──────────────────────────────────────────────────
@@ -106,8 +81,8 @@ class WaterfallTierConfig:
 class SurplusCashNoteConfig:
     """Surplus Cash Note parameters."""
     principal: float = 0.0
-    rate: float = 0.02
-    annual_payment: float = 45_282.0
+    rate: float = 0.0
+    annual_payment: float = 0.0
     starting_balance: Optional[float] = None  # if None, use principal
 
 
@@ -117,69 +92,44 @@ class DistributionAssumptions:
     partners: list[PartnerConfig] = field(default_factory=list)
     waterfall_tiers: list[WaterfallTierConfig] = field(default_factory=list)
     surplus_cash_note: Optional[SurplusCashNoteConfig] = None
-    entity_name: str = 'Example Partners LLC'
+    entity_name: str = EXAMPLE_ENTITY_NAME
     hold_years: int = 10
     first_year: int = 2026
-    escrow_amount: float = 0.0  # Sponsor escrow to recapture
+    escrow_amount: float = 0.0  # managing member's escrow to recapture
 
     @staticmethod
-    def proforma_engine_defaults() -> 'DistributionAssumptions':
-        """Build Deal A-specific assumptions."""
+    def example_defaults() -> 'DistributionAssumptions':
+        """Neutral illustrative deal: 20/80 sponsor/investor, 8% pref."""
         partners = [
-            PartnerConfig(
-                id='Sponsor',
-                name='sponsor-Anderson, Incorporated',
-                role='Managing Member',
-                ownership_pct=0.75,
-                distribution_pct=0.75,
-                pref_rate=0.065,
-                pref_compounding='monthly',
-                initial_equity=DEAL_A_SPONSOR_EQUITY,
-            ),
-            PartnerConfig(
-                id='Investor',
-                name='Investor',
-                role='Limited Partner',
-                ownership_pct=0.25,
-                distribution_pct=0.25,
-                pref_rate=0.065,
-                pref_compounding='monthly',
-                initial_equity=DEAL_A_INVESTOR_EQUITY,
-            ),
+            PartnerConfig(id='GP', name='Sponsor', role='Managing Member',
+                          ownership_pct=0.20, distribution_pct=0.20,
+                          pref_rate=0.08, pref_compounding='monthly',
+                          initial_equity=EXAMPLE_TOTAL_EQUITY * 0.20),
+            PartnerConfig(id='LP', name='Investor', role='Investor Member',
+                          ownership_pct=0.80, distribution_pct=0.80,
+                          pref_rate=0.08, pref_compounding='monthly',
+                          initial_equity=EXAMPLE_TOTAL_EQUITY * 0.80),
         ]
         tiers = [
-            WaterfallTierConfig(
-                order=1,
-                name='Sponsor Escrow Recapture',
-                tier_type='escrow_recapture',
-                allocation={'Sponsor': 1.0, 'Investor': 0.0},
-                governing_provision='LLC §5.2(a)',
-            ),
-            WaterfallTierConfig(
-                order=2,
-                name='6.5% Preferred Return',
-                tier_type='preferred_return',
-                pref_classes=['Sponsor', 'Investor'],
-                allocation={'Sponsor': 0.75, 'Investor': 0.25},
-                governing_provision='LLC §5.2(b)',
-            ),
-            WaterfallTierConfig(
-                order=3,
-                name='75/25 Pari Passu',
-                tier_type='pari_passu',
-                allocation={'Sponsor': 0.75, 'Investor': 0.25},
-                governing_provision='LLC §5.2(c)',
-            ),
+            WaterfallTierConfig(order=1, name='Preferred Return',
+                                tier_type='preferred_return',
+                                pref_classes=['GP', 'LP'],
+                                allocation={'GP': 0.20, 'LP': 0.80}),
+            WaterfallTierConfig(order=2, name='Pari Passu',
+                                tier_type='pari_passu',
+                                allocation={'GP': 0.20, 'LP': 0.80}),
         ]
         return DistributionAssumptions(
-            partners=partners,
-            waterfall_tiers=tiers,
-            surplus_cash_note=SurplusCashNoteConfig(),
-            entity_name='Example Partners LLC',
-            hold_years=10,
-            first_year=2026,
-            escrow_amount=0.0,
+            partners=partners, waterfall_tiers=tiers,
+            surplus_cash_note=None, entity_name=EXAMPLE_ENTITY_NAME,
+            hold_years=10, first_year=2026, escrow_amount=0.0,
         )
+
+    @classmethod
+    def seeded_defaults(cls) -> 'DistributionAssumptions':
+        """The deployment's deal seed if present, else the neutral example."""
+        cfg = deal_seed.section('distribution').get('assumptions')
+        return cls._build(cfg) if cfg else cls.example_defaults()
 
     def to_config(self) -> dict:
         """Serialize the full assumptions (partners, tiers, surplus note, scalars)
@@ -189,10 +139,13 @@ class DistributionAssumptions:
     @classmethod
     def from_config(cls, config: dict | None) -> 'DistributionAssumptions':
         """Rebuild assumptions from an editable per-deal config. A missing/None
-        config returns the Deal A defaults unchanged, so the default deal is
-        identical to the hardcoded behavior."""
+        config returns the seeded defaults unchanged."""
         if not config:
-            return cls.proforma_engine_defaults()
+            return cls.seeded_defaults()
+        return cls._build(config)
+
+    @classmethod
+    def _build(cls, config: dict) -> 'DistributionAssumptions':
         partners = [PartnerConfig(**p) for p in config.get('partners', [])]
         tiers = [WaterfallTierConfig(**t) for t in config.get('waterfall_tiers', [])]
         scn = config.get('surplus_cash_note')
@@ -201,7 +154,7 @@ class DistributionAssumptions:
             partners=partners,
             waterfall_tiers=tiers,
             surplus_cash_note=surplus,
-            entity_name=config.get('entity_name', 'Example Partners LLC'),
+            entity_name=config.get('entity_name', EXAMPLE_ENTITY_NAME),
             hold_years=config.get('hold_years', 10),
             first_year=config.get('first_year', 2026),
             escrow_amount=config.get('escrow_amount', 0.0),
@@ -357,7 +310,7 @@ class DistributionEngine:
     """Distribution waterfall and surplus cash engine."""
 
     def __init__(self, assumptions: Optional[DistributionAssumptions] = None):
-        self.a = assumptions or DistributionAssumptions.proforma_engine_defaults()
+        self.a = assumptions or DistributionAssumptions.seeded_defaults()
 
     def run_distribution(
         self,
@@ -369,7 +322,7 @@ class DistributionEngine:
 
         Args:
             distributable_cf: {proforma_year: distributable_cash}
-                Defaults to DEAL_A_DEFAULT_CF if not provided.
+                Defaults to default_cf() if not provided.
             net_sale_proceeds: terminal distribution from asset sale (Year N).
                 Added to the final year's distributable cash and run through
                 the waterfall. Default 0 = operating distributions only.
@@ -379,7 +332,7 @@ class DistributionEngine:
             DistributionResult with year-by-year waterfall, capital accounts,
             surplus note schedule, and return metrics.
         """
-        cf = distributable_cf or dict(DEAL_A_DEFAULT_CF)
+        cf = distributable_cf or default_cf()
 
         # Add sale proceeds to the final year's distributable cash
         _sale_year = sale_year or self.a.hold_years
@@ -392,7 +345,7 @@ class DistributionEngine:
             acct = CapitalAccount(partner_id=p.id)
             acct.contributed_capital = p.initial_equity
             accounts[p.id] = acct
-            if self.a.escrow_amount > 0 and p.id == 'Sponsor':
+            if self.a.escrow_amount > 0 and p is self.a.partners[0]:
                 acct.escrow_contributed = self.a.escrow_amount
 
         # Build surplus cash note schedule
@@ -546,17 +499,18 @@ class DistributionEngine:
         scenario_names = list(scenarios.keys())
         if len(scenario_names) >= 2:
             base = results[scenario_names[0]]
+            p1, p2 = self.partner_ids()
             for sn in scenario_names[1:]:
                 comp = results[sn]
                 results[sn]['delta_vs_base'] = {
                     'total_distributed': round(
                         comp['total_distributed'] - base['total_distributed'], 2
                     ),
-                    'sponsor_em_delta': round(
-                        _get_partner_em(comp, 'Sponsor') - _get_partner_em(base, 'Sponsor'), 4
+                    'p1_em_delta': round(
+                        _get_partner_em(comp, p1) - _get_partner_em(base, p1), 4
                     ),
-                    'investor_em_delta': round(
-                        _get_partner_em(comp, 'Investor') - _get_partner_em(base, 'Investor'), 4
+                    'p2_em_delta': round(
+                        _get_partner_em(comp, p2) - _get_partner_em(base, p2), 4
                     ),
                 }
 
@@ -565,6 +519,21 @@ class DistributionEngine:
             'scenario_names': scenario_names,
         }
 
+    def partner_ids(self) -> tuple[str, str]:
+        """(managing class id, investor class id) — first two partners."""
+        ids = [p.id for p in self.a.partners] + ['', '']
+        return ids[0], ids[1]
+
+    def class_summary(self, result: 'DistributionResult') -> dict:
+        """Per-class totals keyed p1_/p2_ (managing / investor class)."""
+        out = {}
+        for tag, pid in zip(('p1', 'p2'), self.partner_ids()):
+            acct = result.final_accounts.get(pid)
+            out[f'{tag}_total'] = round(acct.total_distributions, 2) if acct else 0.0
+            out[f'{tag}_em'] = round(acct.equity_multiple, 4) if acct else 0.0
+            out[f'{tag}_unpaid_pref'] = round(acct.unpaid_pref, 2) if acct else 0.0
+        return out
+
     def get_assumptions(self) -> dict:
         """Return current model assumptions as a dict."""
         return {
@@ -572,6 +541,7 @@ class DistributionEngine:
             'hold_years': self.a.hold_years,
             'first_year': self.a.first_year,
             'escrow_amount': self.a.escrow_amount,
+            'partner_ids': list(self.partner_ids()),
             'partners': [
                 {
                     'id': p.id,
@@ -616,7 +586,7 @@ class DistributionEngine:
         Returns:
             List of dicts with scenario results at each multiplier.
         """
-        cf = base_cf or dict(DEAL_A_DEFAULT_CF)
+        cf = base_cf or default_cf()
         if multipliers is None:
             multipliers = [0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30]
 
@@ -629,12 +599,7 @@ class DistributionEngine:
                 'multiplier': round(mult, 2),
                 'label': f'{mult:.0%}',
                 'total_distributable': round(total_dist, 2),
-                'sponsor_total': round(result.final_accounts['Sponsor'].total_distributions, 2),
-                'investor_total': round(result.final_accounts['Investor'].total_distributions, 2),
-                'sponsor_em': round(result.final_accounts['Sponsor'].equity_multiple, 4),
-                'investor_em': round(result.final_accounts['Investor'].equity_multiple, 4),
-                'sponsor_unpaid_pref': round(result.final_accounts['Sponsor'].unpaid_pref, 2),
-                'investor_unpaid_pref': round(result.final_accounts['Investor'].unpaid_pref, 2),
+                **self.class_summary(result),
             })
 
         return results

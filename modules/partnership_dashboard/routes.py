@@ -11,9 +11,7 @@ Routes:
 
 import json
 import logging
-import subprocess
 import tempfile
-from pathlib import Path
 from flask import Blueprint, jsonify, request, render_template, send_file
 
 from .engine import PartnershipDashboardEngine
@@ -33,7 +31,7 @@ from registry.deal_context import (
 def _get_engine(deal_id=None):
     """Build a partnership dashboard engine bound to the selected deal. The engine
     threads the deal's config into its distribution/debt sub-engines; an unknown
-    deal or missing config yields the Deal A defaults."""
+    deal or missing config yields the seeded defaults."""
     return PartnershipDashboardEngine(deal_id)
 
 
@@ -124,40 +122,13 @@ def api_export_docx():
             data['_primary_scenario'] = name
             break
 
-    # Locate the generator script
-    script = Path(__file__).parent / 'generate_report.js'
-    # Find node_modules — check common locations
-    node_modules = None
-    for candidate in [
-        Path(__file__).parent / 'node_modules',
-        Path(__file__).parent.parent.parent / 'node_modules',
-    ]:
-        if candidate.exists():
-            node_modules = candidate
-            break
-
     with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp:
         output_path = tmp.name
 
     try:
-        env = {}
-        if node_modules:
-            env['NODE_PATH'] = str(node_modules)
-
-        proc = subprocess.run(
-            ['node', str(script), output_path],
-            input=json.dumps(data),
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env={**__import__('os').environ, **env},
-        )
-
-        if proc.returncode != 0:
-            logger.error(f'Report generation failed: {proc.stderr}')
-            return jsonify({'error': 'Report generation failed', 'detail': proc.stderr}), 500
-
-        logger.info(f'Report generated: {proc.stdout.strip()}')
+        from .report_docx import build_investor_report
+        build_investor_report(data, output_path)
+        logger.info(f'Report generated: {output_path}')
 
         from datetime import datetime
         import re
@@ -172,8 +143,6 @@ def api_export_docx():
             download_name=filename,
         )
 
-    except subprocess.TimeoutExpired:
-        return jsonify({'error': 'Report generation timed out'}), 504
     except Exception as e:
         logger.error(f'Report export error: {e}')
         return jsonify({'error': str(e)}), 500

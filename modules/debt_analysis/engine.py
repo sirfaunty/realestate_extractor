@@ -1,7 +1,9 @@
 """Debt & Loan Analysis engine.
 
-Standalone engine for Deal A debt analysis. Can run with hardcoded
-defaults or with live data from the proforma_engine proforma engine.
+Standalone engine for a deal's debt analysis. Runs on a per-deal config
+(registry deal_config), the deployment's deal seed
+(data/deal_seeds/deal_defaults.json, gitignored — see modules/deal_seed.py),
+or — with neither — a neutral example loan.
 
 Capabilities:
   - Full amortization schedule (monthly → annual rollup)
@@ -10,11 +12,6 @@ Capabilities:
   - LTV tracking over hold period
   - Debt maturity / payoff analysis
   - Refinance scenario modeling
-
-All Deal A-specific defaults sourced from:
-  - Property Overview Summary 11/7/25 ("Existing Loan" tab)
-  - ANNUAL PROFORMA ("ANNUAL PROFORMA" tab)
-  - LLC Agreement §5.2, HUD Regulatory Agreement
 """
 
 from __future__ import annotations
@@ -24,48 +21,56 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .. import deal_seed
+
 logger = logging.getLogger(__name__)
 
-# ─── Deal A Defaults ─────────────────────────────────────────
+# ─── Neutral example defaults (no client data) ─────────────────────
+# A deployment's real loan lives in its deal seed, never in code.
 
-DEAL_A_LOAN = {
+EXAMPLE_LOAN = {
     'lender': 'Example Lender',
-    'loan_type': 'HUD 223(f)',
+    'loan_type': 'Fixed-rate permanent',
     'original_principal': 30_000_000.00,
-    'rate': 0.0233,
-    'term_months': 420,
-    'amortization_months': 420,
+    'rate': 0.05,
+    'term_months': 360,
+    'amortization_months': 360,
     'io_months': 0,
-    'first_payment_date': '2021-12-01',
-    'maturity_date': '2056-11-01',
-    'monthly_payment': 184_565.17,
-    'proforma_start_balance': 48_771_038.11,
+    'first_payment_date': '2026-01-01',
+    'maturity_date': '2055-12-01',
+    'monthly_payment': 161_046.49,
+    'proforma_start_balance': 30_000_000.00,
     'proforma_start_date': '2025-12-31',
 }
 
-DEAL_A_MIP = {
-    'rate': 0.0035,  # 0.35% of UPB annually
-    'description': 'HUD Mortgage Insurance Premium',
-}
-
-DEAL_A_CAPEX_LOAN = {
-    'max_principal': 1_013_857.00,
+EXAMPLE_MIP = {
     'rate': 0.0,
-    'description': 'Capital Funding Loan (capex shortfall)',
+    'description': 'Mortgage Insurance Premium (none on example loan)',
 }
 
-DEAL_A_SURPLUS_NOTE = {
-    'principal': 0.00,
-    'rate': 0.02,
-    'annual_payment': 45_282.00,
-    'description': 'HRA Surplus Cash Note',
+EXAMPLE_CAPEX_LOAN = {
+    'max_principal': 0.0,
+    'rate': 0.0,
+    'description': 'Capital Funding Loan',
 }
 
-DEAL_A_PROPERTY = {
+EXAMPLE_SURPLUS_NOTE = {
+    'principal': 0.0,
+    'rate': 0.0,
+    'annual_payment': 0.0,
+    'description': 'Surplus Cash Note',
+}
+
+EXAMPLE_PROPERTY = {
     'acquisition_cost_basis': 40_000_000.00,
     'total_equity': 10_000_000.00,
-    'units': 150,
+    'units': 120,
     'hold_years': 10,
+}
+
+_EXAMPLE = {
+    'loan': EXAMPLE_LOAN, 'mip': EXAMPLE_MIP, 'capex': EXAMPLE_CAPEX_LOAN,
+    'surplus': EXAMPLE_SURPLUS_NOTE, 'property': EXAMPLE_PROPERTY,
 }
 
 
@@ -308,16 +313,12 @@ class DebtAnalysisResult:
 # ─── Engine ───────────────────────────────────────────────────────
 
 def default_debt_config() -> dict:
-    """The Deal A loan structure as an editable per-deal config dict.
-    Seeding this and constructing DebtAnalysisEngine(config) reproduces the
-    hardcoded behavior exactly."""
-    return {
-        'loan': dict(DEAL_A_LOAN),
-        'mip': dict(DEAL_A_MIP),
-        'capex': dict(DEAL_A_CAPEX_LOAN),
-        'surplus': dict(DEAL_A_SURPLUS_NOTE),
-        'property': dict(DEAL_A_PROPERTY),
-    }
+    """The default loan structure as an editable per-deal config dict: the
+    deployment's deal seed where present, else the neutral example.
+    Constructing DebtAnalysisEngine(config) with it reproduces the no-config
+    behavior exactly."""
+    seeded = deal_seed.section('debt')
+    return {k: dict(seeded.get(k) or v) for k, v in _EXAMPLE.items()}
 
 
 class DebtAnalysisEngine:
@@ -325,11 +326,12 @@ class DebtAnalysisEngine:
 
     def __init__(self, config: dict | None = None):
         config = config or {}
-        self.loan = dict(config.get('loan', DEAL_A_LOAN))
-        self.mip = dict(config.get('mip', DEAL_A_MIP))
-        self.capex = dict(config.get('capex', DEAL_A_CAPEX_LOAN))
-        self.surplus = dict(config.get('surplus', DEAL_A_SURPLUS_NOTE))
-        self.prop = dict(config.get('property', DEAL_A_PROPERTY))
+        base = default_debt_config()
+        self.loan = dict(config.get('loan', base['loan']))
+        self.mip = dict(config.get('mip', base['mip']))
+        self.capex = dict(config.get('capex', base['capex']))
+        self.surplus = dict(config.get('surplus', base['surplus']))
+        self.prop = dict(config.get('property', base['property']))
 
     # ── PMT helper ────────────────────────────────────────────────
 
@@ -806,5 +808,6 @@ class DebtAnalysisEngine:
 __all__ = [
     'DebtAnalysisEngine',
     'DebtAnalysisResult',
-    'DEAL_A_LOAN',
+    'EXAMPLE_LOAN',
+    'default_debt_config',
 ]

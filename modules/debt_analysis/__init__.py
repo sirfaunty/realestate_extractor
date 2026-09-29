@@ -1,8 +1,8 @@
 """Debt & Loan Analysis module.
 
 Provides amortization schedules, DSCR tracking, MIP analysis,
-LTV monitoring, and refinance scenario modeling for the Deal A
-HUD 223(f) acquisition loan.
+LTV monitoring, and refinance scenario modeling for a deal's
+acquisition loan (assumptions from the deal config / deal seed).
 """
 
 from modules.base import AbstractModule

@@ -658,7 +658,7 @@ class WarehouseEngine:
         """Store a deal-level summary row (one per deal × TIF scenario).
 
         Args:
-            deal_id: Deal identifier (e.g. 'proforma_engine')
+            deal_id: Deal identifier (e.g. 'example_deal')
             tif_scenario: TIF scenario id
             summary: Dict with keys matching fact_deal_summary columns
             knowledge_date: Defaults to today

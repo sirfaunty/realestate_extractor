@@ -21,14 +21,31 @@ import sqlite3
 
 logger = logging.getLogger(__name__)
 
-# Default path relative to project root
-DEFAULT_DB = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    'data', 'proforma_engine_warehouse_v3.sqlite')
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _default_db() -> str:
+    """Warehouse path: CAPACTIVE_CLOSING_BOOKS_DB, else the deal seed's
+    'closing_books_db' (relative to the repo root), else
+    data/closing_books.sqlite."""
+    env = os.environ.get('CAPACTIVE_CLOSING_BOOKS_DB')
+    if env:
+        return env
+    try:
+        from .. import deal_seed
+        rel = deal_seed.load().get('closing_books_db')
+        if rel:
+            return rel if os.path.isabs(rel) else os.path.join(_REPO, rel)
+    except Exception:
+        pass
+    return os.path.join(_REPO, 'data', 'closing_books.sqlite')
+
+
+DEFAULT_DB = _default_db()
 
 
 class ClosingBooksEngine:
-    """Read-only interface to the Deal A closing-books warehouse."""
+    """Read-only interface to a deal's closing-books warehouse."""
 
     def __init__(self, db_path=None):
         self.db_path = db_path or DEFAULT_DB

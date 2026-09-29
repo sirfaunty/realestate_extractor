@@ -13,7 +13,7 @@ Usage in a module:
     from warehouse.deal_analytics import persist_proforma
 
     snap = get_proforma_snapshot('baseline')
-    persist_proforma('proforma_engine', snap)   # fire-and-forget
+    persist_proforma(deal_id, snap)   # fire-and-forget
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def persist_proforma(deal_id: str, snap) -> None:
     """Write a ProformaSnapshot to the warehouse.
 
     Args:
-        deal_id: Deal identifier (e.g. 'proforma_engine')
+        deal_id: Deal identifier (e.g. 'example_deal')
         snap: ProformaSnapshot from proforma_bridge
     """
     wh = _get_wh()

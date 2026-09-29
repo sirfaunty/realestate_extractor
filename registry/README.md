@@ -18,7 +18,7 @@ for the design rationale.
 - `__init__.py` — process-wide singleton (`get_registry()`), `DEFAULT_DEAL`, and
   `resolve_deal()` (always returns a valid deal, falling back to the default).
 - `seed.json` — initial entities, loaded once when the entity table is empty.
-- `deal_config_seed.py` — seeds Deal A's config by introspecting the engine
+- `deal_config_seed.py` — seeds the default deal's config from the gitignored deal seed (data/deal_seeds/) via the engine
   defaults (so config == current behavior; guarded by `tests/test_deal_config_golden.py`).
 - `deal_context.py` — request helpers every deal module uses (see below).
 - `routes.py` — read API: `/api/registry/deals`, `/api/registry/tree`,
@@ -53,7 +53,7 @@ A `deal` node lists the `modules` it participates in and shares one warehouse
 ```python
 reg = get_registry()
 reg.upsert_entity('fund_1', 'fund', 'Flagship Fund')
-reg.move_entity('proforma_engine', 'fund_1')   # attach deal to a fund later
+reg.move_entity('example_deal', 'fund_1')   # attach deal to a fund later
 ```
 
 `move_entity` rejects cycles. Reporting rollups walk `ancestors()` to aggregate

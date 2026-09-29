@@ -21,6 +21,17 @@ lease_abstraction_db
 disposition_diligence_db
 Ownership Deliverables
 
+# bespoke client engines / reference material (deal modules degrade to
+# neutral example defaults without them; see modules/deal_seed.py)
+proforma_engine
+reference_data
+properties.json
+_compare_scorecard
+*.docx
+*.xlsx
+cre_fundamentals.html
+git_push.sh
+
 # large local artifacts
 *.zip
 *.db

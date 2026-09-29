@@ -18,6 +18,14 @@ warehouse_bp = Blueprint('warehouse', __name__, url_prefix='/warehouse')
 _wh = None
 
 
+
+def _default_deal():
+    try:
+        from registry import DEFAULT_DEAL
+        return DEFAULT_DEAL
+    except Exception:
+        return 'example_deal'
+
 def _get_wh():
     global _wh
     if _wh is None:
@@ -146,7 +154,7 @@ def api_peer_cuts():
 def api_deal_summary():
     """Get deal-level summary across TIF scenarios."""
     wh = _get_wh()
-    deal_id = request.args.get('deal_id', 'proforma_engine')
+    deal_id = request.args.get('deal_id', _default_deal())
     tif_scenario = request.args.get('tif_scenario')
     results = wh.get_deal_summary(deal_id, tif_scenario)
     return jsonify({'deal_id': deal_id, 'scenarios': results, 'count': len(results)})
@@ -156,7 +164,7 @@ def api_deal_summary():
 def api_deal_annual():
     """Get joined annual view for a deal × scenario."""
     wh = _get_wh()
-    deal_id = request.args.get('deal_id', 'proforma_engine')
+    deal_id = request.args.get('deal_id', _default_deal())
     tif_scenario = request.args.get('tif_scenario', 'baseline')
     rows = wh.get_deal_annual(deal_id, tif_scenario)
     return jsonify({'deal_id': deal_id, 'tif_scenario': tif_scenario,
@@ -182,7 +190,7 @@ def api_deal_populate():
     """Trigger full deal persist for all TIF scenarios."""
     from .deal_analytics import persist_full_deal
 
-    deal_id = request.json.get('deal_id', 'proforma_engine') if request.json else 'proforma_engine'
+    deal_id = (request.json or {}).get('deal_id') or _default_deal()
     tif_scenarios = request.json.get('tif_scenarios', ['baseline']) if request.json else ['baseline']
 
     results = {}
