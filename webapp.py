@@ -47,6 +47,12 @@ from .permissions import (
 
 # ─── App Setup ───────────────────────────────────────────────────────
 
+import logging as _logging
+# module logger — code here had referenced `logger` without defining it
+# (crashed sync_run on 2026-08-20; a nested-zip upload failure would have
+# crashed the same way). Defined once so it can't recur.
+logger = _logging.getLogger(__name__)
+
 app = Flask(__name__, template_folder='web/templates', static_folder='web/static')
 app.secret_key = os.environ.get('CAPACTIVE_SECRET_KEY', os.urandom(24))
 
@@ -988,17 +994,17 @@ def upload():
                                     f'Processed {fname} ({completed_count}/{file_count})')
 
                 on_step('complete', 'Ingested' if file_count == 1 else f'All {file_count} files ingested')
-                jobs[job_id]['status'] = 'completed'
-                jobs[job_id]['failed_count'] = failed_count
-                if file_count == 1 and jobs[job_id]['results']:
-                    jobs[job_id]['error'] = jobs[job_id]['results'][0].get('error')
-                # auto-queue property analysis for what just landed
+                # auto-queue (BEFORE marking complete, so the job page sees it) property analysis for what just landed
                 try:
                     q = _auto_queue_analysis_for_results(org_id, jobs[job_id]['results'])
                     if q:
                         jobs[job_id]['analysis_jobs'] = q
                 except Exception as ae:
                     print(f"[WARN] auto-analysis trigger failed: {ae}", flush=True)
+                jobs[job_id]['status'] = 'completed'
+                jobs[job_id]['failed_count'] = failed_count
+                if file_count == 1 and jobs[job_id]['results']:
+                    jobs[job_id]['error'] = jobs[job_id]['results'][0].get('error')
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)
@@ -1177,15 +1183,15 @@ def batch():
                 else:
                     on_step('complete',
                             'All files processed' if pdf_count > 1 else 'File processed')
-                jobs[job_id]['status'] = 'completed'
-                jobs[job_id]['failed_count'] = failed_count
-                # auto-queue property analysis for what just landed
+                # auto-queue (BEFORE marking complete, so the job page sees it) property analysis for what just landed
                 try:
                     q = _auto_queue_analysis_for_results(org_id, jobs[job_id]['results'])
                     if q:
                         jobs[job_id]['analysis_jobs'] = q
                 except Exception as ae:
                     print(f"[WARN] auto-analysis trigger failed: {ae}", flush=True)
+                jobs[job_id]['status'] = 'completed'
+                jobs[job_id]['failed_count'] = failed_count
             except Exception as e:
                 jobs[job_id]['status'] = 'failed'
                 jobs[job_id]['error'] = str(e)

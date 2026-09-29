@@ -509,11 +509,46 @@ function pollStatus() {
 
                 // Show final elapsed
                 updateElapsed();
+
+                // Follow-on AI analysis (auto-queued after upload). The
+                // global pill is hidden on this page, so surface it here —
+                // otherwise the analysis runs invisibly (found 2026-09-28).
+                if (job.analysis_jobs && job.analysis_jobs.length) {
+                    followAnalysis(job.analysis_jobs[0]);
+                }
             } else {
                 setTimeout(pollStatus, 2000);
             }
         })
         .catch(() => setTimeout(pollStatus, 3000));
+}
+
+function followAnalysis(aid) {
+    let box = document.getElementById('analysis-follow');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'analysis-follow';
+        box.className = 'card';
+        box.style.cssText = 'padding:14px 20px;font-size:13px;';
+        const anchor = document.getElementById('done-actions');
+        anchor.parentNode.insertBefore(box, anchor);
+    }
+    fetch('/api/job/' + aid).then(r => r.json()).then(a => {
+        const label = a.filename || 'AI analysis';
+        if (a.status === 'completed') {
+            box.innerHTML = '<strong>✓ ' + label.replace(' (auto)', '') +
+                ' complete.</strong> <span style="color:var(--text-secondary)">' +
+                'Extracted terms and clauses are ready — approve in the Review Queue to finalize.</span>';
+        } else if (a.status === 'failed') {
+            box.innerHTML = '<strong style="color:var(--danger)">AI analysis failed:</strong> ' +
+                (a.error || 'see server log') + ' — re-run from the property page.';
+        } else {
+            box.innerHTML = '<strong>AI analysis running…</strong> <span style="color:var(--text-secondary)">' +
+                label + ' — ' + (a.step_detail || 'reading the lease') +
+                '. You can leave this page; it continues in the background.</span>';
+            setTimeout(() => followAnalysis(aid), 3000);
+        }
+    }).catch(() => setTimeout(() => followAnalysis(aid), 5000));
 }
 
 if (polling) {
