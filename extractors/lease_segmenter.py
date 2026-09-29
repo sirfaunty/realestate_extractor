@@ -958,13 +958,38 @@ def _party(flat, role):
     # Anchor on the connective that introduces the party ("between X" /
     # "and Y") so a mixed-case name can't collapse to its suffix — the
     # first version returned "LLC" as the tenant on real Sponsor leases.
-    m = re.search(
+    patterns = (
+        # ("Landlord") label-after convention
         r'(?:\bbetween|\band)\s+(?:the\s+)?([A-Z][^()"“]{2,160}?)\s*'
-        rf'\(\s*(?:hereinafter\s+(?:called|referred\s+to\s+as)\s+)?'
-        rf'(?:the\s+)?["“]{role}["”]', flat)
-    if not m:
+        r'\(\s*(?:hereinafter\s+(?:called|referred\s+to\s+as)\s+)?'
+        rf'(?:the\s+)?["“]{role}["”]',
+        # older/institutional forms: "… between ELM RIDGE PROPERTIES, A NORTH
+        # DAKOTA LIMITED PARTNERSHIP, as Landlord, and NORTHFIELD GROCERS, INC.,
+        # an Iowa corporation, as Tenant."
+        r'(?:\bbetween|\band)\s+(?:the\s+)?([A-Z][^()"“;]{2,160}?),?\s+'
+        rf'as\s+(?:the\s+)?{role}\b',
+    )
+    # A capture may never contain ANOTHER party's role clause — the first
+    # cut of the "as Tenant" form ran from "between ELM RIDGE … as Landlord, and
+    # NORTHFIELD" and returned the landlord as the tenant.
+    role_clause = re.compile(r'\bas\s+(?:the\s+)?(?:Landlord|Tenant|Lessor|Lessee)\b'
+                             r'|["“](?:Landlord|Tenant)["”]', re.I)
+    name = None
+    for rx in patterns:
+        for m in re.finditer(rx, flat):
+            cand = m.group(1)
+            if role_clause.search(cand):
+                # keep only the segment after the last connective
+                tail = re.split(r',?\s+\band\s+', cand)[-1]
+                if role_clause.search(tail):
+                    continue
+                cand = tail
+            name = cand
+            break
+        if name:
+            break
+    if not name:
         return None
-    name = m.group(1)
     # cut the entity description: ", a Minnesota limited liability company"
     name = re.split(r',\s*(?:an?|as|its|whose|with)\s', name, maxsplit=1)[0]
     name = re.sub(r'\s+', ' ', name).strip(' ,.;:')
@@ -980,6 +1005,11 @@ def _party(flat, role):
 def _deterministic_lease_fields(pages, tgt, have):
     flat = re.sub(r'\s+', ' ', '\n'.join(t for _pg, t in pages))
     head = flat[:20000]
+    # Real files are PACKAGES (lease + guaranty + assignments + estoppels).
+    # Parties come from the PRIMARY lease instrument's own preamble first —
+    # a 2023 assignment in the same PDF names a different landlord.
+    lease_head = re.sub(r'\s+', ' ', ' '.join(
+        s['text'] for s in tgt.get('identity', [])[:2]))
     out = []
 
     def add(tt, label, raw, needle, conf=0.9, num=None, unit=None):
@@ -993,10 +1023,10 @@ def _deterministic_lease_fields(pages, tgt, have):
             d['value_unit'] = unit
         out.append(d)
 
-    ll = _party(head, 'Landlord')
+    ll = (lease_head and _party(lease_head, 'Landlord')) or _party(head, 'Landlord')
     if ll and 'landlord_name' not in have:
         add('landlord_name', 'Landlord', ll, ll)
-    tn = _party(head, 'Tenant')
+    tn = (lease_head and _party(lease_head, 'Tenant')) or _party(head, 'Tenant')
     if tn and 'tenant_identity' not in have:
         add('tenant_identity', 'Tenant', tn, tn, conf=0.85)
 
@@ -1028,6 +1058,27 @@ def _deterministic_lease_fields(pages, tgt, have):
         v = float(m.group(1).replace(',', ''))
         add('base_rent', 'Base rent, Year 1 monthly', f'${v:,.2f}', m.group(1),
             num=v, unit='monthly')
+    else:
+        # Self-verifying table read: an ANNUAL amount immediately followed
+        # by its exact MONTHLY twelfth IS a rent pair —
+        #   "Annual Rent  Monthly Rent  Years 1-5  $243,520.00  $20,293.33"
+        # No neighbouring-word guesswork; the arithmetic is the proof.
+        for src in (rent_txt, flat):
+            for pm in re.finditer(r'\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})', src):
+                a = float(pm.group(1).replace(',', ''))
+                b = float(pm.group(2).replace(',', ''))
+                # arithmetic proves a pair; "rent" nearby proves it's RENT
+                # (a $12,000/$1,000 pair can be a deposit or a CAM estimate)
+                ctx = src[max(0, pm.start() - 220):pm.start()].lower()
+                if (a >= 1200 and abs(a / 12 - b) <= 0.02
+                        and 'rent' in ctx and 'sublease' not in ctx
+                        and 'subtenant' not in ctx):
+                    add('base_rent', 'Base rent, first scheduled monthly',
+                        f'${b:,.2f}', pm.group(2), num=b, unit='monthly')
+                    break
+            else:
+                continue
+            break
 
     m = re.search(r'(?:increase|escalat)\w*[^.]{0,80}?by\s+([\d.]+)\s*percent', flat, re.I) or \
         re.search(r'(?:increase|escalat)\w*[^.]{0,80}?\(\s*([\d.]+)\s*%\s*\)', flat, re.I)
