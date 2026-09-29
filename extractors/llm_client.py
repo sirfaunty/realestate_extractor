@@ -27,8 +27,10 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OLLAMA_URL = "http://localhost:11434"
-DEFAULT_MODEL = "llama3.1:8b"  # Good balance of capability and speed
+DEFAULT_OLLAMA_URL = os.environ.get("CAPACTIVE_OLLAMA_URL", "http://localhost:11434")
+# One switch for every entry point (web app, run_analysis, eval harness):
+#   CAPACTIVE_OLLAMA_MODEL=qwen3:8b venv/Scripts/python run_analysis.py …
+DEFAULT_MODEL = os.environ.get("CAPACTIVE_OLLAMA_MODEL", "llama3.1:8b")
 
 
 class ModelVersionMismatch(RuntimeError):
@@ -191,6 +193,15 @@ class LocalLLMClient:
 
         if format_json:
             payload["format"] = "json"
+
+        # Reasoning ("thinking") models spend most of their time on a hidden
+        # chain of thought — wasted on single-field extraction and it skews
+        # any speed comparison. Off by default for known thinking families;
+        # CAPACTIVE_LLM_THINK=1 re-enables.
+        if (os.environ.get("CAPACTIVE_LLM_THINK") != "1"
+                and self.model.split(':')[0].lower().startswith(
+                    ("qwen3", "deepseek-r1", "magistral"))):
+            payload["think"] = False
 
         try:
             # Enforce digest pin on first generation call
