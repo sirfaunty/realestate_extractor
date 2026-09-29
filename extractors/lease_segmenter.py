@@ -623,7 +623,25 @@ def _ask(llm, seg_text, question_json, label):
     except Exception as e:
         logger.warning(f'segment LLM call failed ({label}): {e}')
         return {}
-    return out if isinstance(out, dict) else {}
+    if not isinstance(out, dict):
+        return {}
+    # Placeholder-echo guard: some models copy the field DESCRIPTION from
+    # the question template as the answer (qwen3:8b returned "the d/b/a"
+    # for trade_name on real leases, 2026-09-29 bake-off). Any value that
+    # is just (a fragment of) its own hint, or a template token, is noise.
+    hints = dict(re.findall(r'"(\w+)":\s*"([^"]+)"', question_json))
+    for k, v in list(out.items()):
+        if not isinstance(v, str):
+            continue
+        s = v.strip().lower().strip('.')
+        h = hints.get(k, '').lower()
+        if (s in ('...', '…', 'null', 'none', 'n/a', 'mm/dd/yyyy')
+                or (h and (s == h or (len(s) >= 5 and s in h)))
+                or s.startswith('the d/b/a')):
+            out[k] = None
+        elif isinstance(out.get(k), str) and ' / the d/b/a' in out[k].lower():
+            out[k] = re.split(r'\s*/\s*the d/b/a', out[k], flags=re.I)[0]
+    return out
 
 
 def _route_segments(instruments):
@@ -683,6 +701,17 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
 
     # identity — LLM on preamble, deterministic definition-clause net always
     ident_names = None
+    # the landlord as the lease itself defines it — a model "tenant" that
+    # matches it is the landlord-confusion failure (llama3.1 named Engelsma
+    # LP as UPS's tenant, 2026-09-29 bake-off)
+    _flat_head = re.sub(r'\s+', ' ', body[:20000])
+    _lease_head = re.sub(r'\s+', ' ', ' '.join(
+        s['text'] for s in tgt['identity'][:2]))
+    _det_ll = ((_lease_head and _party(_lease_head, 'Landlord'))
+               or _party(_flat_head, 'Landlord') or '')
+    _det_ll_toks = {w for w in re.findall(r'[a-z]{5,}', _det_ll.lower())
+                    if w not in ('limited', 'partnership', 'company',
+                                 'corporation', 'properties', 'holdings')}
     for s in tgt['identity'][:2]:
         r = _ask(llm, s['text'],
                  '{"tenant_legal_name": ..., '
@@ -705,8 +734,26 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
                            and (t in nm or nm in t) for t in ll_toks)
             lo = re.escape(str(name).strip()[:40])
             body_head = '\n'.join(t for _pg, t in pages)[:20000]
-            if confused or re.search(rf'(?i){lo}[^.\n]{{0,80}}[("“]+\s*Landlord',
-                                     body_head):
+            legal = str(r.get('tenant_legal_name') or '').lower()
+            is_det_landlord = bool(_det_ll_toks) and bool(
+                _det_ll_toks & set(re.findall(r'[a-z]{5,}', legal)))
+            if is_det_landlord and r.get('trade_name'):
+                # keep the brand, drop the landlord-as-legal-name
+                r['tenant_legal_name'] = None
+                name = r.get('trade_name')
+                is_det_landlord = False
+            brand = str(r.get('trade_name') or '').strip()
+            brand_clean = brand and not any(
+                t and len(t) >= 6 and t in re.sub(r'[^a-z]', '', brand.lower())
+                for t in ll_toks + list(_det_ll_toks))
+            if (confused or is_det_landlord) and brand_clean and \
+                    brand.lower() not in legal:
+                # legal name is contaminated by the landlord, the brand isn't:
+                # keep what the model got right
+                ident_names = (brand, s['page_start'])
+                break
+            if is_det_landlord or confused or re.search(
+                    rf'(?i){lo}[^.\n]{{0,80}}[("“]+\s*Landlord', body_head):
                 logger.info(f'rejecting identity {name!r} — matches the '
                             f'Landlord, not the Tenant')
                 continue
