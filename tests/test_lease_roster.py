@@ -13,7 +13,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.lease_roster import (  # noqa: E402
-    RosterRow, _clean_identity, _common_filename_words, _filename_stem, _kind)
+    RosterRow, _check_rent_roll, _clean_identity, _common_filename_words, _filename_stem,
+    _kind, _needs)
 
 FILES = [
     'OKP Harbor Hardware - OK-HH 1st Lease Amendment 05 20 1992.pdf',
@@ -92,6 +93,42 @@ def test_kind_other_agreement_and_expired():
     # expiration on paper is old, but a schedule covers today -> still a tenancy
     renewed = RosterRow(tenant='Shoe Co', expiration=date(2001, 8, 31), rent_method='schedule')
     assert _kind(renewed, 'LEASE AGREEMENT', as_of) == 'tenancy'
+
+
+# --- paper vs uploaded rent roll (date-free) ---------------------------
+
+SCHEDULE = """Minimum Rent shall be as follows:
+Period Annual Rent Monthly Rent
+3/1/2020 to 2/28/2025 $60,000.00 $5,000.00
+3/1/2025 to 2/28/2030 $63,000.00 $5,250.00"""
+
+
+def _row(m=5250.00):
+    return RosterRow(tenant='Shoe Co', monthly_rent=m, rent_method='schedule',
+                     rent_confidence='high')
+
+
+def test_rent_roll_agrees_keeps_high():
+    r = _row()
+    _check_rent_roll(r, 5250.00, SCHEDULE)
+    assert r.show_rent and 'matches_rent_roll' in r.rent_flags and _needs(r) == ''
+
+
+def test_rent_roll_on_another_step_is_a_timing_question():
+    # an older snapshot still showing the previous step: not a conflict,
+    # but not shown unreviewed either
+    r = _row()
+    _check_rent_roll(r, 5000.00, SCHEDULE)
+    assert not r.show_rent and 'rent_roll_on_other_step' in r.rent_flags
+    assert 'another step' in _needs(r)
+
+
+def test_rent_roll_conflict_is_routed_to_reconcile():
+    # two suites summed on the rent roll (4,100 + 1,900) match nothing on paper
+    r = _row()
+    _check_rent_roll(r, 6000.00, SCHEDULE)
+    assert not r.show_rent and 'conflicts_with_rent_roll' in r.rent_flags
+    assert _needs(r) == 'reconcile: lease says $5,250.00/mo, rent roll says $6,000.00/mo'
 
 
 if __name__ == '__main__':

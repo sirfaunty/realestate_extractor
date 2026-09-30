@@ -30,7 +30,7 @@ from datetime import date
 from typing import Optional
 
 from .extractors.rent_derivation import (
-    derive_current_rent, parse_date, _num)
+    derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num)
 
 _ENTITY_WORDS = {'llc', 'inc', 'incorporated', 'corp', 'corporation', 'company',
                  'co', 'lp', 'llp', 'ltd', 'pa', 'pllc', 'dba', 'the', 'of', 'and'}
@@ -63,6 +63,7 @@ class RosterRow:
     key: str = ''                   # stable tenancy id for confirmations ("fn:bean coffee")
     commencement_source: str = ''   # confirmed | rent_roll | lease | '' (unknown)
     commencement_guess: Optional[date] = None     # best guess to pre-fill a confirmation
+    rent_roll_monthly: Optional[float] = None     # uploaded rent roll, summed across suites
 
     @property
     def show_rent(self) -> bool:
@@ -202,7 +203,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                 tenant=f'(unassigned) {d["filename"]}', doc_ids=[d['id']],
                 filenames=[d['filename']], grouped_by='unassigned')
 
-    rent_roll = _rent_roll_starts(conn, property_id, groups) if use_rent_roll else {}
+    rent_roll = _rent_roll(conn, property_id, groups) if use_rent_roll else {}
 
     for k, row in groups.items():
         row.key = k
@@ -252,9 +253,10 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         row.commencement_guess = min(comm) if comm else None
         if confirmed.get(k):
             row.commencement, row.commencement_source = confirmed[k], 'confirmed'
-        elif rent_roll.get(k):
-            row.commencement, row.commencement_source = rent_roll[k], 'rent_roll'
-            row.commencement_guess = row.commencement_guess or rent_roll[k]
+        elif rent_roll.get(k, {}).get('start'):
+            rr_start = rent_roll[k]['start']
+            row.commencement, row.commencement_source = rr_start, 'rent_roll'
+            row.commencement_guess = row.commencement_guess or rr_start
         elif comm:
             row.commencement, row.commencement_source = min(comm), 'lease'
         exps = [parse_date(t['governing_expiration'].get('exp') or t['governing_expiration']['raw'])
@@ -282,6 +284,8 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                 (not row.square_feet and m > 20_000)):
             row.rent_confidence = 'medium'
             row.rent_flags.append('rent_implausible_for_size')
+        if rent_roll.get(k, {}).get('monthly'):
+            _check_rent_roll(row, rent_roll[k]['monthly'], chain_text)
         row.kind = _kind(row, chain_text, as_of)
         row.needs = _needs(row)
         out.append(row)
@@ -302,17 +306,20 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     return out
 
 
-def _rent_roll_starts(conn, property_id, groups) -> dict:
-    """{tenancy key: lease start} from uploaded rent rolls, matched by the
-    tenancy's file-label words or a legal-name alias — only when exactly one
-    tenancy matches a rent-roll tenant. Empty when no rent roll is loaded."""
+def _rent_roll(conn, property_id, groups) -> dict:
+    """{tenancy key: {'start': lease start, 'monthly': base rent}} from
+    uploaded rent rolls, matched by the tenancy's file-label words or a
+    legal-name alias — only when exactly one tenancy matches a rent-roll
+    tenant. A tenancy on several suites (one lease, two spaces) gets the SUM
+    of its suites' rents, from the latest rent roll only (older snapshots
+    would double-count). Empty when no rent roll is loaded."""
     table = 'cur_rent_roll_entries'
     try:
         conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
     except sqlite3.Error:
         table = 'rent_roll_entries'
-    q = (f"SELECT tenant_name, lease_start FROM {table} "
-         f"WHERE tenant_name IS NOT NULL AND lease_start IS NOT NULL")
+    q = (f"SELECT tenant_name, lease_start, monthly_rent, annual_rent, document_id "
+         f"FROM {table} WHERE tenant_name IS NOT NULL")
     args = []
     if property_id is not None:
         q += " AND property_id = ?"
@@ -321,19 +328,49 @@ def _rent_roll_starts(conn, property_id, groups) -> dict:
         rows = conn.execute(q, args).fetchall()
     except sqlite3.Error:
         return {}
+    latest = max((r[4] for r in rows if r[4] is not None), default=None)
     out = {}
-    for name, start in rows:
-        d = parse_date(start)
+    for name, start, monthly, annual, doc_id in rows:
         nt = _alpha(name)
-        if not d or not nt:
+        if not nt:
             continue
         cands = [k for k, row in groups.items() if not k.startswith('unassigned') and (
             (row.label and all(w in nt for w in row.label.split())) or
             any(_tokens(a) and all(t in nt for t in _tokens(a)[:2]) for a in row.aliases))]
-        if len(cands) == 1:
-            prev = out.get(cands[0])
-            out[cands[0]] = min(prev, d) if prev else d   # the earliest start = the lease's
+        if len(cands) != 1:
+            continue
+        e = out.setdefault(cands[0], {'start': None, 'monthly': None})
+        d = parse_date(start)
+        if d:
+            e['start'] = min(e['start'], d) if e['start'] else d   # earliest = the lease's
+        rent = monthly if monthly else (annual / 12 if annual else None)
+        if rent and rent > 0 and doc_id == latest:
+            e['monthly'] = round((e['monthly'] or 0) + rent, 2)
     return out
+
+
+def _within(a: float, b: float, tol: float = 0.02) -> bool:
+    return bool(a and b) and abs(a - b) / b <= tol
+
+
+def _check_rent_roll(row: 'RosterRow', rr_monthly: float, chain_text: str) -> None:
+    """Paper vs rent roll, date-free (a rent roll is a snapshot of unknown
+    date): agrees with the derived rent -> 'matches_rent_roll'; equals a
+    different step of the lease's own schedule -> 'rent_roll_on_other_step'
+    (a timing question); matches nothing on paper -> 'conflicts_with_rent_roll'.
+    Either disagreement keeps the rent off the dashboard (never high)."""
+    row.rent_roll_monthly = rr_monthly
+    m = row.monthly_rent
+    if not m:
+        return
+    if _within(m, rr_monthly):
+        row.rent_flags.append('matches_rent_roll')
+        return
+    steps = [r.monthly for r in parse_dated_rows(chain_text) + parse_rent_schedule(chain_text)]
+    row.rent_flags.append('rent_roll_on_other_step' if any(_within(v, rr_monthly) for v in steps)
+                          else 'conflicts_with_rent_roll')
+    if row.rent_confidence == 'high':
+        row.rent_confidence = 'medium'
 
 
 # ─── grouping helpers ─────────────────────────────────────────────
@@ -457,6 +494,15 @@ def _needs(row: RosterRow) -> str:
     if row.show_rent:
         return ''
     f = set(row.rent_flags)
+    if 'conflicts_with_rent_roll' in f:
+        return (f'reconcile: lease says ${row.monthly_rent:,.2f}/mo, '
+                f'rent roll says ${row.rent_roll_monthly:,.2f}/mo')
+    if 'rent_roll_on_other_step' in f:
+        return (f'rent roll shows ${row.rent_roll_monthly:,.2f}/mo — another step of the '
+                f'lease schedule; check which applies today')
+    if 'later_schedule_unplaced' in f:
+        return ("a later amendment's rent table has no start date — "
+                "check which rent applies today")
     if 'past_expiration' in f:
         return 'lease past its expiration on paper — add the renewal / holdover terms'
     if 'schedule_ends_before_date' in f:

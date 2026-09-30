@@ -174,7 +174,7 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
         table = 0 if last_end is None else rows[-1][3]
         if last_end is None or s1 - last_end > 400:
             low = ctx.lower()
-            if 'rent' not in low or 'sublease' in low or 'subtenant' in low:
+            if 'rent' not in low or re.search(r'sublease|subtenant|sublandlord', low):
                 continue
             table += 1          # a new table (amendments carry their own)
         # period marker = text since the previous row (never that row's dates)
@@ -265,8 +265,31 @@ _RANGE = re.compile(
 _OPTION_CTX = re.compile(r'\b(?:extended\s+term|extension\s+(?:term|option|period)|'
                          r'option\s+(?:to\s+)?(?:extend|renew)|renewal\s+(?:term|option|period))\b',
                          re.I)
+# an amendment that actually changed the term / premises (not an unexercised
+# option): its table can supersede, even if it also says "Extended Term"
+_EXECUTED_CTX = re.compile(r'\b(?:hereby\s+extended|is\s+extended|expansion|relocat\w*)\b', re.I)
+
+
+def _is_option_table(flat: str, pos: int) -> bool:
+    """A renewal-option rent table: begins only after the current term ends,
+    so it can't supersede a row inside that term."""
+    return bool(_OPTION_CTX.search(flat[max(0, pos - 300):pos])
+                and not _EXECUTED_CTX.search(flat[max(0, pos - 1500):pos]))
+
+
+def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = ()) -> bool:
+    """A relative rent table later in the chain than after_pos that could
+    not be dated and is not a renewal option. A row the dated parser already
+    placed ("Year 3 $27,233.30 $2,269.44 (1/1/2028 to 12/31/2028)") is not
+    unplaced."""
+    placed = {round(d.monthly, 2) for d in dated}
+    return any(x.start is None and x.pos > after_pos and round(x.monthly, 2) not in placed
+               and not _is_option_table(flat, x.pos)
+               for x in rows)
+
+
 _BAD_CTX = re.compile(r'\b(?:security\s+deposit|deposit|operating\s+costs?|cam|'
-                      r'common\s+area|estimated?|sublease|subtenant|deferred)\b')
+                      r'common\s+area|estimated?|sublease|subtenant|sublandlord|deferred)\b')
 
 
 def _amounts(seg: str, keep_zero: bool = False):
@@ -435,33 +458,33 @@ def derive_current_rent(*, as_of: date,
     # 1. explicitly dated rows — self-dating, strongest evidence. Where
     #    several cover the date (lease + later amendment), the row that
     #    STARTS latest belongs to the newer instrument; ties -> later in text.
+    #    Relative tables are parsed + dated up front: one that sits LATER in
+    #    the chain than the answer but can't be dated (an expansion,
+    #    relocation or rent-reduction amendment counted from an event) may
+    #    supersede it -> never high (flag later_schedule_unplaced).
+    flat = re.sub(r'\s+', ' ', schedule_text or '')
+    rows = parse_rent_schedule(schedule_text) if schedule_text else []
+    how = _anchor(rows, comm, exp)
+
     dated = parse_dated_rows(schedule_text) if schedule_text else []
     cov = [r for r in dated if r.start <= as_of <= r.end]
     if cov:
         r = max(cov, key=lambda x: (x.start, x.pos))
+        if _later_unplaced(rows, flat, r.pos, dated):
+            flags.append('later_schedule_unplaced')
         return RentResult(r.monthly, 'schedule', 'high' if not flags else 'medium',
                           flags, f'dated row {r.start}..{r.end} '
                           f'({len(dated)} dated rows found)')
 
     # 2. relative rows (Months 1-12 / Lease Year 3 / sequential) dated from
     #    each table's anchor
-    rows = parse_rent_schedule(schedule_text) if schedule_text else []
-    how = _anchor(rows, comm, exp)
     covering = [r for r in rows if r.start and r.end and r.start <= as_of <= r.end]
     if covering:
         r = max(covering, key=lambda x: (x.start, x.pos))
         # high only for explicitly labelled rows (Months / Lease Year) dated
         # from a stated start or the commencement; sequential guesses and
         # expiration back-dating are medium
-        # ...and never while a LATER table in the chain could not be dated:
-        # that newer instrument may supersede this row (a relocation or
-        # rent-reduction amendment counted from an event, not a date).
-        # Option / extension-term tables don't count — they begin only when
-        # the term this row sits in has ended.
-        flat = re.sub(r'\s+', ' ', schedule_text)
-        if any(x.start is None and x.table > r.table
-               and not _OPTION_CTX.search(flat[max(0, x.pos - 300):x.pos])
-               for x in rows):
+        if _later_unplaced(rows, flat, r.pos, dated):
             flags.append('later_schedule_unplaced')
         conf = ('high' if not flags and not r.label.startswith('seq')
                 and r.label.endswith('[commencement]') else 'medium')

@@ -95,6 +95,9 @@
                 {% else %}
                     <span style="color:var(--text-muted);">—</span>
                 {% endif %}
+                {% if r.rent_roll_monthly %}
+                    <div style="font-size:11px; color:var(--text-muted);">rent roll: ${{ '{:,.2f}'.format(r.rent_roll_monthly) }}{% if 'matches_rent_roll' in r.rent_flags %} ✓{% endif %}</div>
+                {% endif %}
             </td>
             <td style="font-size:13px;">
                 {% if r.needs %}{{ r.needs }}{% else %}<span class="badge badge-success">complete</span>{% endif %}

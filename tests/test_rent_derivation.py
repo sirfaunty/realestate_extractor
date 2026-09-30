@@ -175,6 +175,55 @@ def test_undatable_later_table_caps_confidence():
     assert 'later_schedule_unplaced' in r.flags, r
 
 
+def test_expansion_amendment_after_dated_row_caps_confidence():
+    # dated option-term schedule for the ORIGINAL premises, then a later
+    # expansion amendment whose table counts from the "Expansion Date" (an
+    # event) — it says "Extended Term" but it EXECUTED the extension, so it
+    # may supersede the dated row
+    t = """The Fixed Base Rent due during the Renewal Term and Option Terms:
+    Time Period Annual Rent Monthly Amount PSF
+    3/01/2020 - 2/28/2025 (1st Option) $60,000.00 $5,000.00 $10.00
+    3/01/2025 - 2/28/2030 (2nd Option) $63,000.00 $5,250.00 $10.50
+    """ + 'x ' * 300 + """
+    FOURTH AMENDMENT. Landlord hereby also leases to Tenant the Expansion
+    Space. 3. Extended Term: The term of the Lease is hereby extended for ten
+    years starting on the Expansion Date. 4. Base Rent: Beginning on the
+    Expansion Date and continuing through the Extended Term, Tenant shall pay
+    Landlord annual Fixed Base Rent for the Leased Premises as follows:
+    Months Monthly Annually 1-4 $6,000.00 $72,000.00 5-64 $6,200.00 $74,400.00
+    65-124 $6,500.00 $78,000.00"""
+    r = rent(t)
+    assert r.monthly == 5250.00 and r.confidence == 'medium', r
+    assert 'later_schedule_unplaced' in r.flags, r
+
+
+def test_later_sublease_table_does_not_cap_confidence():
+    # a sublease later in the file (Sublandlord / Subtenant) is not the
+    # tenant's own rent — it must not demote the lease's dated row
+    t = """Minimum Rent shall be as follows:
+    Period Annual Rent Monthly Rent
+    2/1/2023 to 1/31/2028 $60,000.00 $5,000.00
+    """ + 'x ' * 300 + """
+    6) RENT. A. Subtenant covenants and agrees to pay to Sublandlord, in
+    lawful money of the United States, Gross Rent ("Gross Rent") at the
+    following rates: Annual Rent Monthly Rent Years 1-5 $90,000.00 $7,500.00
+    Years 6- January 31, 2033 $96,000.00 $8,000.00"""
+    r = rent(t)
+    assert (r.monthly, r.confidence, r.flags) == (5000.00, 'high', []), r
+
+
+def test_dates_after_amounts_row_is_not_unplaced():
+    # "Year 3 $.. $.. (1/1/2028 to 12/31/2028)": the dated parser places it,
+    # so the relative parser's undated copy must not trigger the cap
+    t = """b. New Premises. Tenant shall pay Landlord Gross Rent as follows:
+    TERM ANNUAL RENT MONTHLY RENT
+    Year 1 (1/1/2026 to 12/31/2026) $24,000.00 $2,000.00
+    Year 2 (1/1/2027 to 12/31/2027) $24,720.00 $2,060.00
+    Year 3 $25,461.60 $2,121.80 (1/1/2028 to 12/31/2028)"""
+    r = rent(t)
+    assert (r.monthly, r.confidence, r.flags) == (2000.00, 'high', []), r
+
+
 def test_option_term_table_does_not_cap_confidence():
     # a later Extended Term table can't be dated either, but it only starts
     # after the initial term ends -> the initial-term row stays high
