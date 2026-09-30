@@ -191,6 +191,50 @@ def test_no_restatement_means_none():
 
 
 
+# --- expiration: uploaded rent roll vs paper (build_roster, temp DB) -----
+
+def _roster_with_rent_roll(lease_end_on_roll):
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    tmp = tempfile.mkdtemp()
+    db = Database(os.path.join(tmp, 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+              "VALUES (1, 'Elm Court - Bean Coffee Lease.pdf', 'x', 'lease', 1)")
+    c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw, expiration_date) "
+              "VALUES (1, 'governing_expiration', '2024-12-31', '2024-12-31')")
+    c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+              "VALUES (3, 'Elm Court - Pet Barn Lease.pdf', 'x', 'lease', 1)")
+    c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+              "VALUES (2, 'Elm Court Rent Roll.pdf', 'x', 'rent_roll', 1)")
+    c.execute("INSERT INTO rent_roll_entries (document_id, property_id, tenant_name, lease_start, "
+              "lease_end, monthly_rent) VALUES (2, 1, 'Bean Coffee', '2020-01-01', ?, 2500)",
+              (lease_end_on_roll,))
+    c.commit()
+    rows = [r for r in build_roster(c, 1, as_of=date(2026, 6, 30)) if r.label == 'bean coffee']
+    db.close()
+    return rows[0]
+
+
+def test_rent_roll_expiration_wins_and_difference_is_flagged():
+    # paper says the lease ended 2024; the rent roll shows a 2029 extension
+    r = _roster_with_rent_roll('2029-12-31')
+    assert r.expiration == date(2029, 12, 31) and r.expiration_source == 'rent_roll', r
+    assert r.expiration_lease == date(2024, 12, 31)
+    assert 'expiration_differs_from_lease' in r.flags
+    assert r.kind == 'tenancy'            # not "expired" — the landlord still bills it
+
+
+def test_paper_expiration_kept_without_rent_roll_end():
+    r = _roster_with_rent_roll(None)
+    assert r.expiration == date(2024, 12, 31) and r.expiration_source == 'lease', r
+    assert 'expiration_differs_from_lease' not in r.flags
+
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

@@ -84,7 +84,13 @@
                 </form>
                 {% endif %}
             </td>
-            <td>{{ r.expiration.isoformat() if r.expiration else '—' }}</td>
+            <td>
+                {{ r.expiration.isoformat() if r.expiration else '—' }}
+                {% if r.expiration_source == 'rent_roll' %}
+                    <div style="font-size:11px; color:var(--text-muted);"
+                         title="{{ 'Lease says ' ~ r.expiration_lease.isoformat() if 'expiration_differs_from_lease' in r.flags else 'Matches the lease' if r.expiration_lease else 'Not stated on the lease' }}">rent roll{% if 'expiration_differs_from_lease' in r.flags %} · lease says {{ r.expiration_lease.isoformat() }}{% endif %}</div>
+                {% endif %}
+            </td>
             <td style="text-align:right;">
                 {% if r.show_rent %}
                     <span style="font-weight:600;">${{ '{:,.2f}'.format(r.monthly_rent) }}</span>

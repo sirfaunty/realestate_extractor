@@ -64,6 +64,8 @@ class RosterRow:
     commencement_source: str = ''   # confirmed | rent_roll | lease | '' (unknown)
     commencement_guess: Optional[date] = None     # best guess to pre-fill a confirmation
     rent_roll_monthly: Optional[float] = None     # uploaded rent roll, summed across suites
+    expiration_source: str = ''     # rent_roll | lease | '' (unknown)
+    expiration_lease: Optional[date] = None       # what the paper says, kept when the rent roll wins
 
     @property
     def show_rent(self) -> bool:
@@ -267,7 +269,17 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         exps = [parse_date(t['governing_expiration'].get('exp') or t['governing_expiration']['raw'])
                 for t in ts if t.get('governing_expiration')]
         exps = [e for e in exps if e]
-        row.expiration = max(exps) if exps else None
+        row.expiration_lease = max(exps) if exps else None
+        row.expiration = row.expiration_lease
+        row.expiration_source = 'lease' if row.expiration_lease else ''
+        # the rent roll is the landlord's current view: auto-renewals and
+        # extensions that never reached paper. It wins for display / WALT /
+        # expired status; a disagreement with the paper is flagged, not hidden
+        rr_end = rent_roll.get(k, {}).get('end')
+        if rr_end:
+            row.expiration, row.expiration_source = rr_end, 'rent_roll'
+            if row.expiration_lease and abs((rr_end - row.expiration_lease).days) > 31:
+                row.flags.append('expiration_differs_from_lease')
         base = first('base_rent')
         esc = first('escalation_rate')
         r = derive_current_rent(
@@ -275,7 +287,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             year1_monthly=base['raw'] if base else None,
             escalation_pct=esc['raw'] if esc else None,
             commencement=row.commencement,
-            expiration=row.expiration,
+            expiration=row.expiration_lease,      # paper only — never the rent roll's
             schedule_text=chain_text)
         row.monthly_rent, row.rent_method = r.monthly, r.method
         row.rent_confidence, row.rent_flags, row.rent_detail = r.confidence, list(r.flags), r.detail
@@ -323,7 +335,7 @@ def _rent_roll(conn, property_id, groups) -> dict:
         conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
     except sqlite3.Error:
         table = 'rent_roll_entries'
-    q = (f"SELECT tenant_name, lease_start, monthly_rent, annual_rent, document_id "
+    q = (f"SELECT tenant_name, lease_start, monthly_rent, annual_rent, document_id, lease_end "
          f"FROM {table} WHERE tenant_name IS NOT NULL")
     args = []
     if property_id is not None:
@@ -335,7 +347,7 @@ def _rent_roll(conn, property_id, groups) -> dict:
         return {}
     latest = max((r[4] for r in rows if r[4] is not None), default=None)
     out = {}
-    for name, start, monthly, annual, doc_id in rows:
+    for name, start, monthly, annual, doc_id, end in rows:
         nt = _alpha(name)
         if not nt:
             continue
@@ -344,10 +356,13 @@ def _rent_roll(conn, property_id, groups) -> dict:
             any(_tokens(a) and all(t in nt for t in _tokens(a)[:2]) for a in row.aliases))]
         if len(cands) != 1:
             continue
-        e = out.setdefault(cands[0], {'start': None, 'monthly': None})
+        e = out.setdefault(cands[0], {'start': None, 'monthly': None, 'end': None})
         d = parse_date(start)
         if d:
             e['start'] = min(e['start'], d) if e['start'] else d   # earliest = the lease's
+        x = parse_date(end) if doc_id == latest else None
+        if x:
+            e['end'] = max(e['end'], x) if e['end'] else x         # latest suite end
         rent = monthly if monthly else (annual / 12 if annual else None)
         if rent and rent > 0 and doc_id == latest:
             e['monthly'] = round((e['monthly'] or 0) + rent, 2)
