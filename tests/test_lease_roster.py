@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.lease_roster import (  # noqa: E402
     RosterRow, _check_rent_roll, _clean_identity, _common_filename_words, _filename_stem,
-    _kind, _needs)
+    _kind, _needs, _restated_sf)
 
 FILES = [
     'OKP Harbor Hardware - OK-HH 1st Lease Amendment 05 20 1992.pdf',
@@ -156,6 +156,38 @@ def test_confirmed_rent_keeps_the_expiration_question():
     _check_rent_roll(r, 4000.00, '')
     assert r.show_rent
     assert _needs(r) == 'lease past its expiration on paper — add the renewal / holdover terms'
+
+
+
+# --- premises restated by later instruments ---------------------------
+
+def test_expansion_restates_the_premises():
+    t = """ARTICLE 1. Landlord leases to Tenant approximately 4,000 square feet.
+    ... 1 ton of air conditioning for every 350 square feet of Premises ...
+    FIRST AMENDMENT. Landlord and Tenant desire to expand the Original Premises,
+    thereby enlarging the total square foot area of the premises from 4,000
+    square feet to 5,500 square feet (the "Combined Premises")."""
+    assert _restated_sf(t) == 5500
+
+
+def test_relocation_and_recital_latest_wins():
+    t = """RECITALS: A. Landlord is currently leasing to Tenant approximately
+    2,200 square feet of space known as Suite 110. ... The parties agree that the
+    total rentable square feet of the New Premises is approximately 3,100 square
+    feet. 3. Extended Term."""
+    assert _restated_sf(t) == 3100
+
+
+def test_spelled_out_area_with_digits_in_brackets():
+    t = """the Leased Premises shall thereafter contain approximately twelve
+    thousand five hundred (12,500) square feet of floor area."""
+    assert _restated_sf(t) == 12500
+
+
+def test_no_restatement_means_none():
+    t = """Landlord leases approximately 4,000 square feet. Signage criteria for
+    tenants having 5,000 square feet or more; HVAC per 350 square feet."""
+    assert _restated_sf(t) is None
 
 
 

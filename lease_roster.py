@@ -247,6 +247,11 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                         v = None
                         break
             row.square_feet = v
+        # an expansion / relocation restates the premises later in the chain
+        restated = _restated_sf(chain_text)
+        if restated and restated != row.square_feet:
+            row.square_feet = restated
+            row.flags.append('sf_restated_by_amendment')
         comm = [parse_date(t['lease_commencement']['raw']) for t in ts
                 if t.get('lease_commencement')]
         comm = [c for c in comm if c]
@@ -347,6 +352,45 @@ def _rent_roll(conn, property_id, groups) -> dict:
         if rent and rent > 0 and doc_id == latest:
             e['monthly'] = round((e['monthly'] or 0) + rent, 2)
     return out
+
+
+# The premises area as RESTATED later in the chain — expansions ("the Leased
+# Premises shall thereafter contain approximately 15,026 square feet",
+# "enlarging ... from 7,000 square feet to 10,360 square feet"), relocations
+# ("the total rentable square feet of the New Premises is approximately
+# 5,045"), amendment recitals ("Landlord is currently leasing to Tenant
+# approximately 12,280 square feet") and estoppels ("Tenant is in possession
+# of 12,280 square feet"). Numbers may be spelled out with the digits in
+# brackets. Incidental areas (HVAC per 350 sq ft, signage criteria) don't
+# match these forms.
+_N = r'\(?\s*(\d{1,3}(?:,\d{3})+|\d{3,6})\s*\)?'
+_SQF = r'\s*(?:rentable\s+|leasable\s+|usable\s+)?(?:ground\s+floor\s+)?square\s+f'
+_W = r'[^.$]{0,120}?'
+_RESTATED_SF = [re.compile(p, re.I) for p in (
+    r'premises\s+shall\s+(?:thereafter\s+|then\s+|now\s+)?(?:contain|consist\s+of|be|include)\s+'
+    + _W + _N + _SQF,
+    r'(?:total|combined)\s+(?:rentable\s+|leasable\s+)?square\s+f(?:eet|oot(?:age)?)\s+(?:area\s+)?'
+    r'of\s+the\s+(?:new\s+|leased\s+|combined\s+|relocat\w+\s+)?premises\s+(?:is|shall\s+be|being)\s+'
+    + _W + _N,
+    r'square\s+f(?:eet|oot)(?:\s+area)?\s+(?:in|of)\s+the\s+(?:new\s+|leased\s+|combined\s+)?'
+    r'premises\s+being\s+' + _N,
+    r'from\s+' + _N + r'\s*square\s+feet\s+to\s+' + _W + _N + r'\s*square\s+feet',
+    r'(?:currently|presently)\s+leas(?:ing|es)\s+[^.$]{0,160}?' + _N + _SQF,
+    r'tenant\s+is\s+in\s+possession\s+of\s+[^.$]{0,60}?' + _N + _SQF,
+)]
+
+
+def _restated_sf(chain_text: str) -> Optional[float]:
+    """The LAST premises restatement in the chain (later instrument = the
+    current premises), or None."""
+    flat = re.sub(r'\s+', ' ', chain_text or '')
+    best = None
+    for rx in _RESTATED_SF:
+        for m in rx.finditer(flat):
+            v = _num(m.group(m.lastindex))
+            if v and 50 < v < 500_000 and (best is None or m.start() > best[0]):
+                best = (m.start(), v)
+    return best[1] if best else None
 
 
 def _within(a: float, b: float, tol: float = 0.02) -> bool:

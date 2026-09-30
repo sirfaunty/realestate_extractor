@@ -158,16 +158,36 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
     last_end = None
     i = 0
     while i < len(toks) - 1:
-        (s1, e1, a), (s2, e2, b) = toks[i], toks[i + 1]
+        s1, e1, a = toks[i]
         i += 1
-        if not a or not b or s2 - e1 > 40:
+        if not a:
             continue
-        if _is_pair(a, b):
-            annual, monthly = a, b
-        elif _is_pair(b, a):
-            annual, monthly = b, a
-        else:
+        # partner = the next token, or the one after a stray small amount
+        # (an OCR'd page-footer "003.50" or a $/SF figure). Rent written in
+        # words puts the spelled-out amount between annual and monthly
+        # ("($418,069.32) per Lease Year, payable at the rate of Thirty-four
+        # thousand ... cents ($34,839.11) per month") -> up to 260 chars when
+        # no other real amount sits between; the exact x12 check keeps it safe.
+        found = None
+        for j in (i, i + 1):
+            if j >= len(toks):
+                break
+            s2, e2, b = toks[j]
+            if j == i + 1 and (toks[i][2] or 0) >= 100:
+                break
+            gap = flat[e1:s2]
+            if not b or s2 - e1 > (260 if _WORD_AMOUNT.search(gap) else 40):
+                continue
+            if _is_pair(a, b):
+                found = (j, a, b)
+            elif _is_pair(b, a):
+                found = (j, b, a)
+            if found:
+                break
+        if not found:
             continue
+        j, annual, monthly = found
+        s2, e2, _ = toks[j]
         if monthly > MAX_MONTHLY:
             continue
         ctx = flat[max(0, s1 - 220):s1]
@@ -182,27 +202,45 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
         rows.append((s1, ScheduleRow(monthly=monthly, annual=annual, pos=s1),
                      flat[lo:s1], table))
         last_end = e2
-        i += 1                  # both tokens consumed
+        i = j + 1               # both tokens consumed
 
     out = []
     seq = {}
+    split, last_term = {}, {}
     for _, row, pre, table in rows:
         if _RANGE.search(pre):
             continue            # explicitly dated row — parse_dated_rows owns it
-        seq[table] = seq.get(table, 0) + 1
         mm = list(re.finditer(r'(?i)months?\s*(\d{1,3})\s*(?:-|–|to|through)\s*(\d{1,3})', pre))
         yr = list(re.finditer(r'(?i)(?:lease\s+)?years?\s*(\d{1,2})\s*(?:-|–|to|through)\s*(\d{1,2})\b', pre))
         yy = list(re.finditer(r'(?i)(?:lease\s+)?year\s*(\d{1,2})\b', pre))
+        tm = list(_TERM_LABEL.finditer(pre))
+        if tm and not (mm or yr or yy):
+            k = _term_index(tm[-1])
+            # the term sequence restarting ("Initial Term" again) = a
+            # PARALLEL table for another space of the same lease
+            if k is not None and k <= last_term.get(table, -1):
+                split[table] = split.get(table, 0) + 1
+                last_term[table] = -1
+            if k is not None:
+                last_term[table] = k
+        key = (table, split.get(table, 0))
+        seq[key] = seq.get(key, 0) + 1
         if mm:
             row.label = f'months {mm[-1].group(1)}-{mm[-1].group(2)}'
         elif yr:
             row.label = f'years {yr[-1].group(1)}-{yr[-1].group(2)}'
         elif yy:
             row.label = f'year {yy[-1].group(1)}'
+        elif tm and _term_index(tm[-1]) is not None:
+            row.label = f'term {_term_index(tm[-1])}'
         else:
-            row.label = f'seq {seq[table]}'
-        row.table = table
+            row.label = f'seq {seq[key]}'
+        row.table = key
         out.append(row)
+    # renumber (table, split) keys 1..n in text order
+    ids = {}
+    for r in out:
+        r.table = ids.setdefault(r.table, len(ids) + 1)
 
     # each table's own start date, if the text states one ("... during the
     # Extended Term ... beginning on November 1, 2017") — amendment tables
@@ -213,6 +251,42 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
         for r in trs:
             r.anchor = a
     return out
+
+
+# Named-term rows: "Initial Term:" -> term 0, "First Extended Term:" /
+# "2nd Renewal Term" / "Third Option Term" -> term n
+_ORD = {'initial': 0, 'original': 0, 'first': 1, '1st': 1, 'second': 2, '2nd': 2,
+        'third': 3, '3rd': 3, 'fourth': 4, '4th': 4, 'fifth': 5, '5th': 5}
+_TERM_LABEL = re.compile(r'(?i)\b(initial|original|first|1st|second|2nd|third|3rd|fourth|4th|'
+                         r'fifth|5th)\s+(?:(extended|extension|renewal|option)\s+)?term\s*[:\-–—]')
+# a spelled-out amount between an annual and its monthly figure
+_WORD_AMOUNT = re.compile(r'(?i)\b(?:thousand|hundred)\b[^$]{0,200}\bdollars\b')
+
+
+def _term_index(m) -> Optional[int]:
+    k = _ORD[m.group(1).lower()]
+    if k == 0 and m.group(2):
+        return None                 # "Original Extended Term" — not a clear index
+    if k > 0 and not m.group(2):
+        return None                 # "First Term" alone is ambiguous
+    return k
+
+
+def _term_lengths(flat: str) -> tuple[Optional[int], Optional[int]]:
+    """(initial term, each extension) in months, from the Term article:
+    'The Initial Term ... shall run ... for fifteen (15) years',
+    'three (3) additional term of five (5) years each (each an "Extended
+    Term")'."""
+    def months(m):
+        n = int(m.group(1))
+        return n * 12 if m.group(2).lower().startswith('year') else n
+    ini = re.search(r'(?i)initial\s+term[^.]{0,160}?\b(?:for|of)\s+(?:a\s+(?:period\s+|term\s+)?of\s+)?'
+                    r'(?:[a-z\- ]{0,30}\(\s*)?(\d{1,3})\s*\)?\s*(?:full\s+)?(?:lease\s+|calendar\s+)?'
+                    r'(years?|months?)', flat)
+    ext = re.search(r'(?i)(?:additional|extended|extension|renewal|option)\s+terms?\s+of\s+'
+                    r'(?:[a-z\- ]{0,30}\(\s*)?(\d{1,2})\s*\)?\s*(?:full\s+)?(?:lease\s+)?(years?|months?)',
+                    flat)
+    return (months(ini) if ini else None), (months(ext) if ext else None)
 
 
 # "Year 1" incl. OCR'd 1s ("Year |", "Year I", "Year l")
@@ -412,7 +486,7 @@ def _offsets(r: ScheduleRow) -> tuple[int, int]:
 
 
 def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
-            expiration: Optional[date]) -> set:
+            expiration: Optional[date], flat: str = '') -> set:
     """Date the relative rows. Each table counts from its own stated start
     if it has one; the first table (the original lease) from the
     commencement; failing both, the LAST table is back-dated from the
@@ -420,8 +494,25 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
     used, for confidence."""
     used = set()
     tables = sorted({r.table for r in rows})
+    ini, ext = _term_lengths(flat) if flat else (None, None)
     for t in tables:
         trs = [r for r in rows if r.table == t]
+        if all(r.label.startswith('term ') for r in trs):
+            # named terms are lease-level: Initial Term from the
+            # commencement, each Extended Term right after the previous one
+            if not commencement or not ini:
+                continue
+            for r in trs:
+                k = int(r.label.split()[1])
+                if k and not ext:
+                    continue
+                s = 0 if k == 0 else ini + (k - 1) * ext
+                e = ini if k == 0 else ini + k * ext
+                r.start = add_months(commencement, s)
+                r.end = add_months(commencement, e) - timedelta(days=1)
+                r.label += ' [commencement]'
+            used.add('commencement')
+            continue
         a = trs[0].anchor or (commencement if t == tables[0] else None)
         how = 'stated' if trs[0].anchor else 'commencement'
         if not a and expiration and t == tables[-1]:
@@ -464,7 +555,7 @@ def derive_current_rent(*, as_of: date,
     #    supersede it -> never high (flag later_schedule_unplaced).
     flat = re.sub(r'\s+', ' ', schedule_text or '')
     rows = parse_rent_schedule(schedule_text) if schedule_text else []
-    how = _anchor(rows, comm, exp)
+    how = _anchor(rows, comm, exp, flat)
 
     dated = parse_dated_rows(schedule_text) if schedule_text else []
     cov = [r for r in dated if r.start <= as_of <= r.end]
@@ -481,16 +572,34 @@ def derive_current_rent(*, as_of: date,
     covering = [r for r in rows if r.start and r.end and r.start <= as_of <= r.end]
     if covering:
         r = max(covering, key=lambda x: (x.start, x.pos))
+        monthly = r.monthly
+        # parallel named-term tables for the lease's separate spaces
+        # ("Minimum Rental for the Existing Space ... for the New Space",
+        # same term labels, same instrument) -> the tenancy pays their SUM
+        if r.label.startswith('term '):
+            def labels(t):
+                return [x.label for x in rows if x.table == t]
+            first = {t: min(x.pos for x in rows if x.table == t) for t in {x.table for x in rows}}
+            par = [x for x in covering if x.table != r.table and x.label == r.label
+                   and labels(x.table) == labels(r.table)
+                   and abs(first[x.table] - first[r.table]) < 8000]
+            if par:
+                monthly = round(monthly + sum(x.monthly for x in par), 2)
+                flags.append('multi_space_sum')
+            if not r.label.startswith('term 0'):
+                flags.append('extension_term_assumed')   # an option may not have been exercised
         # high only for explicitly labelled rows (Months / Lease Year) dated
         # from a stated start or the commencement; sequential guesses and
         # expiration back-dating are medium
         if _later_unplaced(rows, flat, r.pos, dated):
             flags.append('later_schedule_unplaced')
-        conf = ('high' if not flags and not r.label.startswith('seq')
+        conf = ('high' if not (set(flags) - {'multi_space_sum'})
+                and not r.label.startswith('seq')
                 and r.label.endswith('[commencement]') else 'medium')
-        return RentResult(r.monthly, 'schedule', conf, flags,
+        return RentResult(monthly, 'schedule', conf, flags,
                           f'{len(rows)}-row schedule, row {r.label} '
-                          f'({r.start}..{r.end})')
+                          f'({r.start}..{r.end})'
+                          + (f' + {len(par)} parallel space(s)' if 'multi_space_sum' in flags else ''))
     if dated and max(r.end for r in dated) < as_of:
         flags.append('schedule_ends_before_date')   # a later amendment is missing
 

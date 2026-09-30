@@ -224,6 +224,50 @@ def test_dates_after_amounts_row_is_not_unplaced():
     assert (r.monthly, r.confidence, r.flags) == (2000.00, 'high', []), r
 
 
+TWO_SPACES = """3. Term. The Initial Term of this Lease shall run and extend for ten (10)
+years from and after the Commencement Date (the "Initial Term"). Landlord grants
+Tenant two (2) additional term of five (5) years each (each an "Extended Term").
+4.1.1 Minimum Rental for the Existing Space. An annual Minimum Rental for the
+Existing Space as follows: Initial Term: One hundred twenty thousand dollars
+($120,000.00) per Lease Year, payable at the rate of Ten thousand dollars and no
+cents ($10,000.00) per month; (based upon six dollars ($6.00) per square foot).
+First Extended Term: One hundred thirty-two thousand dollars ($132,000.00) per
+Lease Year, payable at the rate of Eleven thousand dollars ($11,000.00) per month.
+Second Extended Term: One hundred forty-four thousand dollars 004.507 ($144,000.00)
+per Lease Year, payable at the rate of Twelve thousand dollars ($12,000.00) per month.
+4.1.2 Minimum Rental for the New Space. An annual Minimum Rental for the New Space
+as follows: Initial Term: Twenty-four thousand dollars ($24,000.00) per Lease
+Year, payable at the rate of Two thousand dollars ($2,000.00) per month. First
+Extended Term: Twenty-six thousand four hundred dollars ($26,400.00) per Lease
+Year, payable at the rate of Two thousand two hundred dollars ($2,200.00) per month.
+Second Extended Term: Twenty-eight thousand eight hundred dollars ($28,800.00) per
+Lease Year, payable at the rate of Two thousand four hundred dollars 003.50
+($2,400.00) per month."""
+
+
+def test_rent_in_words_named_terms_two_spaces_are_summed():
+    # anchor-style lease: amounts spelled out between annual and monthly,
+    # "Initial Term / First Extended Term" rows, one table per space;
+    # commenced 9/15/2008 -> Initial to 9/14/2018, First Extended to
+    # 9/14/2023, Second Extended covers 2026 -> 12,000 + 2,400
+    r = rent(TWO_SPACES, commencement='2008-09-15')
+    assert r.monthly == 14400.00 and r.method == 'schedule', r
+    assert 'multi_space_sum' in r.flags and 'extension_term_assumed' in r.flags, r
+    assert r.confidence == 'medium', r          # an extension may not have been exercised
+    # in the Initial Term the sum is high confidence
+    r0 = rent(TWO_SPACES, commencement='2020-01-01')
+    assert (r0.monthly, r0.confidence) == (12000.00, 'high'), r0
+
+
+def test_prose_term_mention_is_not_a_term_row():
+    # "the initial term" in running prose is not a row label
+    t = """3. OPTION TO RENEW. Landlord grants Tenant the option to extend this
+    Lease for five (5) years under the terms in effect at the expiration of the
+    initial term except that the Minimum Annual Rent during the option term shall
+    be $24,000.00, payable in equal monthly installments of $2,000.00."""
+    assert all(not r.label.startswith('term') for r in parse_rent_schedule(t))
+
+
 def test_option_term_table_does_not_cap_confidence():
     # a later Extended Term table can't be dated either, but it only starts
     # after the initial term ends -> the initial-term row stays high
