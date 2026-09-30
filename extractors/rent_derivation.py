@@ -83,6 +83,22 @@ def _num(s) -> Optional[float]:
         return None
 
 
+def _is_pair(annual: float, monthly: float) -> bool:
+    """annual = 12 x monthly, to the cent. Also accepts an annual whose '$'
+    was OCR'd as a leading digit ("344,143.75" for "$44,143.75" next to
+    $3,678.65) — the remaining digits must still match exactly, so a real
+    six-figure annual can't pass by accident."""
+    if annual < 1200 or not monthly:
+        return False
+    if abs(annual / 12 - monthly) <= 0.02:
+        return True
+    s = f'{annual:.2f}'
+    if len(s) > 7:                         # 5+ integer digits: one can be the '$'
+        rest = float(s[1:])
+        return rest >= 1200 and abs(rest / 12 - monthly) <= 0.02
+    return False
+
+
 def parse_date(s) -> Optional[date]:
     if not s:
         return None
@@ -146,9 +162,9 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
         i += 1
         if not a or not b or s2 - e1 > 40:
             continue
-        if a >= 1200 and abs(a / 12 - b) <= 0.02:
+        if _is_pair(a, b):
             annual, monthly = a, b
-        elif b >= 1200 and abs(b / 12 - a) <= 0.02:
+        elif _is_pair(b, a):
             annual, monthly = b, a
         else:
             continue
@@ -246,6 +262,9 @@ _RANGE = re.compile(
     r'and\s+(?:ending|expiring|terminating)(?:\s+on)?|'
     r'10(?=\d{1,2}/))'                       # OCR: "to" read as "10" ("1/1/20261012/31/2026")
     r'\s*(' + _D + r')', re.I)
+_OPTION_CTX = re.compile(r'\b(?:extended\s+term|extension\s+(?:term|option|period)|'
+                         r'option\s+(?:to\s+)?(?:extend|renew)|renewal\s+(?:term|option|period))\b',
+                         re.I)
 _BAD_CTX = re.compile(r'\b(?:security\s+deposit|deposit|operating\s+costs?|cam|'
                       r'common\s+area|estimated?|sublease|subtenant|deferred)\b')
 
@@ -274,9 +293,9 @@ def _monthly_from(seg: str, header: str, nearest_last: bool = False) -> Optional
     if nearest_last:            # amounts BEFORE the range: the closest row wins
         pairs.reverse()
     for (s1, e1, a), (s2, e2, b) in pairs:
-        if a >= 1200 and abs(a / 12 - b) <= 0.02:
+        if _is_pair(a, b):
             return b
-        if b >= 1200 and abs(b / 12 - a) <= 0.02:
+        if _is_pair(b, a):
             return a
     big = [(s, e, v) for s, e, v in am if v >= 100]
     if not big or (len(big) > 1 and not nearest_last):
@@ -434,6 +453,16 @@ def derive_current_rent(*, as_of: date,
         # high only for explicitly labelled rows (Months / Lease Year) dated
         # from a stated start or the commencement; sequential guesses and
         # expiration back-dating are medium
+        # ...and never while a LATER table in the chain could not be dated:
+        # that newer instrument may supersede this row (a relocation or
+        # rent-reduction amendment counted from an event, not a date).
+        # Option / extension-term tables don't count — they begin only when
+        # the term this row sits in has ended.
+        flat = re.sub(r'\s+', ' ', schedule_text)
+        if any(x.start is None and x.table > r.table
+               and not _OPTION_CTX.search(flat[max(0, x.pos - 300):x.pos])
+               for x in rows):
+            flags.append('later_schedule_unplaced')
         conf = ('high' if not flags and not r.label.startswith('seq')
                 and r.label.endswith('[commencement]') else 'medium')
         return RentResult(r.monthly, 'schedule', conf, flags,

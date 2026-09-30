@@ -140,6 +140,60 @@ def test_newest_instrument_wins_latest_start():
     assert rent(t).monthly == 2500.00
 
 
+def test_ocr_dollar_read_as_digit_in_annual_column():
+    # '$' of the annual column OCR'd as a leading '3' ("$27,600.00" ->
+    # "327,600.00"): the pair still verifies once that digit is dropped
+    t = """b. Notwithstanding anything to the contrary, Tenant shall pay the
+    reduced annual Minimum Rent as follows:
+    TERM ANNUAL RENT MONTHLY RENT RENT PER SQ. FT.
+    1/1/2024 to 7/31/2025 $26,400.00 $2,200.00 $8.00
+    8/1/2025 to 7/31/2026 327,600.00 $2,300.00 $8.36
+    8/1/2026 to 7/31/2027 $28,800.00 $2,400.00 $8.73"""
+    r = rent(t)
+    assert (r.method, r.monthly, r.confidence) == ('schedule', 2300.00, 'high'), r
+
+
+def test_undatable_later_table_caps_confidence():
+    # original lease's Lease Year table + a relocation amendment counted from
+    # an EVENT ("Relocation Commencement Date"). With a confirmed original
+    # commencement the old table places, but the newer one may supersede it
+    # -> never high
+    t = """2. Minimum Rent. Tenant shall pay Landlord annual Minimum Rent:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Lease Year 1 $18,000.00 $1,500.00
+    Lease Year 2 $18,600.00 $1,550.00
+    Lease Year 3 $19,200.00 $1,600.00
+    Lease Year 4 $19,800.00 $1,650.00
+    """ + 'x ' * 300 + """
+    b. New Premises. Beginning on the Relocation Commencement Date, Tenant
+    shall pay Landlord Minimum Rent for the New Premises as follows:
+    TERM ANNUAL RENT MONTHLY RENT
+    Year 1 $36,000.00 $3,000.00
+    Year 2 $37,080.00 $3,090.00"""
+    r = rent(t, commencement='2023-08-01')
+    assert r.monthly == 1600.00 and r.confidence == 'medium', r
+    assert 'later_schedule_unplaced' in r.flags, r
+
+
+def test_option_term_table_does_not_cap_confidence():
+    # a later Extended Term table can't be dated either, but it only starts
+    # after the initial term ends -> the initial-term row stays high
+    t = """2. Minimum Rent. Tenant shall pay Landlord annual Minimum Rent:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Lease Year 1 $18,000.00 $1,500.00
+    Lease Year 2 $18,600.00 $1,550.00
+    Lease Year 3 $19,200.00 $1,600.00
+    Lease Year 4 $19,800.00 $1,650.00
+    """ + 'x ' * 300 + """
+    3. Option to Extend: Landlord grants Tenant one option to extend for five
+    years, except that Minimum Rent for the Extended Term shall be as follows:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Extended Term Year 1 $20,400.00 $1,700.00
+    Extended Term Year 2 $21,000.00 $1,750.00"""
+    r = rent(t, commencement='2023-08-01')
+    assert (r.monthly, r.confidence, r.flags) == (1600.00, 'high', []), r
+
+
 def test_schedule_ends_before_date_is_flagged_not_guessed():
     t = """Minimum Rent shall be as follows:
     Period Monthly Rent

@@ -47,3 +47,7 @@ export_for_mac.py
 TESTING_CHECKLIST.md
 CLAUDE.md
 .claude
+# internal notes that name client entities — dev docs, not runtime
+PROJECT_STATE.md
+docs/HISTORY_SCRUB.md
+docs/multi-property-plan.md
