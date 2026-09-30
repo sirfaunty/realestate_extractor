@@ -88,7 +88,7 @@
             <td style="text-align:right;">
                 {% if r.show_rent %}
                     <span style="font-weight:600;">${{ '{:,.2f}'.format(r.monthly_rent) }}</span>
-                    <div style="font-size:11px; color:var(--text-muted);" title="{{ r.rent_detail }}">from the rent schedule</div>
+                    <div style="font-size:11px; color:var(--text-muted);" title="{{ r.rent_detail }}">{% if 'confirmed_by_rent_roll' in r.rent_flags %}confirmed by rent roll{% else %}from the rent schedule{% endif %}</div>
                 {% elif r.monthly_rent %}
                     <span style="color:var(--text-muted);" title="{{ r.rent_detail }} ({{ r.rent_confidence }} confidence)">${{ '{:,.2f}'.format(r.monthly_rent) }}?</span>
                     <div style="font-size:11px; color:var(--text-muted);">{{ r.rent_confidence }} confidence — not counted</div>

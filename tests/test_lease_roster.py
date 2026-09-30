@@ -131,6 +131,34 @@ def test_rent_roll_conflict_is_routed_to_reconcile():
     assert _needs(r) == 'reconcile: lease says $5,250.00/mo, rent roll says $6,000.00/mo'
 
 
+def test_exact_rent_roll_match_confirms_a_low_confidence_rent():
+    # flat Year-1 rent, no escalation stated: paper alone can't prove it's
+    # still in force; the rent roll billing the same amount does
+    r = RosterRow(tenant='Pho Place', monthly_rent=1500.00, rent_method='flat',
+                  rent_confidence='low', rent_flags=['no_escalation_stated'])
+    _check_rent_roll(r, 1500.00, '')
+    assert r.show_rent and 'confirmed_by_rent_roll' in r.rent_flags and _needs(r) == ''
+
+
+def test_near_rent_roll_match_does_not_confirm():
+    # within 2% but not the same number -> agreement noted, not proof
+    r = RosterRow(tenant='Pho Place', monthly_rent=1500.00, rent_method='flat',
+                  rent_confidence='low')
+    _check_rent_roll(r, 1520.00, '')
+    assert not r.show_rent and 'matches_rent_roll' in r.rent_flags
+    assert 'confirmed_by_rent_roll' not in r.rent_flags
+
+
+def test_confirmed_rent_keeps_the_expiration_question():
+    # the rent is settled, the lease status is not
+    r = RosterRow(tenant='Gift Co', monthly_rent=4000.00, rent_method='schedule',
+                  rent_confidence='medium', rent_flags=['past_expiration'])
+    _check_rent_roll(r, 4000.00, '')
+    assert r.show_rent
+    assert _needs(r) == 'lease past its expiration on paper — add the renewal / holdover terms'
+
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

@@ -365,6 +365,13 @@ def _check_rent_roll(row: 'RosterRow', rr_monthly: float, chain_text: str) -> No
         return
     if _within(m, rr_monthly):
         row.rent_flags.append('matches_rent_roll')
+        # the SAME number to the dollar: we read the lease the way the
+        # landlord bills it -> confirmed, whatever the paper alone could
+        # prove (a flat Year-1 rent still in force, a schedule past the
+        # stated expiration). Other open items stay on the row (_needs).
+        if abs(m - rr_monthly) <= 1.0 and row.rent_confidence != 'high':
+            row.rent_confidence = 'high'
+            row.rent_flags.append('confirmed_by_rent_roll')
         return
     steps = [r.monthly for r in parse_dated_rows(chain_text) + parse_rent_schedule(chain_text)]
     row.rent_flags.append('rent_roll_on_other_step' if any(_within(v, rr_monthly) for v in steps)
@@ -491,9 +498,12 @@ def _needs(row: RosterRow) -> str:
         return 'expired on paper — still occupying? add the renewal, or mark vacated'
     if row.grouped_by == 'unassigned':
         return 'assign this document to a tenant'
-    if row.show_rent:
-        return ''
     f = set(row.rent_flags)
+    # lease-status questions a confirmed rent doesn't answer
+    if row.show_rent:
+        if 'past_expiration' in f:
+            return 'lease past its expiration on paper — add the renewal / holdover terms'
+        return ''
     if 'conflicts_with_rent_roll' in f:
         return (f'reconcile: lease says ${row.monthly_rent:,.2f}/mo, '
                 f'rent roll says ${row.rent_roll_monthly:,.2f}/mo')
