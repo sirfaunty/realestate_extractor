@@ -55,7 +55,14 @@ class RosterRow:
     rent_flags: list = field(default_factory=list)
     rent_detail: str = ''
     needs: str = ''                 # the one action that would resolve it
-    grouped_by: str = 'identity'    # identity | filename | text | unassigned
+    grouped_by: str = 'identity'    # filename | identity | unassigned
+    label: str = ''                 # the file-name tenancy words ("bean coffee")
+    aliases: list = field(default_factory=list)   # legal names across assignments
+    kind: str = 'tenancy'           # tenancy | expired | other_agreement
+    flags: list = field(default_factory=list)     # data-quality notes (SF rejected, ...)
+    key: str = ''                   # stable tenancy id for confirmations ("fn:bean coffee")
+    commencement_source: str = ''   # confirmed | rent_roll | lease | '' (unknown)
+    commencement_guess: Optional[date] = None     # best guess to pre-fill a confirmation
 
     @property
     def show_rent(self) -> bool:
@@ -114,13 +121,19 @@ def _text(conn, doc_id, limit=None):
 
 def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                  as_of: Optional[date] = None,
-                 confirmed_commencements: Optional[dict] = None) -> list[RosterRow]:
+                 confirmed_commencements: Optional[dict] = None,
+                 use_rent_roll: bool = True) -> list[RosterRow]:
     """Tenancies for one property (or the whole DB when property_id is None).
 
-    confirmed_commencements: {tenant_key: date} a user confirmed — the one
-    input that unlocks relative rent schedules (see RosterRow.needs)."""
+    Commencement, the one input that places a relative rent schedule in
+    time, comes from (best first): a user confirmation
+    (confirmed_commencements = {RosterRow.key: date or ISO string}, see
+    Database.get_lease_confirmations), an uploaded rent roll's lease start
+    for that tenant, then the lease text itself."""
     as_of = as_of or date.today()
-    confirmed = confirmed_commencements or {}
+    confirmed = {k: (v if isinstance(v, date) else parse_date(v))
+                 for k, v in (confirmed_commencements or {}).items()}
+    confirmed = {k: v for k, v in confirmed.items() if v}
     where, args = "WHERE document_type = 'lease'", []
     if property_id is not None:
         where += " AND property_id = ?"
@@ -129,42 +142,78 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         f"SELECT id, filename FROM documents {where} ORDER BY id", args)]
     terms = _terms(conn, [d['id'] for d in docs])
 
-    # 1. tenancies anchored by an extracted tenant identity
+    # Words every file in this property shares ("EC", "Oak Square",
+    # "Scanned") say nothing about WHICH tenancy a file belongs to.
+    common = _common_filename_words([d['filename'] for d in docs])
+
+    # 1. group by the tenancy words in the FILE NAME. Landlords file a
+    #    tenancy's lease, amendments and assignments under one name ("EC
+    #    Bean Coffee - 3rd Lease Amendment") even as the tenant's legal
+    #    name changes through assignments (Bean Co LLC -> Roast Holdings ->
+    #    Bean Coffee Inc) — so the file name follows the tenancy; the extracted
+    #    tenant name does not. Validated on the 9 Sponsor pilot properties.
+    # the property's own name ("Elm Court Plaza") — an extracted "tenant"
+    # sharing 2+ of its words is the landlord / center, not a tenant
+    prop_words = set()
+    try:
+        pq = "SELECT DISTINCT property_name FROM documents" + (
+            " WHERE property_id = ?" if property_id is not None else "")
+        for (pn,) in conn.execute(pq, [property_id] if property_id is not None else []):
+            prop_words |= set(_tokens(pn))
+    except sqlite3.Error:
+        pass
+    common = common | prop_words        # the property's own name is never tenancy words
+
     groups: dict[str, RosterRow] = {}
     loose = []
+    alias_count: dict[str, int] = {}
     for d in docs:
         t = terms.get(d['id'], {})
-        name = (t.get('tenant_identity') or t.get('tenant_name') or {}).get('raw')
-        k = _key(name) if name else ''
-        if k:
-            row = groups.setdefault(k, RosterRow(tenant=name.strip()))
-            row.doc_ids.append(d['id'])
-            row.filenames.append(d['filename'])
+        name = _clean_identity((t.get('tenant_identity') or t.get('tenant_name') or {}).get('raw'),
+                               common, prop_words)
+        if name:
+            alias_count[name] = alias_count.get(name, 0) + 1
+        stem = _filename_stem(d['filename'], common)
+        if stem:
+            k, how = 'fn:' + stem, 'filename'
+        elif name:
+            k, how = 'id:' + _key(name), 'identity'
         else:
             loose.append(d)
+            continue
+        row = groups.setdefault(k, RosterRow(tenant='', grouped_by=how, label=stem or ''))
+        row.doc_ids.append(d['id'])
+        row.filenames.append(d['filename'])
+        if name and name not in row.aliases:
+            row.aliases.append(name)
 
-    # 2. attach amendments / letters by a distinctive token in the filename,
-    #    then in the opening text — only when exactly ONE tenancy matches
+    # 2. files with neither: attach by a tenant name in the opening text —
+    #    only when exactly ONE tenancy matches; otherwise their own row
     for d in loose:
-        fn = _alpha(d['filename'])
+        head = _alpha(_text(conn, d['id'], limit=3000))
         cands = [k for k, row in groups.items()
-                 if any(tok in fn for tok in _tokens(row.tenant))]
-        how = 'filename'
-        if len(cands) != 1:
-            head = _alpha(_text(conn, d['id'], limit=3000))
-            cands = [k for k, row in groups.items()
-                     if _tokens(row.tenant) and all(tok in head for tok in _tokens(row.tenant)[:2])]
-            how = 'text'
+                 if any(_tokens(a) and all(tok in head for tok in _tokens(a)[:2])
+                        for a in row.aliases)]
         if len(cands) == 1:
-            row = groups[cands[0]]
-            row.doc_ids.append(d['id'])
-            row.filenames.append(d['filename'])
-            if row.grouped_by == 'identity':
-                row.grouped_by = f'identity+{how}'
+            groups[cands[0]].doc_ids.append(d['id'])
+            groups[cands[0]].filenames.append(d['filename'])
         else:
-            k = f'unassigned:{d["id"]}'
-            groups[k] = RosterRow(tenant=f'(unassigned) {d["filename"]}', doc_ids=[d['id']],
-                                  filenames=[d['filename']], grouped_by='unassigned')
+            groups[f'unassigned:{d["id"]}'] = RosterRow(
+                tenant=f'(unassigned) {d["filename"]}', doc_ids=[d['id']],
+                filenames=[d['filename']], grouped_by='unassigned')
+
+    rent_roll = _rent_roll_starts(conn, property_id, groups) if use_rent_roll else {}
+
+    for k, row in groups.items():
+        row.key = k
+    for row in groups.values():
+        if not row.tenant:
+            # display: the legal name most documents agree on (ties -> the
+            # later one, usually the assignee), else the file label
+            if row.aliases:
+                row.tenant = max(reversed(row.aliases), key=lambda a: alias_count.get(a, 0))
+            else:
+                row.tenant = row.label.title()
 
     # 3. per tenancy: facts + current rent over the whole lease chain
     out = []
@@ -179,14 +228,35 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                         return t[ty]
             return None
 
+        chain_text = '\n\n'.join(_text(conn, i) for i in row.doc_ids)
         sf = first('square_footage', 'square_feet', 'rentable_sf')
         if sf:
             v = sf.get('num') or _num(sf.get('raw'))
-            row.square_feet = v if v and 50 < v < 500_000 else None
+            v = v if v and 50 < v < 500_000 else None
+            # a "square footage" that appears in the lease as a RENT amount is
+            # a rent read as area (real: "annual minimum rent ... $64,491.00"
+            # -> 64,491 SF). Only a rent context, or an implausibly big area,
+            # counts: $1.00/SF charges legitimately equal the SF in dollars.
+            if v:
+                pat = r'\$\s*' + re.escape(f'{v:,.0f}') + r'(?:\.\d{2})?\b'
+                for mm in re.finditer(pat, chain_text):
+                    ctx = chain_text[max(0, mm.start() - 100):mm.start()].lower()
+                    if 'rent' in ctx or v > 20_000:
+                        row.flags.append('sf_is_a_rent_amount')
+                        v = None
+                        break
+            row.square_feet = v
         comm = [parse_date(t['lease_commencement']['raw']) for t in ts
                 if t.get('lease_commencement')]
         comm = [c for c in comm if c]
-        row.commencement = confirmed.get(k) or (min(comm) if comm else None)
+        row.commencement_guess = min(comm) if comm else None
+        if confirmed.get(k):
+            row.commencement, row.commencement_source = confirmed[k], 'confirmed'
+        elif rent_roll.get(k):
+            row.commencement, row.commencement_source = rent_roll[k], 'rent_roll'
+            row.commencement_guess = row.commencement_guess or rent_roll[k]
+        elif comm:
+            row.commencement, row.commencement_source = min(comm), 'lease'
         exps = [parse_date(t['governing_expiration'].get('exp') or t['governing_expiration']['raw'])
                 for t in ts if t.get('governing_expiration')]
         exps = [e for e in exps if e]
@@ -199,16 +269,189 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             escalation_pct=esc['raw'] if esc else None,
             commencement=row.commencement,
             expiration=row.expiration,
-            schedule_text='\n\n'.join(_text(conn, i) for i in row.doc_ids))
+            schedule_text=chain_text)
         row.monthly_rent, row.rent_method = r.monthly, r.method
-        row.rent_confidence, row.rent_flags, row.rent_detail = r.confidence, r.flags, r.detail
+        row.rent_confidence, row.rent_flags, row.rent_detail = r.confidence, list(r.flags), r.detail
+        # plausibility: a shown rent must make sense for the space. > $80/SF/yr
+        # (retail rarely exceeds it), or > $20k/mo with no SF to check, can't
+        # be shown unreviewed — the classic error is an ANNUAL figure read as
+        # monthly (a real row: $45,600 "monthly" = $3,800 x 12).
+        m = row.monthly_rent
+        if m and row.rent_confidence == 'high' and (
+                (row.square_feet and m * 12 / row.square_feet > 80) or
+                (not row.square_feet and m > 20_000)):
+            row.rent_confidence = 'medium'
+            row.rent_flags.append('rent_implausible_for_size')
+        row.kind = _kind(row, chain_text, as_of)
         row.needs = _needs(row)
         out.append(row)
-    out.sort(key=lambda x: (x.grouped_by == 'unassigned', x.tenant.lower()))
+
+    # the same SF on 3+ tenancies is a boilerplate number (e.g. "within 500
+    # feet" radius clauses), not their areas
+    counts = {}
+    for row in out:
+        if row.square_feet:
+            counts[row.square_feet] = counts.get(row.square_feet, 0) + 1
+    for row in out:
+        if row.square_feet and counts[row.square_feet] >= 3:
+            row.flags.append('sf_repeated_across_tenants')
+            row.square_feet = None
+
+    order = {'tenancy': 0, 'expired': 1, 'other_agreement': 2}
+    out.sort(key=lambda x: (order.get(x.kind, 3), x.grouped_by == 'unassigned', x.tenant.lower()))
     return out
 
 
+def _rent_roll_starts(conn, property_id, groups) -> dict:
+    """{tenancy key: lease start} from uploaded rent rolls, matched by the
+    tenancy's file-label words or a legal-name alias — only when exactly one
+    tenancy matches a rent-roll tenant. Empty when no rent roll is loaded."""
+    table = 'cur_rent_roll_entries'
+    try:
+        conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
+    except sqlite3.Error:
+        table = 'rent_roll_entries'
+    q = (f"SELECT tenant_name, lease_start FROM {table} "
+         f"WHERE tenant_name IS NOT NULL AND lease_start IS NOT NULL")
+    args = []
+    if property_id is not None:
+        q += " AND property_id = ?"
+        args.append(property_id)
+    try:
+        rows = conn.execute(q, args).fetchall()
+    except sqlite3.Error:
+        return {}
+    out = {}
+    for name, start in rows:
+        d = parse_date(start)
+        nt = _alpha(name)
+        if not d or not nt:
+            continue
+        cands = [k for k, row in groups.items() if not k.startswith('unassigned') and (
+            (row.label and all(w in nt for w in row.label.split())) or
+            any(_tokens(a) and all(t in nt for t in _tokens(a)[:2]) for a in row.aliases))]
+        if len(cands) == 1:
+            prev = out.get(cands[0])
+            out[cands[0]] = min(prev, d) if prev else d   # the earliest start = the lease's
+    return out
+
+
+# ─── grouping helpers ─────────────────────────────────────────────
+
+_DOC_WORDS = {
+    'lease', 'leases', 'amendment', 'amendments', 'amend', 'agreement', 'agreements',
+    'scanned', 'signed', 'executed', 'fully', 'final', 'draft', 'copy', 'pdf', 'doc', 'docx',
+    'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth',
+    'tenth', 'assignment', 'assumption', 'guaranty', 'guarantee', 'estoppel', 'snda',
+    'subordination', 'extension', 'renewal', 'letter', 'notice', 'memorandum',
+    'commencement', 'addendum', 'exhibit', 'rider', 'modification', 'the', 'and', 'for',
+    'with', 'from', 'to', 'of', 'aka', 'fka', 'dba', 'suite', 'bay', 'unit', 'space',
+    'premises', 'tenant', 'landlord', 'setting', 'term', 'order', 'waiver', 'consent',
+    'sublease', 'covid', 'abatement', 'deferral', 'relief', 'january', 'february', 'march',
+    'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+    # generic place words: part of a CENTER's name, never a tenancy's
+    # ("Willow Center Shopping Center - Art Frame ..." vs "Willow Center - ...")
+    'shopping', 'center', 'centre', 'plaza', 'mall', 'marketplace', 'commons',
+}
+
+
+def _fn_words(filename: str) -> list[str]:
+    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', filename or '')
+    return [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', base))
+            if len(w) >= 3 and w not in _DOC_WORDS]
+
+
+def _common_filename_words(filenames: list[str]) -> set:
+    """The property / portfolio PREFIX of a property's file names: the
+    leading run of words that >= 90% of files start with (all of them when
+    there are only 2) — "EC", "Oak Square", "Birch Commons".
+
+    Leading position, not mere frequency: a tenant word can sit in nearly
+    every name of a small property ("Birch Commons II Best Buy ..." x4 +
+    "... Corner Liquor Best ...") without being the prefix."""
+    lists = [_fn_words(f) for f in filenames]
+    n = len(lists)
+    if n < 2:
+        return set()
+    need = n if n < 3 else max(2, int(0.9 * n + 0.999))
+    common, pos = set(), 0
+    while pos < 5:
+        at = {}
+        for ws in lists:
+            if len(ws) > pos:
+                at[ws[pos]] = at.get(ws[pos], 0) + 1
+        if not at:
+            break
+        w, c = max(at.items(), key=lambda kv: kv[1])
+        if c < need:
+            break
+        common.add(w)
+        pos += 1
+    return common
+
+
+def _filename_stem(filename: str, common: set) -> str:
+    """The tenancy words of a file name: its first two distinctive words
+    ('EC Bean Coffee - CG-PFO 3rd Lease Amendment' -> 'bean coffee')."""
+    ws = [w for w in _fn_words(filename) if w not in common]
+    return ' '.join(ws[:2])
+
+
+_BAD_IDENTITY = re.compile(
+    r"(?i)d/b/a or|store brand|\bif st\b|\binsert\b|name of tenant|^tenant$|"
+    r"licensee and|its affiliates|shopping center|limited partnership|\blandlord\b|"
+    r"^associates\b|^(?:llc|inc|corp)\.?$")
+
+
+def _clean_identity(name: Optional[str], common: set,
+                    prop_words: Optional[set] = None) -> Optional[str]:
+    """None for extracted 'tenant names' that are not a tenant: form
+    placeholders echoed by the model, the landlord / center's own name,
+    generic parties. (All seen on real Sponsor leases, 2026-09-29.)"""
+    if not name:
+        return None
+    n = name.strip()
+    if len(_alpha(n)) < 3 or _BAD_IDENTITY.search(n):
+        return None
+    toks = _tokens(n)
+    if toks and all(t in common for t in toks):
+        return None                     # "CEDAR STATION" at Cedar Station
+    if prop_words and len(set(toks) & prop_words) >= 2:
+        return None                     # "Elm Court Plz ..." at Elm Court Plaza
+    return n
+
+
+# ─── what a row is ────────────────────────────────────────────────
+
+_OTHER_AGREEMENT = re.compile(
+    r'(?i)\b(?:license agreement|easement|billboard|outdoor advertising|right of entry|'
+    r'access agreement|telecommunications (?:license|easement|agreement)|antenna|'
+    r'reciprocal easement|declaration of)\b')
+_CARRIERS = re.compile(
+    r'(?i)\b(?:charter communications|comcast|centurylink|century link|mediacom|'
+    r'clear channel|sprint spectrum|at&t|verizon wireless|tds telecommunications)\b')
+
+
+def _kind(row: RosterRow, text: str, as_of: date) -> str:
+    """tenancy | other_agreement (telecom / billboard / easement / license —
+    not an occupancy) | expired (paper ends > 90 days ago and no schedule
+    covers today — a former tenant, or a renewal not in the file)."""
+    names = ' '.join([row.tenant, row.label] + row.aliases + row.filenames)
+    if _CARRIERS.search(names) or _OTHER_AGREEMENT.search(text[:600]) \
+            or _OTHER_AGREEMENT.search(' '.join(row.filenames)):
+        return 'other_agreement'
+    if (row.expiration and (as_of - row.expiration).days > 90
+            and row.rent_method != 'schedule'):
+        return 'expired'
+    return 'tenancy'
+
+
 def _needs(row: RosterRow) -> str:
+    if row.kind == 'other_agreement':
+        return ''
+    if row.kind == 'expired':
+        return 'expired on paper — still occupying? add the renewal, or mark vacated'
     if row.grouped_by == 'unassigned':
         return 'assign this document to a tenant'
     if row.show_rent:
@@ -220,15 +463,50 @@ def _needs(row: RosterRow) -> str:
         return 'rent schedule ends before today — a later amendment is missing'
     if 'no_rent_found' in f:
         return 'no rent schedule found — add the rent exhibit or amendment'
-    if not row.commencement or 'no_commencement' in f:
+    if not row.commencement or 'no_commencement' in f or row.commencement_source == 'lease':
         return 'confirm the commencement date'
     return 'review the derived rent'
+
+
+def portfolio_summary(db, as_of: Optional[date] = None) -> Optional[dict]:
+    """Roster KPIs across every property with lease documents — what the
+    dashboard shows when no units / rent roll exist. `db` is a
+    database.Database (its connection + lease confirmations). None when the
+    org has no leases."""
+    as_of = as_of or date.today()
+    pids = [r[0] for r in db.conn.execute(
+        "SELECT DISTINCT property_id FROM documents WHERE document_type = 'lease'")]
+    if not pids:
+        return None
+    names = {r[0]: r[1] for r in db.conn.execute("SELECT id, name FROM properties")}
+    tot = {'tenancies': 0, 'leased_sf': 0, 'sf_known_for': 0, 'monthly_rent_confirmed': 0.0,
+           'rent_confirmed_for': 0, 'needs_review': 0, 'needs_commencement': 0,
+           'expiring_12mo': 0, 'properties': []}
+    for pid in pids:
+        rows = build_roster(db.conn, pid, as_of,
+                            confirmed_commencements=db.get_lease_confirmations(pid))
+        s = summarize(rows, as_of)
+        for k in ('tenancies', 'leased_sf', 'sf_known_for', 'rent_confirmed_for', 'expiring_12mo'):
+            tot[k] += s[k]
+        tot['monthly_rent_confirmed'] += s['monthly_rent_confirmed']
+        tot['needs_review'] += len(s['needs_review'])
+        n_comm = sum(1 for _, need in s['needs_review'] if need.startswith('confirm the commencement'))
+        tot['needs_commencement'] += n_comm
+        tot['properties'].append({'property_id': pid, 'name': names.get(pid, 'Unassigned documents'),
+                                  'tenancies': s['tenancies'], 'needs_review': len(s['needs_review']),
+                                  'needs_commencement': n_comm})
+    tot['monthly_rent_confirmed'] = round(tot['monthly_rent_confirmed'], 2)
+    # The dashboard links to properties[0] under the "just need a commencement
+    # date" message, so lead with the property where a date unlocks the most.
+    tot['properties'].sort(key=lambda p: (p['property_id'] is None,
+                                          -p['needs_commencement'], -p['needs_review']))
+    return tot
 
 
 def summarize(rows: list[RosterRow], as_of: Optional[date] = None) -> dict:
     """Dashboard KPIs from a roster: only what the data supports."""
     as_of = as_of or date.today()
-    ten = [r for r in rows if r.grouped_by != 'unassigned']
+    ten = [r for r in rows if r.grouped_by != 'unassigned' and r.kind == 'tenancy']
     sf_known = [r for r in ten if r.square_feet]
     leased_sf = sum(r.square_feet for r in sf_known)
     rent_rows = [r for r in ten if r.show_rent]
@@ -244,4 +522,6 @@ def summarize(rows: list[RosterRow], as_of: Optional[date] = None) -> dict:
         'rent_confirmed_for': len(rent_rows),
         'needs_review': [(r.tenant, r.needs) for r in rows if r.needs],
         'expiring_12mo': sum(1 for r in ten if r.expiration and 0 <= (r.expiration - as_of).days <= 365),
+        'expired_on_paper': sum(1 for r in rows if r.kind == 'expired'),
+        'other_agreements': sum(1 for r in rows if r.kind == 'other_agreement'),
     }

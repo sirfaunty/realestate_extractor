@@ -1,0 +1,111 @@
+"""
+Tests for lease_roster grouping rules. Fictional file names and tenants that
+copy the real patterns found on the Sponsor pilot properties (2026-09-29).
+
+    venv/Scripts/python tests/test_lease_roster.py
+"""
+
+import os
+import sys
+from datetime import date
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+
+from realestate_extractor.lease_roster import (  # noqa: E402
+    RosterRow, _clean_identity, _common_filename_words, _filename_stem, _kind)
+
+FILES = [
+    'OKP Harbor Hardware - OK-HH 1st Lease Amendment 05 20 1992.pdf',
+    'OKP Harbor Hardware - OK-HH 7th Lease Amendment 04 28 2017.pdf',
+    'OKP Harbor Hardware - Assignment & Assumption of Lease 05 01 2001.pdf',
+    'OKP Harbor Hardware - Lease Agreement 02 11 1992.pdf',
+    'OKP Blue Lotus Spa - Lease Agreement 06 28 2010.pdf',
+    'OKP Blue Lotus Spa - Second Amendment to Lease 03 25 2015.pdf',
+    'OKP Quick Print-Copy Hub - First Amendment to Lease 2021.pdf',
+    'OKP Quick Print-Copy Hub - Lease 06 14 2016 (Signed).pdf',
+    'OKP Northside Bakery - Lease.pdf',
+    'OKP Fern Dental - Lease.pdf',
+]
+
+
+def test_property_prefix_is_common():
+    common = _common_filename_words(FILES)
+    assert 'okp' in common and 'harbor' not in common, common
+
+
+def test_stems_follow_the_tenancy_not_the_legal_name():
+    common = _common_filename_words(FILES)
+    stems = {_filename_stem(f, common) for f in FILES[:4]}
+    assert stems == {'harbor hardware'}, stems        # 4 files, one tenancy
+    assert _filename_stem(FILES[4], common) == 'blue lotus'
+    assert _filename_stem(FILES[6], common) == _filename_stem(FILES[7], common) == 'quick print'
+
+
+def test_tenant_word_in_every_name_is_not_the_prefix():
+    # small property: "Bright" is in all 5 names, but leads only 4 tenant parts
+    files = ['Elm Court II Bright Market Scanned Lease.pdf',
+             'Elm Court II Bright Market Estoppel.pdf',
+             'Elm Court II Bright Market Checklists and Notes.pdf',
+             'Elm Court II Bright Market Lease Correspondence.pdf',
+             'Elm Court II Corner Wine Bright Scanned Lease.pdf']
+    common = _common_filename_words(files)
+    assert common == {'elm', 'court'}, common
+    assert {_filename_stem(f, common) for f in files[:4]} == {'bright market'}
+    assert _filename_stem(files[4], common) == 'corner wine'
+
+
+def test_center_words_never_become_tenant_words():
+    files = ['Oakdale - Pet Barn Scanned Lease.pdf',
+             'Oakdale - Nail Studio Scanned Lease.pdf',
+             'Oakdale - Taco Stop Scanned Lease.pdf',
+             'Oakdale Shopping Center - Frame Works Scanned Lease.pdf',
+             'Oakdale Shopping Center - Bean Coffee Scanned Lease.pdf']
+    common = _common_filename_words(files)
+    assert _filename_stem(files[3], common) == 'frame works'
+    assert _filename_stem(files[4], common) == 'bean coffee'
+
+
+def test_single_file_property_has_no_common_words():
+    assert _common_filename_words(['Only Plaza - Anchor Market Lease.pdf']) == set()
+
+
+def test_identity_rejects_placeholders_and_landlord_names():
+    common = {'harbor', 'point', 'plaza'}
+    assert _clean_identity('the d/b/a or store brand if st', common) is None
+    assert _clean_identity('HARBOR POINT PLAZA', common) is None       # the center itself
+    assert _clean_identity('SHOPPING CENTER', common) is None
+    assert _clean_identity('Licensee and its affiliates', common) is None
+    assert _clean_identity('ASSOCIATES, LLC', common) is None
+    assert _clean_identity('LLC', common) is None
+    assert _clean_identity('Blue Lotus Spa, LLC', common) == 'Blue Lotus Spa, LLC'
+
+
+def test_kind_other_agreement_and_expired():
+    as_of = date(2026, 6, 30)
+    tel = RosterRow(tenant='Comcast Cable Communications Management, LLC')
+    assert _kind(tel, 'RIGHT OF ENTRY AGREEMENT ...', as_of) == 'other_agreement'
+    sign = RosterRow(tenant='Metro Signs', filenames=['Plaza - Billboard License Agreement.pdf'])
+    assert _kind(sign, '', as_of) == 'other_agreement'
+    gone = RosterRow(tenant='Old Anchor Inc.', expiration=date(2018, 2, 1), rent_method='flat')
+    assert _kind(gone, 'LEASE AGREEMENT', as_of) == 'expired'
+    # expiration on paper is old, but a schedule covers today -> still a tenancy
+    renewed = RosterRow(tenant='Shoe Co', expiration=date(2001, 8, 31), rent_method='schedule')
+    assert _kind(renewed, 'LEASE AGREEMENT', as_of) == 'tenancy'
+
+
+if __name__ == '__main__':
+    fails = 0
+    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
+    for name, fn in tests:
+        try:
+            fn()
+            print(f'  ok    {name}')
+        except AssertionError as e:
+            fails += 1
+            print(f'  FAIL  {name}: {e}')
+        except Exception as e:           # noqa: BLE001
+            fails += 1
+            print(f'  ERROR {name}: {type(e).__name__}: {e}')
+    print(f'\n{len(tests) - fails}/{len(tests)} passed')
+    sys.exit(1 if fails else 0)

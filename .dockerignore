@@ -45,3 +45,5 @@ export_for_mac.py
 .vscode
 .idea
 TESTING_CHECKLIST.md
+CLAUDE.md
+.claude

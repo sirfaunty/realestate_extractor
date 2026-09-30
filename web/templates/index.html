@@ -30,35 +30,51 @@
         <div class="stat-value">{{ d.property_count }}</div>
         <div class="stat-label">Properties</div>
     </div>
+    {% set rr = d.roster %}
     <div class="stat-card">
         {% if d.unit_count > 0 %}
         <div class="stat-value">{{ d.unit_count }}</div>
+        <div class="stat-label">Units</div>
         {% elif d.extracted and d.extracted.total_units %}
         <div class="stat-value">{{ d.extracted.total_units }}</div>
+        <div class="stat-label">Units</div>
+        {% elif rr %}
+        <div class="stat-value">{{ rr.tenancies }}</div>
+        <div class="stat-label">Tenancies <span style="color:var(--text-muted);">(from leases)</span></div>
         {% else %}
         <div class="stat-value">0</div>
-        {% endif %}
         <div class="stat-label">Units</div>
+        {% endif %}
     </div>
     <div class="stat-card">
         {% if d.unit_count > 0 %}
         <div class="stat-value">{{ d.occupancy_rate }}%</div>
+        <div class="stat-label">Occupancy</div>
         {% elif d.extracted and d.extracted.occupancy_rate %}
         <div class="stat-value">{{ d.extracted.occupancy_rate }}%</div>
+        <div class="stat-label">Occupancy</div>
+        {% elif rr %}
+        <div class="stat-value">{{ '{:,}'.format(rr.leased_sf) }}</div>
+        <div class="stat-label">Leased SF <span style="color:var(--text-muted);">({{ rr.sf_known_for }} of {{ rr.tenancies }})</span></div>
         {% else %}
         <div class="stat-value">0%</div>
-        {% endif %}
         <div class="stat-label">Occupancy</div>
+        {% endif %}
     </div>
     <div class="stat-card">
         {% if d.total_monthly_rent > 0 %}
         <div class="stat-value">${{ '{:,.0f}'.format(d.total_monthly_rent) }}</div>
+        <div class="stat-label">Monthly Rent</div>
         {% elif d.extracted and d.extracted.monthly_gpr %}
         <div class="stat-value">${{ '{:,.0f}'.format(d.extracted.monthly_gpr) }}</div>
+        <div class="stat-label">Monthly Rent</div>
+        {% elif rr %}
+        <div class="stat-value">${{ '{:,.0f}'.format(rr.monthly_rent_confirmed) }}</div>
+        <div class="stat-label">Monthly Rent <span style="color:var(--text-muted);">— {{ rr.rent_confirmed_for }} of {{ rr.tenancies }} confirmed</span></div>
         {% else %}
         <div class="stat-value">$0</div>
-        {% endif %}
         <div class="stat-label">Monthly Rent</div>
+        {% endif %}
     </div>
     <div class="stat-card">
         <div class="stat-value">{{ d.document_count }}</div>
@@ -67,9 +83,29 @@
 </div>
 
 <!-- ═══ ATTENTION ITEMS ═══ -->
-{% if d.pending_review > 0 or d.properties_no_docs or d.upcoming_expirations %}
+{% if d.pending_review > 0 or d.properties_no_docs or d.upcoming_expirations or (d.roster and d.roster.needs_review) %}
 <div class="card" style="border-left: 3px solid var(--cap-active); margin-bottom: 20px;">
     <div class="card-header" style="color: var(--cap-navy);">Needs Attention</div>
+
+    {% if d.roster and d.roster.needs_review %}
+    {% set top = d.roster.properties[0] %}
+    <div class="attention-item">
+        <div class="attention-icon" style="background: var(--cap-cloud); color: var(--cap-primary);">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <div style="flex: 1;">
+            <div style="font-weight: 500; font-size: 14px; color: var(--text);">
+                {{ d.roster.needs_review }} tenanc{{ 'ies' if d.roster.needs_review != 1 else 'y' }} need attention
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted);">
+                {% if d.roster.needs_commencement %}{{ d.roster.needs_commencement }} just need a commencement date confirmed — each unlocks that tenant's rent schedule{% else %}See the lease roster for what each needs{% endif %}
+            </div>
+        </div>
+        {% if top.property_id %}
+        <a href="{{ url_for('property_roster', property_id=top.property_id) }}" class="btn btn-sm btn-primary">Lease Roster</a>
+        {% endif %}
+    </div>
+    {% endif %}
 
     {% if d.pending_review > 0 %}
     <div class="attention-item">

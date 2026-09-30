@@ -472,6 +472,24 @@ CREATE TABLE IF NOT EXISTS extraction_runs (
 
 CREATE INDEX IF NOT EXISTS idx_extraction_runs_doc ON extraction_runs(document_id);
 CREATE INDEX IF NOT EXISTS idx_extraction_runs_current ON extraction_runs(document_id, is_current);
+
+-- ─── Lease confirmations ─────────────────────────────────────────────
+-- The one fact a lease often cannot state (its commencement is defined by
+-- an event, e.g. opening day), captured once per tenancy so its rent
+-- schedule can be placed in time. See lease_roster.py.
+
+CREATE TABLE IF NOT EXISTS lease_confirmations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id     INTEGER,                -- NULL when documents carry no property link
+    tenancy_key     TEXT NOT NULL,          -- lease_roster RosterRow.key ("fn:bean coffee")
+    tenant_label    TEXT,                   -- display name at confirmation time
+    commencement    TEXT NOT NULL,          -- ISO date
+    source          TEXT NOT NULL DEFAULT 'user',   -- user | rent_roll
+    confirmed_by    INTEGER,                -- user id
+    confirmed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    note            TEXT,
+    UNIQUE(property_id, tenancy_key)
+);
 """
 
 
@@ -3393,6 +3411,48 @@ class Database:
         summary['rent_roll'] = dict(row) if row else {}
 
         return summary
+
+    # ─── Lease confirmations (lease_roster) ─────────────────────────
+
+    def get_lease_confirmations(self, property_id: Optional[int] = None) -> Dict[str, str]:
+        """{tenancy_key: ISO commencement} confirmed for a property."""
+        if property_id is None:
+            rows = self.conn.execute(
+                "SELECT tenancy_key, commencement FROM lease_confirmations "
+                "WHERE property_id IS NULL ORDER BY confirmed_at").fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT tenancy_key, commencement FROM lease_confirmations "
+                "WHERE property_id = ? ORDER BY confirmed_at", (property_id,)).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+    def set_lease_confirmation(self, property_id: Optional[int], tenancy_key: str,
+                               commencement: str, tenant_label: str = None,
+                               source: str = 'user', confirmed_by: int = None,
+                               note: str = None) -> None:
+        """Record (replace) the commencement date for one tenancy. A user
+        confirmation always wins; a rent-roll date never overwrites one."""
+        if property_id is None:
+            existing = self.conn.execute(
+                "SELECT source FROM lease_confirmations WHERE property_id IS NULL "
+                "AND tenancy_key = ?", (tenancy_key,)).fetchone()
+        else:
+            existing = self.conn.execute(
+                "SELECT source FROM lease_confirmations WHERE property_id = ? "
+                "AND tenancy_key = ?", (property_id, tenancy_key)).fetchone()
+        if existing and existing[0] == 'user' and source != 'user':
+            return
+        if property_id is None:
+            self.conn.execute("DELETE FROM lease_confirmations WHERE property_id IS NULL "
+                              "AND tenancy_key = ?", (tenancy_key,))
+        else:
+            self.conn.execute("DELETE FROM lease_confirmations WHERE property_id = ? "
+                              "AND tenancy_key = ?", (property_id, tenancy_key))
+        self.conn.execute(
+            "INSERT INTO lease_confirmations (property_id, tenancy_key, tenant_label, "
+            "commencement, source, confirmed_by, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (property_id, tenancy_key, tenant_label, commencement, source, confirmed_by, note))
+        self.conn.commit()
 
     def get_dashboard_stats(self) -> Dict:
         """Get comprehensive stats for the dashboard homepage."""

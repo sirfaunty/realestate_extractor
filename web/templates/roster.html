@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Lease Roster — {{ prop.name }} — capactive{% endblock %}
+
+{% block content %}
+{% set s = summary %}
+<div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:20px;">
+    <div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">
+            <a href="{{ url_for('property_detail', property_id=prop.id) }}">&larr; {{ prop.name }}</a>
+        </div>
+        <h2 style="font-size:1.5rem; font-weight:600; color:var(--cap-navy); margin:0 0 4px;">Lease Roster</h2>
+        <p style="color:var(--text-secondary); font-size:14px; margin:0;">
+            Built from the leases themselves. A rent is shown only when the lease's own rent schedule
+            places it with high confidence; everything else says what would resolve it.
+        </p>
+    </div>
+</div>
+
+<div class="card-grid" style="margin-bottom:20px;">
+    <div class="stat-card">
+        <div class="stat-value">{{ s.tenancies }}</div>
+        <div class="stat-label">Tenancies</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ '{:,}'.format(s.leased_sf) }}</div>
+        <div class="stat-label">Leased SF <span style="color:var(--text-muted);">({{ s.sf_known_for }} of {{ s.tenancies }} with SF)</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ '{:,.0f}'.format(s.monthly_rent_confirmed) }}</div>
+        <div class="stat-label">Monthly rent — {{ s.rent_confirmed_for }} of {{ s.tenancies }} confirmed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ s.walt_years if s.walt_years is not none else '—' }}</div>
+        <div class="stat-label">WALT (years)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ s.needs_review|length }}</div>
+        <div class="stat-label">Need attention</div>
+    </div>
+</div>
+
+{% macro roster_table(items, allow_confirm) %}
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Tenant</th>
+            <th style="text-align:right;">SF</th>
+            <th>Commencement</th>
+            <th>Expires</th>
+            <th style="text-align:right;">Rent / mo</th>
+            <th>What's needed</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for r in items %}
+        <tr id="t-{{ r.key|replace(' ', '-') }}">
+            <td>
+                <div style="font-weight:500;">{{ r.tenant }}</div>
+                {% if r.aliases|length > 1 %}
+                <div style="font-size:11px; color:var(--text-muted);">also: {{ r.aliases[:-1]|join('; ') }}</div>
+                {% endif %}
+                <div style="font-size:11px; color:var(--text-muted);">{{ r.doc_ids|length }} document{{ 's' if r.doc_ids|length != 1 else '' }}</div>
+            </td>
+            <td style="text-align:right;">{{ '{:,.0f}'.format(r.square_feet) if r.square_feet else '—' }}</td>
+            <td>
+                {% if r.commencement %}
+                    {{ r.commencement.isoformat() }}
+                    <span class="badge badge-{{ 'success' if r.commencement_source in ('confirmed', 'rent_roll') else 'processing' }}"
+                          title="{{ {'confirmed': 'Confirmed by a user', 'rent_roll': 'From the rent roll', 'lease': 'Read from the lease — confirm'}[r.commencement_source] if r.commencement_source else '' }}">
+                        {{ {'confirmed': 'confirmed', 'rent_roll': 'rent roll', 'lease': 'from lease'}.get(r.commencement_source, '') }}
+                    </span>
+                {% else %}
+                    <span style="color:var(--text-muted);">unknown</span>
+                {% endif %}
+                {% if allow_confirm and r.commencement_source != 'confirmed' and can_edit('property.units') %}
+                <form method="post" action="{{ url_for('roster_confirm', property_id=prop.id) }}"
+                      style="display:flex; gap:6px; margin-top:6px;">
+                    <input type="hidden" name="tenancy_key" value="{{ r.key }}">
+                    <input type="hidden" name="tenant_label" value="{{ r.tenant }}">
+                    <input type="date" name="commencement" required
+                           value="{{ (r.commencement or r.commencement_guess).isoformat() if (r.commencement or r.commencement_guess) else '' }}"
+                           style="font-size:12px; padding:2px 6px;">
+                    <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
+                </form>
+                {% endif %}
+            </td>
+            <td>{{ r.expiration.isoformat() if r.expiration else '—' }}</td>
+            <td style="text-align:right;">
+                {% if r.show_rent %}
+                    <span style="font-weight:600;">${{ '{:,.2f}'.format(r.monthly_rent) }}</span>
+                    <div style="font-size:11px; color:var(--text-muted);" title="{{ r.rent_detail }}">from the rent schedule</div>
+                {% elif r.monthly_rent %}
+                    <span style="color:var(--text-muted);" title="{{ r.rent_detail }} ({{ r.rent_confidence }} confidence)">${{ '{:,.2f}'.format(r.monthly_rent) }}?</span>
+                    <div style="font-size:11px; color:var(--text-muted);">{{ r.rent_confidence }} confidence — not counted</div>
+                {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                {% endif %}
+            </td>
+            <td style="font-size:13px;">
+                {% if r.needs %}{{ r.needs }}{% else %}<span class="badge badge-success">complete</span>{% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+
+{% set tenancies = rows|selectattr('kind', 'equalto', 'tenancy')|list %}
+{% set expired = rows|selectattr('kind', 'equalto', 'expired')|list %}
+{% set other = rows|selectattr('kind', 'equalto', 'other_agreement')|list %}
+
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header">Tenancies ({{ tenancies|length }})</div>
+    {% if tenancies %}{{ roster_table(tenancies, True) }}{% else %}
+    <p style="color:var(--text-muted); padding:12px;">No lease documents for this property yet.</p>{% endif %}
+</div>
+
+{% if expired %}
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header">Expired on paper ({{ expired|length }}) — not counted above</div>
+    <p style="font-size:13px; color:var(--text-secondary); padding:0 12px;">
+        These leases end more than 90 days ago and no rent schedule covers today. If the tenant is
+        still there, upload the renewal or extension; otherwise they are former tenants.
+    </p>
+    {{ roster_table(expired, False) }}
+</div>
+{% endif %}
+
+{% if other %}
+<details class="card" style="margin-bottom:20px;">
+    <summary class="card-header" style="cursor:pointer;">Other agreements ({{ other|length }}) — telecom, billboard, easement, license</summary>
+    {{ roster_table(other, False) }}
+</details>
+{% endif %}
+{% endblock %}

@@ -792,6 +792,16 @@ def index():
         return redirect(url_for('login'))
     try:
         dashboard = db.get_dashboard_stats()
+        # Lease-only clients have no units / rent roll: derive the headline
+        # numbers from the leases (lease_roster), showing rent only where
+        # it is high-confidence. Never breaks the dashboard.
+        dashboard['roster'] = None
+        if not dashboard.get('unit_count'):
+            try:
+                from .lease_roster import portfolio_summary
+                dashboard['roster'] = portfolio_summary(db)
+            except Exception:
+                logger.exception('lease roster summary failed')
         llm = get_llm()
         llm_status = llm.is_available()
     finally:
@@ -2699,6 +2709,53 @@ def property_detail(property_id):
                            ingested_count=ingested_count,
                            analyzed_count=analyzed_count,
                            synthesis=synthesis)
+
+
+@app.route('/property/<int:property_id>/roster')
+@login_required
+def property_roster(property_id):
+    """Lease roster — tenancies derived from the leases themselves, with the
+    one action that resolves each unconfirmed row (usually: confirm the
+    commencement date so the rent schedule can be placed in time)."""
+    from .lease_roster import build_roster, summarize
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        prop = db.get_property(property_id)
+        if not prop:
+            flash('Property not found.', 'error')
+            return redirect(url_for('properties'))
+        rows = build_roster(db.conn, property_id,
+                            confirmed_commencements=db.get_lease_confirmations(property_id))
+        summary = summarize(rows)
+    finally:
+        db.close()
+    return render_template('roster.html', prop=prop, rows=rows, summary=summary)
+
+
+@app.route('/property/<int:property_id>/roster/confirm', methods=['POST'])
+@login_required
+@permission_required('property.units', 'edit')
+def roster_confirm(property_id):
+    """Record the commencement date for one tenancy (the user's word beats
+    any rent roll or extracted date)."""
+    from .extractors.rent_derivation import parse_date
+    key = (request.form.get('tenancy_key') or '').strip()
+    when = parse_date((request.form.get('commencement') or '').strip())
+    if not key or not when:
+        flash('Enter a valid commencement date.', 'error')
+        return redirect(url_for('property_roster', property_id=property_id))
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        db.set_lease_confirmation(property_id, key, when.isoformat(),
+                                  tenant_label=(request.form.get('tenant_label') or '')[:200],
+                                  source='user', confirmed_by=session.get('user_id'))
+    finally:
+        db.close()
+    flash(f'Commencement confirmed: {when.strftime("%B")} {when.day}, {when.year} — rent recalculated.',
+          'success')
+    return redirect(url_for('property_roster', property_id=property_id) + '#t-' + key.replace(' ', '-'))
 
 
 @app.route('/property/<int:property_id>/building/create', methods=['POST'])
