@@ -125,8 +125,10 @@ def _text(conn, doc_id, limit=None):
 def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                  as_of: Optional[date] = None,
                  confirmed_commencements: Optional[dict] = None,
-                 use_rent_roll: bool = True) -> list[RosterRow]:
-    """Tenancies for one property (or the whole DB when property_id is None).
+                 use_rent_roll: bool = True,
+                 unassigned_only: bool = False) -> list[RosterRow]:
+    """Tenancies for one property (or the whole DB when property_id is None;
+    unassigned_only=True limits it to documents with no property).
 
     Commencement, the one input that places a relative rent schedule in
     time, comes from (best first): a user confirmation
@@ -138,7 +140,9 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                  for k, v in (confirmed_commencements or {}).items()}
     confirmed = {k: v for k, v in confirmed.items() if v}
     where, args = "WHERE document_type = 'lease'", []
-    if property_id is not None:
+    if unassigned_only:
+        where += " AND property_id IS NULL"
+    elif property_id is not None:
         where += " AND property_id = ?"
         args.append(property_id)
     docs = [dict(id=r[0], filename=r[1] or '') for r in conn.execute(
@@ -160,8 +164,10 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     prop_words = set()
     try:
         pq = "SELECT DISTINCT property_name FROM documents" + (
+            " WHERE property_id IS NULL" if unassigned_only else
             " WHERE property_id = ?" if property_id is not None else "")
-        for (pn,) in conn.execute(pq, [property_id] if property_id is not None else []):
+        for (pn,) in conn.execute(pq, [property_id] if property_id is not None
+                                  and not unassigned_only else []):
             prop_words |= set(_tokens(pn))
     except sqlite3.Error:
         pass
@@ -205,7 +211,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                 tenant=f'(unassigned) {d["filename"]}', doc_ids=[d['id']],
                 filenames=[d['filename']], grouped_by='unassigned')
 
-    rent_roll = _rent_roll(conn, property_id, groups) if use_rent_roll else {}
+    rent_roll = _rent_roll(conn, property_id, groups, unassigned_only) if use_rent_roll else {}
 
     for k, row in groups.items():
         row.key = k
@@ -345,7 +351,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     return out
 
 
-def _rent_roll(conn, property_id, groups) -> dict:
+def _rent_roll(conn, property_id, groups, unassigned_only=False) -> dict:
     """{tenancy key: {'start': lease start, 'monthly': base rent}} from
     uploaded rent rolls, matched by the tenancy's file-label words or a
     legal-name alias — only when exactly one tenancy matches a rent-roll
@@ -360,7 +366,9 @@ def _rent_roll(conn, property_id, groups) -> dict:
     q = (f"SELECT tenant_name, lease_start, monthly_rent, annual_rent, document_id, lease_end "
          f"FROM {table} WHERE tenant_name IS NOT NULL")
     args = []
-    if property_id is not None:
+    if unassigned_only:
+        q += " AND property_id IS NULL"
+    elif property_id is not None:
         q += " AND property_id = ?"
         args.append(property_id)
     try:
@@ -623,8 +631,10 @@ def portfolio_summary(db, as_of: Optional[date] = None) -> Optional[dict]:
            'rent_confirmed_for': 0, 'needs_review': 0, 'needs_commencement': 0,
            'expiring_12mo': 0, 'properties': []}
     for pid in pids:
+        # pid None = the documents not yet matched to a property (not the whole DB)
         rows = build_roster(db.conn, pid, as_of,
-                            confirmed_commencements=db.get_lease_confirmations(pid))
+                            confirmed_commencements=db.get_lease_confirmations(pid),
+                            unassigned_only=pid is None)
         s = summarize(rows, as_of)
         for k in ('tenancies', 'leased_sf', 'sf_known_for', 'rent_confirmed_for', 'expiring_12mo'):
             tot[k] += s[k]

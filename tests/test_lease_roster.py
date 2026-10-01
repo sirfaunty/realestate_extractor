@@ -329,6 +329,30 @@ def test_past_stated_date_does_not_expire_a_tenancy():
     assert r.expiration is None and r.kind == 'tenancy', r
 
 
+def test_unassigned_upload_does_not_recount_the_portfolio():
+    # one lease not yet matched to a property must add one tenancy, not
+    # re-count every lease in the org (staging 2026-10-01: 12 -> 25)
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import portfolio_summary
+    tmp = tempfile.mkdtemp()
+    db = Database(os.path.join(tmp, 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, (fn, pid) in enumerate([('Elm Court - Bean Coffee Lease.pdf', 1),
+                                   ('Elm Court - Pet Barn Lease.pdf', 1),
+                                   ('Elm Court - Lamp Shop Lease.pdf', None)], 1):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+                  "VALUES (?, ?, 'x', 'lease', ?)", (i, fn, pid))
+    c.commit()
+    s = portfolio_summary(db, as_of=date(2026, 10, 1))
+    db.close()
+    assert s['tenancies'] == 3, s
+    by_pid = {p['property_id']: p['tenancies'] for p in s['properties']}
+    assert by_pid == {1: 2, None: 1}, by_pid
+
+
 
 if __name__ == '__main__':
     fails = 0
