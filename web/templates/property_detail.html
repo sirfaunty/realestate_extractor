@@ -21,8 +21,10 @@
         </span>
         <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end;">
             {% if documents %}
-            <a href="{{ url_for('property_roster', property_id=prop.id) }}" class="btn btn-sm"
-               title="Tenancies, rents and expirations built from the leases">Lease Roster</a>
+            <a href="{{ url_for('property_roster', property_id=prop.id) }}" class="btn btn-sm btn-secondary"
+               title="Tenancies, rents and expirations built from the leases">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12M2 9.5h12M6 6v7.5" stroke="currentColor" stroke-width="1.5"/></svg>
+                Lease Roster</a>
             <!-- Analyze dropdown -->
             <div style="position: relative; display: inline-block;" id="analyze-group">
                 <button id="analyze-btn" onclick="runAnalysis('smart')" class="btn btn-sm btn-primary" title="Smart re-run: only process docs that need it" style="border-top-right-radius: 0; border-bottom-right-radius: 0;">

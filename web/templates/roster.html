@@ -96,8 +96,10 @@
                     <span style="font-weight:600;">${{ '{:,.2f}'.format(r.monthly_rent) }}</span>
                     <div style="font-size:11px; color:var(--text-muted);" title="{{ r.rent_detail }}">{% if 'confirmed_by_rent_roll' in r.rent_flags %}confirmed by rent roll{% else %}from the rent schedule{% endif %}</div>
                 {% elif r.monthly_rent %}
-                    <span style="color:var(--text-muted);" title="{{ r.rent_detail }} ({{ r.rent_confidence }} confidence)">${{ '{:,.2f}'.format(r.monthly_rent) }}?</span>
-                    <div style="font-size:11px; color:var(--text-muted);">{{ r.rent_confidence }} confidence — not counted</div>
+                    <span style="color:var(--text-muted);" title="{{ r.rent_detail }} ({{ r.rent_confidence }} confidence)">${{ '{:,.2f}'.format(r.monthly_rent) }}</span>
+                    <span class="badge badge-processing" style="margin-left:4px;"
+                          title="Derived from the lease but not confirmed — not counted in the totals">estimate</span>
+                    <div style="font-size:11px; color:var(--text-muted);">not counted · {{ r.rent_confidence }} confidence</div>
                 {% else %}
                     <span style="color:var(--text-muted);">—</span>
                 {% endif %}
