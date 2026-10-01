@@ -159,7 +159,8 @@
                                    value="{{ doc.property_name or '' }}" required>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
-                            <select name="property_type">
+                            <select name="property_type" required>
+                                <option value="" disabled selected>Choose a type…</option>
                                 <option value="multifamily">Multifamily</option>
                                 <option value="industrial">Industrial</option>
                                 <option value="commercial">Commercial</option>

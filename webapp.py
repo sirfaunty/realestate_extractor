@@ -2370,10 +2370,13 @@ def review_create_property(doc_id):
         if not name:
             flash('Property name is required.', 'error')
             return redirect(url_for('review_queue'))
+        if request.form.get('property_type') not in PROPERTY_TYPES:
+            flash('Choose a property type.', 'error')
+            return redirect(url_for('review_queue'))
 
         prop_id = db.create_property(
             name=name,
-            property_type=request.form.get('property_type', 'multifamily'),
+            property_type=request.form['property_type'],
             portfolio_id=int(request.form['portfolio_id']) if request.form.get('portfolio_id') else None,
             address=request.form.get('address') or None,
             city=request.form.get('city') or None,
@@ -2581,10 +2584,13 @@ def create_property():
         if not name:
             flash('Property name is required.', 'error')
             return redirect(url_for('properties'))
+        if request.form.get('property_type') not in PROPERTY_TYPES:
+            flash('Choose a property type.', 'error')
+            return redirect(url_for('properties'))
 
         prop_id = db.create_property(
             name=name,
-            property_type=request.form.get('property_type', 'multifamily'),
+            property_type=request.form['property_type'],
             portfolio_id=int(request.form['portfolio_id']) if request.form.get('portfolio_id') else None,
             address=request.form.get('address') or None,
             city=request.form.get('city') or None,
