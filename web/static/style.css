@@ -408,7 +408,8 @@ select:focus {
     font-family: inherit;
     font-size: 14px;
     font-weight: 500;
-    border: none;
+    line-height: inherit;           /* <button> and <a> buttons the same height */
+    border: 1px solid transparent;  /* same box as .btn-secondary's border */
     cursor: pointer;
     transition: all 200ms ease;
     text-decoration: none;

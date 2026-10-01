@@ -26,7 +26,7 @@
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12M2 9.5h12M6 6v7.5" stroke="currentColor" stroke-width="1.5"/></svg>
                 Lease Roster</a>
             <!-- Analyze dropdown -->
-            <div style="position: relative; display: inline-block;" id="analyze-group">
+            <div style="position: relative; display: inline-flex; align-items: stretch;" id="analyze-group">
                 <button id="analyze-btn" onclick="runAnalysis('smart')" class="btn btn-sm btn-primary" title="Smart re-run: only process docs that need it" style="border-top-right-radius: 0; border-bottom-right-radius: 0;">
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align: -1px; margin-right: 3px;"><path d="M14 8H10L8.5 11L5.5 5L4 8H2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Analyze
@@ -75,6 +75,30 @@
 <!-- Quick Stats -->
 {% set ext = operations.extracted %}
 {% set has_manual = (operations.units.total_units or 0) > 0 %}
+{% if roster %}
+<div class="card-grid" style="margin-bottom: 20px;">
+    <div class="stat-card">
+        <div class="stat-value">{{ roster.tenancies }}</div>
+        <div class="stat-label">Tenancies <span style="color:var(--text-muted);">(from leases)</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ '{:,}'.format(roster.leased_sf) }}</div>
+        <div class="stat-label">Leased SF <span style="color:var(--text-muted);">({{ roster.sf_known_for }} of {{ roster.tenancies }})</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ '{:,.0f}'.format(roster.monthly_rent_confirmed) }}</div>
+        <div class="stat-label">Monthly Rent <span style="color:var(--text-muted);">— {{ roster.rent_confirmed_for }} of {{ roster.tenancies }} confirmed</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ roster.walt_years if roster.walt_years is not none else '—' }}</div>
+        <div class="stat-label">WALT (years)</div>
+    </div>
+    <a class="stat-card" href="{{ url_for('property_roster', property_id=prop.id) }}" style="text-decoration:none;">
+        <div class="stat-value">{{ roster.needs_review|length }}</div>
+        <div class="stat-label">Need attention <span style="color:var(--text-muted);">→ roster</span></div>
+    </a>
+</div>
+{% else %}
 <div class="card-grid" style="margin-bottom: 20px;">
     <div class="stat-card">
         <div class="stat-value">{{ operations.units.total_units if has_manual else (ext.total_units or 0) }}</div>
@@ -97,6 +121,7 @@
         <div class="stat-label">Cap Rate</div>
     </div>
 </div>
+{% endif %}
 
 <!-- Analysis Status -->
 <div id="analysis-status" class="card" style="margin-bottom: 20px; {% if not latest_analysis %}display: none;{% endif %}">

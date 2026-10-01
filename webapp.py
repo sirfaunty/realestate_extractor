@@ -2697,6 +2697,20 @@ def property_detail(property_id):
         # Financial synthesis (reconciled multi-source view)
         synthesizer = FinancialSynthesizer(db)
         synthesis = synthesizer.synthesize(property_id)
+
+        # Leases but no units / rent roll: the stat cards come from the lease
+        # roster (as on the dashboard), rent only where high-confidence.
+        roster = None
+        if (not (operations['units'].get('total_units') or 0)
+                and not (operations.get('extracted') or {}).get('total_units')
+                and any(d.get('document_type') == 'lease' for d in documents)):
+            try:
+                from .lease_roster import build_roster, summarize
+                roster = summarize(build_roster(
+                    db.conn, property_id,
+                    confirmed_commencements=db.get_lease_confirmations(property_id)))
+            except Exception:
+                logger.exception('lease roster summary failed')
     finally:
         db.close()
 
@@ -2708,7 +2722,7 @@ def property_detail(property_id):
                            latest_analysis=latest_analysis,
                            ingested_count=ingested_count,
                            analyzed_count=analyzed_count,
-                           synthesis=synthesis)
+                           synthesis=synthesis, roster=roster)
 
 
 @app.route('/property/<int:property_id>/roster')
