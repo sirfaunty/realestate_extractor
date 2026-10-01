@@ -147,6 +147,13 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         args.append(property_id)
     docs = [dict(id=r[0], filename=r[1] or '') for r in conn.execute(
         f"SELECT id, filename FROM documents {where} ORDER BY id", args)]
+    # uploaded but not yet run through Analyze: no terms extracted yet
+    try:
+        not_analyzed = {r[0] for r in conn.execute(
+            f"SELECT id FROM documents {where} AND COALESCE(analysis_status, 'ingested') != 'analyzed'",
+            args)}
+    except sqlite3.Error:            # older DB without the column
+        not_analyzed = set()
     terms = _terms(conn, [d['id'] for d in docs])
 
     # Words every file in this property shares ("EC", "Oak Square",
@@ -331,6 +338,11 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             row.rent_flags.append('rent_implausible_for_size')
         if rent_roll.get(k, {}).get('monthly'):
             _check_rent_roll(row, rent_roll[k]['monthly'], chain_text)
+        # a document in the chain not analyzed yet may change the answer
+        if not_analyzed & set(row.doc_ids):
+            row.rent_flags.append('not_analyzed')
+            if row.rent_confidence == 'high':
+                row.rent_confidence = 'medium'
         row.kind = _kind(row, chain_text, as_of)
         row.needs = _needs(row)
         out.append(row)
@@ -588,6 +600,8 @@ def _needs(row: RosterRow) -> str:
     if row.grouped_by == 'unassigned':
         return 'assign this document to a tenant'
     f = set(row.rent_flags)
+    if 'not_analyzed' in f:
+        return 'not analyzed yet — run Analyze on the property page'
     # lease-status questions a confirmed rent doesn't answer
     if row.show_rent:
         if 'past_expiration' in f:

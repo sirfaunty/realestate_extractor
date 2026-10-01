@@ -213,6 +213,7 @@ def _roster_with_rent_roll(lease_end_on_roll):
     c.execute("INSERT INTO rent_roll_entries (document_id, property_id, tenant_name, lease_start, "
               "lease_end, monthly_rent) VALUES (2, 1, 'Bean Coffee', '2020-01-01', ?, 2500)",
               (lease_end_on_roll,))
+    c.execute("UPDATE documents SET analysis_status = 'analyzed'")
     c.commit()
     rows = [r for r in build_roster(c, 1, as_of=date(2026, 6, 30)) if r.label == 'bean coffee']
     db.close()
@@ -254,6 +255,7 @@ def test_extension_amendment_sets_the_expiration():
               "VALUES (1, 'governing_expiration', '2026-08-31', '2026-08-31')")
     c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) "
               "VALUES (2, 'lease_expiration', '06/30/2029')")
+    c.execute("UPDATE documents SET analysis_status = 'analyzed'")
     c.commit()
     r = [x for x in build_roster(c, 1, as_of=date(2026, 9, 30)) if x.label == 'bean coffee'][0]
     db.close()
@@ -281,6 +283,7 @@ def _expansion_roster(amendment_text):
               ('Landlord leases to Tenant approximately 2,000 rentable square feet.',))
     c.execute("INSERT INTO document_fulltext (document_id, page_number, content) VALUES ('2', '1', ?)",
               (amendment_text,))
+    c.execute("UPDATE documents SET analysis_status = 'analyzed'")
     c.commit()
     rows = build_roster(c, 1, as_of=date(2026, 9, 30),
                         confirmed_commencements={'fn:bean coffee': '2022-10-01'})
@@ -296,6 +299,34 @@ def test_expansion_holds_back_a_year1_rolled_rent():
                           '2,900 rentable square feet. 3. Base Rent shall be adjusted.')
     assert r.square_feet == 2900 and not r.show_rent, r
     assert 'premises_changed_since_year1' in r.rent_flags and 'confirm the current rent' in r.needs
+
+
+def test_unanalyzed_document_says_run_analyze_and_holds_back_rent():
+    # uploaded, never run through Analyze: the one action is Analyze, not
+    # "add the rent exhibit" (staging 2026-10-01, Lantern Bay)
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn in ((1, 'Elm Court - Bean Coffee Lease.pdf'),
+                  (2, 'Elm Court - Bean Coffee First Amendment.pdf'),
+                  (3, 'Elm Court - Pet Barn Lease.pdf')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id, "
+                  "analysis_status) VALUES (?, ?, 'x', 'lease', 1, ?)",
+                  (i, fn, 'ingested' if i == 2 else 'analyzed'))
+    for ty, v in (('square_footage', '2,000'), ('base_rent', '$4,000.00'), ('escalation_rate', '3%')):
+        c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) VALUES (1, ?, ?)", (ty, v))
+    c.commit()
+    rows = build_roster(c, 1, as_of=date(2026, 9, 30),
+                        confirmed_commencements={'fn:bean coffee': '2022-10-01'})
+    db.close()
+    bean = [x for x in rows if x.label == 'bean coffee'][0]
+    pet = [x for x in rows if x.label == 'pet barn'][0]
+    assert not bean.show_rent and bean.needs.startswith('not analyzed yet'), bean
+    assert 'not_analyzed' not in pet.rent_flags, pet
 
 
 def test_confirmed_commencement_shows_escalated_rent():
@@ -323,6 +354,7 @@ def test_past_stated_date_does_not_expire_a_tenancy():
                   "VALUES (?, ?, 'x', 'lease', 1)", (i, fn))
     c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) "
               "VALUES (2, 'lease_expiration', '10/31/2014')")
+    c.execute("UPDATE documents SET analysis_status = 'analyzed'")
     c.commit()
     r = [x for x in build_roster(c, 1, as_of=date(2026, 9, 30)) if x.label == 'bean coffee'][0]
     db.close()
@@ -345,6 +377,7 @@ def test_unassigned_upload_does_not_recount_the_portfolio():
                                    ('Elm Court - Lamp Shop Lease.pdf', None)], 1):
         c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
                   "VALUES (?, ?, 'x', 'lease', ?)", (i, fn, pid))
+    c.execute("UPDATE documents SET analysis_status = 'analyzed'")
     c.commit()
     s = portfolio_summary(db, as_of=date(2026, 10, 1))
     db.close()

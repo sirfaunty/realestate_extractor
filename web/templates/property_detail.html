@@ -10,9 +10,10 @@
             {% if prop.portfolio_name %} / <a href="{{ url_for('portfolios') }}" style="color: var(--text-muted);">{{ prop.portfolio_name }}</a>{% endif %}
         </div>
         <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">{{ prop.name }}</h2>
-        <div style="font-size: 14px; color: var(--text-secondary);">
-            {{ prop.address }}{% if prop.city %}, {{ prop.city }}{% endif %}{% if prop.state %}, {{ prop.state }}{% endif %} {{ prop.zip_code or '' }}
-        </div>
+        {% set addr = [prop.address, prop.city, ((prop.state or '') ~ ' ' ~ (prop.zip_code or ''))|trim]|select|join(', ') %}
+        {% if addr %}
+        <div style="font-size: 14px; color: var(--text-secondary);">{{ addr }}</div>
+        {% endif %}
     </div>
     <div style="text-align: right;">
         <span class="badge badge-{{ prop.property_type }}" style="font-size: 12px;">{{ prop.property_type.replace('_', ' ').title() }}</span>
@@ -1426,7 +1427,7 @@ function runAnalysis(mode) {
             if (data.error) {
                 resetAnalyzeBtn();
                 document.getElementById('analysis-progress').style.display = 'none';
-                alert('Error: ' + data.error);
+                capModal.alert({title: 'Analysis failed', message: data.error});
                 return;
             }
             if (data.message) {
@@ -1447,7 +1448,7 @@ function runAnalysis(mode) {
         .catch(err => {
             resetAnalyzeBtn();
             document.getElementById('analysis-progress').style.display = 'none';
-            alert('Request failed: ' + err);
+            capModal.alert({title: 'Analysis failed', message: 'Request failed: ' + err});
         });
 }
 
@@ -1500,7 +1501,7 @@ function runVersionedReanalyze() {
             if (data.error) {
                 resetAnalyzeBtn();
                 document.getElementById('analysis-progress').style.display = 'none';
-                alert('Error: ' + data.error);
+                capModal.alert({title: 'Analysis failed', message: data.error});
                 return;
             }
             const text = document.getElementById('analysis-progress-text');
@@ -1531,7 +1532,7 @@ function runVersionedReanalyze() {
         .catch(() => {
             resetAnalyzeBtn();
             document.getElementById('analysis-progress').style.display = 'none';
-            alert('Failed to start versioned re-analysis.');
+            capModal.alert({title: 'Analysis failed', message: 'Failed to start versioned re-analysis.'});
         });
 }
 

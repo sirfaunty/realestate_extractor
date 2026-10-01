@@ -19,7 +19,7 @@
     </div>
     <div style="display: flex; gap: 8px;">
         {% if can_edit('extraction.upload') or can_edit('extraction.batch') %}
-        <a href="{{ url_for('file_extractor') }}" class="btn btn-primary">Upload & Extract</a>
+        <a href="{{ url_for('file_extractor') }}" class="btn btn-primary">Upload Documents</a>
         {% endif %}
     </div>
 </div>
