@@ -391,6 +391,18 @@ def test_escalation_roll_forward_is_medium():
     assert (r.method, r.monthly, r.confidence) == ('escalated', 2121.8, 'medium'), r
 
 
+def test_escalation_with_confirmed_commencement_is_high():
+    # stated Y1 + stated fixed % + a commencement the user (or rent roll)
+    # confirmed: nothing left to guess
+    r = rent('', year1_monthly='$2,000.00', escalation_pct='3%',
+             commencement='7/1/2023', commencement_confirmed=True)
+    assert (r.method, r.monthly, r.confidence) == ('escalated', 2121.8, 'high'), r
+    # ...but a schedule that doesn't cover the date still caps it
+    r2 = rent('Rent: Lease Year 1 $24,000.00 $2,000.00', year1_monthly='$2,000.00',
+              escalation_pct='3%', commencement='7/1/2010', commencement_confirmed=True)
+    assert r2.confidence != 'high', r2
+
+
 def test_flat_year1_is_low():
     r = rent('', year1_monthly='$2,000.00')
     assert (r.method, r.confidence) == ('flat', 'low')

@@ -534,8 +534,13 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
 def derive_current_rent(*, as_of: date,
                         year1_monthly=None, escalation_pct=None,
                         commencement=None, expiration=None,
-                        schedule_text: str = '') -> RentResult:
-    """Monthly base rent in effect on `as_of`, with method + confidence."""
+                        schedule_text: str = '',
+                        commencement_confirmed: bool = False) -> RentResult:
+    """Monthly base rent in effect on `as_of`, with method + confidence.
+
+    commencement_confirmed: the commencement came from a user confirmation
+    or the rent roll, not from reading the lease — a stated Year-1 rent rolled
+    forward by a stated fixed escalation is then fully determined (high)."""
     comm = commencement if isinstance(commencement, date) else parse_date(commencement)
     exp = expiration if isinstance(expiration, date) else parse_date(expiration)
     y1 = _num(year1_monthly)
@@ -603,6 +608,7 @@ def derive_current_rent(*, as_of: date,
     if dated and max(r.end for r in dated) < as_of:
         flags.append('schedule_ends_before_date')   # a later amendment is missing
 
+    y1_stated = y1 is not None
     if rows and not y1:
         y1 = rows[0].monthly
     if y1 and comm and esc and 0 < esc < 15:
@@ -610,7 +616,13 @@ def derive_current_rent(*, as_of: date,
         v = round(y1 * (1 + esc / 100.0) ** n, 2)
         if rows:
             flags.append('schedule_does_not_cover_date')
-        return RentResult(v, 'escalated', 'medium' if not flags else 'low', flags,
+        if flags:
+            conf = 'low'
+        elif commencement_confirmed and y1_stated:
+            conf = 'high'       # every input known: stated Y1, stated %, confirmed date
+        else:
+            conf = 'medium'
+        return RentResult(v, 'escalated', conf, flags,
                           f'Y1 {y1:,.2f} x (1+{esc:g}%)^{n}')
     if y1:
         if not comm:

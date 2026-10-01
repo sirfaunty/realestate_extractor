@@ -266,8 +266,22 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             row.commencement_guess = row.commencement_guess or rr_start
         elif comm:
             row.commencement, row.commencement_source = min(comm), 'lease'
-        exps = [parse_date(t['governing_expiration'].get('exp') or t['governing_expiration']['raw'])
-                for t in ts if t.get('governing_expiration')]
+        # per instrument: its governing expiration (lease + renewals rolled
+        # forward), else the date it states — an extension amendment only
+        # says "the Expiration Date shall be August 31, 2035" (lease_expiration).
+        # A stated date already in the PAST is not used: later instruments in
+        # the chain often extend the term without a date we could read (a 2nd
+        # amendment's 2014 date, then a 3rd and 4th amendment), so it could
+        # wrongly mark a live tenancy expired.
+        exps = []
+        for t in ts:
+            g = t.get('governing_expiration')
+            if g:
+                exps.append(parse_date(g.get('exp') or g['raw']))
+            elif t.get('lease_expiration'):
+                s = parse_date(t['lease_expiration'].get('exp') or t['lease_expiration']['raw'])
+                if s and s > as_of:
+                    exps.append(s)
         exps = [e for e in exps if e]
         row.expiration_lease = max(exps) if exps else None
         row.expiration = row.expiration_lease
@@ -288,9 +302,17 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             escalation_pct=esc['raw'] if esc else None,
             commencement=row.commencement,
             expiration=row.expiration_lease,      # paper only — never the rent roll's
-            schedule_text=chain_text)
+            schedule_text=chain_text,
+            commencement_confirmed=row.commencement_source in ('confirmed', 'rent_roll'))
         row.monthly_rent, row.rent_method = r.monthly, r.method
         row.rent_confidence, row.rent_flags, row.rent_detail = r.confidence, list(r.flags), r.detail
+        # an amendment changed the premises (expansion / relocation): a rent
+        # rolled forward from the ORIGINAL Year-1 rent no longer describes
+        # them ("Base Rent shall be adjusted to reflect the expanded Premises")
+        if 'sf_restated_by_amendment' in row.flags and r.method in ('escalated', 'flat'):
+            row.rent_flags.append('premises_changed_since_year1')
+            if row.rent_confidence == 'high':
+                row.rent_confidence = 'medium'
         # plausibility: a shown rent must make sense for the space. > $80/SF/yr
         # (retail rarely exceeds it), or > $20k/mo with no SF to check, can't
         # be shown unreviewed — the classic error is an ANNUAL figure read as
@@ -569,6 +591,9 @@ def _needs(row: RosterRow) -> str:
     if 'rent_roll_on_other_step' in f:
         return (f'rent roll shows ${row.rent_roll_monthly:,.2f}/mo — another step of the '
                 f'lease schedule; check which applies today')
+    if 'premises_changed_since_year1' in f:
+        return ('premises changed by amendment — the rent shown is from the original '
+                'premises; confirm the current rent')
     if 'later_schedule_unplaced' in f:
         return ("a later amendment's rent table has no start date — "
                 "check which rent applies today")

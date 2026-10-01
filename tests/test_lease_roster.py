@@ -235,6 +235,101 @@ def test_paper_expiration_kept_without_rent_roll_end():
 
 
 
+def test_extension_amendment_sets_the_expiration():
+    # the amendment only STATES the new date (lease_expiration); the lease
+    # carries the governing one -> the later instrument's date wins
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn in ((1, 'Elm Court - Bean Coffee Lease.pdf'),
+                  (2, 'Elm Court - Bean Coffee First Amendment.pdf'),
+                  (3, 'Elm Court - Pet Barn Lease.pdf')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+                  "VALUES (?, ?, 'x', 'lease', 1)", (i, fn))
+    c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw, expiration_date) "
+              "VALUES (1, 'governing_expiration', '2026-08-31', '2026-08-31')")
+    c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) "
+              "VALUES (2, 'lease_expiration', '06/30/2029')")
+    c.commit()
+    r = [x for x in build_roster(c, 1, as_of=date(2026, 9, 30)) if x.label == 'bean coffee'][0]
+    db.close()
+    assert r.expiration == date(2029, 6, 30) and r.kind == 'tenancy', r
+    assert 'past expiration' not in r.needs
+
+
+
+def _expansion_roster(amendment_text):
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn in ((1, 'Elm Court - Bean Coffee Lease.pdf'),
+                  (2, 'Elm Court - Bean Coffee First Amendment.pdf'),
+                  (3, 'Elm Court - Pet Barn Lease.pdf')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+                  "VALUES (?, ?, 'x', 'lease', 1)", (i, fn))
+    for ty, v in (('square_footage', '2,000'), ('base_rent', '$4,000.00'), ('escalation_rate', '3%')):
+        c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) VALUES (1, ?, ?)", (ty, v))
+    c.execute("INSERT INTO document_fulltext (document_id, page_number, content) VALUES ('1', '1', ?)",
+              ('Landlord leases to Tenant approximately 2,000 rentable square feet.',))
+    c.execute("INSERT INTO document_fulltext (document_id, page_number, content) VALUES ('2', '1', ?)",
+              (amendment_text,))
+    c.commit()
+    rows = build_roster(c, 1, as_of=date(2026, 9, 30),
+                        confirmed_commencements={'fn:bean coffee': '2022-10-01'})
+    db.close()
+    return [x for x in rows if x.label == 'bean coffee'][0]
+
+
+def test_expansion_holds_back_a_year1_rolled_rent():
+    # confirmed date + stated Y1 + stated % would be high — but an amendment
+    # enlarged the premises, so the original Year-1 rent no longer applies
+    r = _expansion_roster('2. Expansion of Premises. The Premises are expanded such that '
+                          'the Premises shall consist of a combined total of approximately '
+                          '2,900 rentable square feet. 3. Base Rent shall be adjusted.')
+    assert r.square_feet == 2900 and not r.show_rent, r
+    assert 'premises_changed_since_year1' in r.rent_flags and 'confirm the current rent' in r.needs
+
+
+def test_confirmed_commencement_shows_escalated_rent():
+    # same lease, amendment that doesn't touch the premises -> rent counts
+    r = _expansion_roster('2. Notices. Notices to Tenant shall be sent to the Premises.')
+    assert r.square_feet == 2000 and r.show_rent and r.monthly_rent == 4370.91, r
+
+
+
+def test_past_stated_date_does_not_expire_a_tenancy():
+    # a 2nd amendment states 10/31/2014, a later 3rd amendment states no
+    # date we could read: the stale date must not mark the tenancy expired
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn in ((1, 'Elm Court - Bean Coffee Lease.pdf'),
+                  (2, 'Elm Court - Bean Coffee 2nd Amendment.pdf'),
+                  (3, 'Elm Court - Bean Coffee 3rd Amendment.pdf'),
+                  (4, 'Elm Court - Pet Barn Lease.pdf')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+                  "VALUES (?, ?, 'x', 'lease', 1)", (i, fn))
+    c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) "
+              "VALUES (2, 'lease_expiration', '10/31/2014')")
+    c.commit()
+    r = [x for x in build_roster(c, 1, as_of=date(2026, 9, 30)) if x.label == 'bean coffee'][0]
+    db.close()
+    assert r.expiration is None and r.kind == 'tenancy', r
+
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
