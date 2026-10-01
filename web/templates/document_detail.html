@@ -817,7 +817,7 @@ async function setCurrentRun(runId) {
             loadRuns();
         }
     } catch (err) {
-        alert('Failed to switch active run.');
+        capModal.alert({message: 'Failed to switch active run.'});
     }
 }
 

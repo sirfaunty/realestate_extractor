@@ -620,8 +620,8 @@ function esc(s) {
     return d.innerHTML;
 }
 
-function reextractBatch(btn, docIds, batchName) {
-    if (!confirm('Re-extract all ' + docIds.length + ' documents in "' + batchName + '"?\n\nThis will delete existing extractions and reprocess each document through the current extractors.')) return;
+async function reextractBatch(btn, docIds, batchName) {
+    if (!(await capModal.confirm({title: 'Re-extract batch?', message: 'Re-extract all ' + docIds.length + ' documents in "' + batchName + '"? This will delete existing extractions and reprocess each document through the current extractors.', confirmLabel: 'Re-extract'}))) return;
 
     btn.disabled = true;
     btn.textContent = 'Starting…';

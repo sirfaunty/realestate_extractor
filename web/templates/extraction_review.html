@@ -304,7 +304,7 @@ function toggleSelectAll(checked) {
     updateBulkBar();
 }
 
-function bulkApproveByFilter() {
+async function bulkApproveByFilter() {
     const propertyId = document.getElementById('property-filter').value;
     const docType = document.getElementById('type-filter').value;
     const desc = [];
@@ -315,7 +315,7 @@ function bulkApproveByFilter() {
     if (docType) desc.push(docType.replace(/_/g, ' '));
 
     const label = desc.length ? ` (${desc.join(' · ')})` : '';
-    if (!confirm(`Approve all pending documents${label}? This cannot be undone.`)) return;
+    if (!(await capModal.confirm({title: 'Approve all pending?', message: `Approve all pending documents${label}? This cannot be undone.`, confirmLabel: 'Approve'}))) return;
 
     fetch('/api/extraction-review/bulk-by-filter', {
         method: 'POST',
@@ -330,8 +330,9 @@ function bulkApproveByFilter() {
     .then(r => r.json())
     .then(data => {
         if (data.ok) {
-            alert(`${data.count} document${data.count !== 1 ? 's' : ''} approved.`);
-            location.reload();
+            capModal.alert({icon: capModal.icons.success, title: 'Approved',
+                            message: `${data.count} document${data.count !== 1 ? 's' : ''} approved.`})
+                .then(() => location.reload());
         }
     });
 }

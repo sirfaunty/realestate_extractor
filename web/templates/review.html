@@ -8,7 +8,7 @@
         <p>Match processed documents to properties — {{ review_count }} pending</p>
     </div>
     {% if review_count > 0 %}
-    <form method="POST" action="{{ url_for('review_bulk_approve') }}" onsubmit="return confirm('Approve all documents with high-confidence property matches (≥70%)?');">
+    <form method="POST" action="{{ url_for('review_bulk_approve') }}" onsubmit="return capModal.confirmThen(event, 'Approve all documents with high-confidence property matches (≥70%)?', {title: 'Approve all?', confirmLabel: 'Approve'});">
         <button type="submit" class="btn btn-signal" style="white-space: nowrap;">
             ✓ Approve All High-Confidence
         </button>

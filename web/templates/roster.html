@@ -27,7 +27,7 @@
     </div>
     <div class="stat-card">
         <div class="stat-value">${{ '{:,.0f}'.format(s.monthly_rent_confirmed) }}</div>
-        <div class="stat-label">Monthly rent — {{ s.rent_confirmed_for }} of {{ s.tenancies }} confirmed</div>
+        <div class="stat-label">Monthly rent, this property — {{ s.rent_confirmed_for }} of {{ s.tenancies }} confirmed</div>
     </div>
     <div class="stat-card">
         <div class="stat-value">{{ s.walt_years if s.walt_years is not none else '—' }}</div>

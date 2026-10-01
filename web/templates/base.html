@@ -602,6 +602,20 @@ const capModal = {
         if (this._resolve) { this._resolve(false); this._resolve = null; }
     },
 
+    /** onsubmit / onclick handler: `return capModal.confirmThen(event, 'Revoke X?')`.
+     *  In-page replacement for `return confirm(...)` (native dialogs block the
+     *  page and browser automation); submits the form / follows the link on OK. */
+    confirmThen(ev, message, opts) {
+        ev.preventDefault();
+        const el = ev.currentTarget;
+        this.confirm(Object.assign({ message }, opts || {})).then(ok => {
+            if (!ok) return;
+            if (el.tagName === 'FORM') HTMLFormElement.prototype.submit.call(el);
+            else if (el.href) window.location.href = el.href;
+        });
+        return false;
+    },
+
     /** Show a confirmation dialog. Returns a Promise<boolean>. */
     confirm(opts) {
         return new Promise(resolve => {

@@ -2320,9 +2320,14 @@ def review_bulk_approve():
     db = get_org_db(org_id)
     try:
         count = db.bulk_approve_matches(min_score=0.7)
-        flash(f'{count} document{"s" if count != 1 else ""} approved with high-confidence matches.', 'success')
+        pids = [r[0] for r in db.conn.execute(
+            "SELECT DISTINCT property_id FROM documents WHERE property_id IS NOT NULL")]
     finally:
         db.close()
+    queued = _auto_analyze_new_docs(org_id, pids) if count else 0
+    flash(f'{count} document{"s" if count != 1 else ""} approved with high-confidence matches.'
+          + (f' Extracting terms from {queued} new document{"s" if queued != 1 else ""}.' if queued else ''),
+          'success')
     return redirect(url_for('review_queue'))
 
 
@@ -2345,9 +2350,11 @@ def review_approve(doc_id):
 
         doc = db.get_document(doc_id)
         prop = db.get_property(int(property_id))
-        flash(f'"{doc["filename"]}" linked to {prop["name"]}.', 'success')
     finally:
         db.close()
+    queued = _auto_analyze_new_docs(org_id, [int(property_id)])
+    flash(f'"{doc["filename"]}" linked to {prop["name"]}.'
+          + (' Extracting its terms now.' if queued else ''), 'success')
     return redirect(url_for('review_queue'))
 
 
@@ -2374,10 +2381,11 @@ def review_create_property(doc_id):
             zip_code=request.form.get('zip_code') or None,
         )
         db.approve_document_match(doc_id, prop_id)
-
-        flash(f'Property "{name}" created and document linked.', 'success')
     finally:
         db.close()
+    queued = _auto_analyze_new_docs(org_id, [prop_id])
+    flash(f'Property "{name}" created and document linked.'
+          + (' Extracting its terms now.' if queued else ''), 'success')
     return redirect(url_for('review_queue'))
 
 
@@ -3964,6 +3972,48 @@ def api_analyze_selective(property_id):
     finally:
         db.close()
 
+    job_id = _start_analysis_job(org_id, property_id, prop['name'], mode, doc_types,
+                                 process_ids, skip_ids, total_docs=len(docs))
+    return jsonify({
+        'success': True,
+        'job_id': job_id,
+        'processing': len(process_ids),
+        'skipped': len(skip_ids),
+        'mode': mode,
+    })
+
+
+def _auto_analyze_new_docs(org_id, property_ids) -> int:
+    """After Review links documents to properties: queue a 'new docs only'
+    analysis for each property that has documents never run through Analyze,
+    so an upload ends with extracted terms without a separate click. Returns
+    the number of documents queued. Never breaks the review action."""
+    queued = 0
+    db = get_org_db(org_id)
+    try:
+        for pid in sorted({p for p in property_ids if p}):
+            prop = db.get_property(pid)
+            if not prop:
+                continue
+            docs = [dict(d) for d in db.conn.execute(
+                "SELECT id, analysis_status FROM documents WHERE property_id = ?", (pid,))]
+            new = [d['id'] for d in docs if d.get('analysis_status') != 'analyzed']
+            if not new:
+                continue
+            skip = [d['id'] for d in docs if d.get('analysis_status') == 'analyzed']
+            _start_analysis_job(org_id, pid, prop['name'], 'new_only', None, new, skip,
+                                total_docs=len(docs))
+            queued += len(new)
+    except Exception:
+        logger.exception('auto-analysis after review failed')
+    finally:
+        db.close()
+    return queued
+
+
+def _start_analysis_job(org_id, property_id, prop_name, mode, doc_types,
+                        process_ids, skip_ids, total_docs):
+    """Queue a Phase 2 analysis job for the given documents; returns its id."""
     mode_label = {'full': 'Full re-run', 'smart': 'Smart (needs rerun only)', 'new_only': 'New docs only'}.get(mode, mode)
     _cleanup_expired_jobs()
     job_id = str(uuid.uuid4())[:8]
@@ -3972,17 +4022,17 @@ def api_analyze_selective(property_id):
         'org_id': org_id,
         'status': 'processing',
         'type': 'analysis',
-        'filename': f'{mode_label} — {prop["name"]}',
+        'filename': f'{mode_label} — {prop_name}',
         'total': len(process_ids),
         'progress': 0,
         'results': [],
         'error': None,
         'started': datetime.now().astimezone().isoformat(),  # tz-aware: browser parses it correctly
         'step': 'analyzing',
-        'step_detail': f'{mode_label}: processing {len(process_ids)} of {len(docs)} documents...',
+        'step_detail': f'{mode_label}: processing {len(process_ids)} of {total_docs} documents...',
         'steps_log': [{
             'step': 'analyzing',
-            'detail': f'{mode_label} for {prop["name"]} — {len(process_ids)} to process, {len(skip_ids)} skipped',
+            'detail': f'{mode_label} for {prop_name} — {len(process_ids)} to process, {len(skip_ids)} skipped',
             'time': datetime.now().isoformat(),
         }],
     }
@@ -4058,14 +4108,7 @@ def api_analyze_selective(property_id):
                 db2.close()
 
     enqueue_job(job_id, process_async)
-
-    return jsonify({
-        'success': True,
-        'job_id': job_id,
-        'processing': len(process_ids),
-        'skipped': len(skip_ids),
-        'mode': mode,
-    })
+    return job_id
 
 
 @app.route('/document/<int:doc_id>/pdf')

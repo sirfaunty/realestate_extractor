@@ -68,7 +68,7 @@
             <td>
                 {% if d.is_active %}
                 <form method="POST" style="display: inline;"
-                      onsubmit="return confirm('Revoke {{ d.device_name }}? Its token stops working immediately.');">
+                      onsubmit="return capModal.confirmThen(event, 'Revoke {{ d.device_name }}? Its token stops working immediately.', {title: 'Revoke device?', confirmLabel: 'Revoke'});">
                     <input type="hidden" name="action" value="revoke">
                     <input type="hidden" name="device_id" value="{{ d.device_id }}">
                     <button type="submit" class="btn btn-sm btn-secondary">Revoke</button>

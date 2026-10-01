@@ -547,7 +547,7 @@ async function exportReport() {
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
-    alert('Report generation failed: ' + e.message);
+    capModal.alert({title: 'Report generation failed', message: e.message});
   } finally {
     btn.disabled = false;
     btn.innerHTML = origText;
