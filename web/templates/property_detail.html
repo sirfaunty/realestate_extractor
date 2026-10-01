@@ -21,6 +21,12 @@
             {{ prop.status.replace('_', ' ').title() }}
         </span>
         <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end;">
+            {% if can_edit('property.operations') %}
+            <button type="button" class="btn btn-sm btn-secondary" title="Edit name, type, status and address"
+                    onclick="const c = document.getElementById('edit-property'); c.style.display = c.style.display === 'none' ? 'block' : 'none';">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2.5l2.5 2.5L5.5 13H3v-2.5L11 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+                Edit</button>
+            {% endif %}
             {% if documents %}
             <a href="{{ url_for('property_roster', property_id=prop.id) }}" class="btn btn-sm btn-secondary"
                title="Tenancies, rents and expirations built from the leases">
@@ -72,6 +78,70 @@
         </div>
     </div>
 </div>
+
+{% if can_edit('property.operations') %}
+<!-- Edit property (toggled by the Edit button) -->
+<div class="card" id="edit-property" style="display: none; margin-bottom: 20px;">
+    <div class="card-header">Edit Property</div>
+    <form method="POST" action="{{ url_for('property_edit', property_id=prop.id) }}">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="ep-name">Property Name</label>
+                <input type="text" id="ep-name" name="name" value="{{ prop.name }}" required>
+            </div>
+            <div class="form-group">
+                <label for="ep-type">Type</label>
+                <select id="ep-type" name="property_type">
+                    {% for v, l in [('multifamily', 'Multifamily'), ('industrial', 'Industrial'), ('commercial', 'Commercial'), ('office', 'Office'), ('retail', 'Retail'), ('mixed_use', 'Mixed Use')] %}
+                    <option value="{{ v }}" {% if prop.property_type == v %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="ep-status">Status</label>
+                <select id="ep-status" name="status">
+                    {% for v, l in [('active', 'Active'), ('under_contract', 'Under Contract'), ('pipeline', 'Pipeline'), ('disposed', 'Disposed')] %}
+                    <option value="{{ v }}" {% if prop.status == v %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="ep-address">Address</label>
+                <input type="text" id="ep-address" name="address" value="{{ prop.address or '' }}" placeholder="Street address">
+            </div>
+            <div class="form-group">
+                <label for="ep-city">City</label>
+                <input type="text" id="ep-city" name="city" value="{{ prop.city or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="ep-state">State</label>
+                <input type="text" id="ep-state" name="state" value="{{ prop.state or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="ep-zip">Zip</label>
+                <input type="text" id="ep-zip" name="zip_code" value="{{ prop.zip_code or '' }}">
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px;">
+            <div class="form-group">
+                <label for="ep-year">Year Built</label>
+                <input type="text" id="ep-year" name="year_built" inputmode="numeric" value="{{ prop.year_built or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="ep-sqft">Total SF</label>
+                <input type="text" id="ep-sqft" name="total_sqft" inputmode="numeric" value="{{ '{:,.0f}'.format(prop.total_sqft) if prop.total_sqft else '' }}">
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary"
+                    onclick="document.getElementById('edit-property').style.display = 'none';">Cancel</button>
+        </div>
+    </form>
+</div>
+{% endif %}
 
 <!-- Quick Stats -->
 {% set ext = operations.extracted %}

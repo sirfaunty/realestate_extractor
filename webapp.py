@@ -2733,6 +2733,61 @@ def property_detail(property_id):
                            synthesis=synthesis, roster=roster)
 
 
+PROPERTY_TYPES = ('multifamily', 'industrial', 'commercial', 'office', 'retail', 'mixed_use')
+PROPERTY_STATUSES = ('active', 'under_contract', 'pipeline', 'disposed')
+
+
+@app.route('/property/<int:property_id>/edit', methods=['POST'])
+@login_required
+@permission_required('property.operations', 'edit')
+def property_edit(property_id):
+    """Edit a property's details (name, type, status, address, size)."""
+    org_id = session['org_id']
+    f = request.form
+
+    def _num(key, cast, label):
+        v = (f.get(key) or '').replace(',', '').strip()
+        if not v:
+            return None
+        try:
+            return cast(float(v))
+        except ValueError:
+            raise ValueError(label)
+
+    name = (f.get('name') or '').strip()
+    if not name:
+        flash('Property name is required.', 'error')
+        return redirect(url_for('property_detail', property_id=property_id))
+    ptype = f.get('property_type')
+    status = f.get('status')
+    if ptype not in PROPERTY_TYPES or status not in PROPERTY_STATUSES:
+        flash('Unknown property type or status.', 'error')
+        return redirect(url_for('property_detail', property_id=property_id))
+    try:
+        year_built = _num('year_built', int, 'Year built')
+        total_sqft = _num('total_sqft', float, 'Total SF')
+    except ValueError as e:
+        flash(f'{e} must be a number.', 'error')
+        return redirect(url_for('property_detail', property_id=property_id))
+
+    db = get_org_db(org_id)
+    try:
+        if not db.get_property(property_id):
+            flash('Property not found.', 'error')
+            return redirect(url_for('properties'))
+        db.update_property(
+            property_id, name=name, property_type=ptype, status=status,
+            address=(f.get('address') or '').strip() or None,
+            city=(f.get('city') or '').strip() or None,
+            state=(f.get('state') or '').strip() or None,
+            zip_code=(f.get('zip_code') or '').strip() or None,
+            year_built=year_built, total_sqft=total_sqft)
+    finally:
+        db.close()
+    flash('Property details saved.', 'success')
+    return redirect(url_for('property_detail', property_id=property_id))
+
+
 @app.route('/property/<int:property_id>/roster')
 @login_required
 def property_roster(property_id):
