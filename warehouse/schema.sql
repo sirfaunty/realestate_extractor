@@ -184,8 +184,8 @@ CREATE TABLE IF NOT EXISTS fact_ownership (
 -- Partner dimension (investor/operator entities)
 CREATE TABLE IF NOT EXISTS dim_partner (
     partner_key     INTEGER PRIMARY KEY,
-    deal_id         VARCHAR NOT NULL,          -- e.g. 'proforma_engine'
-    partner_id      VARCHAR NOT NULL,          -- e.g. 'Sponsor', 'Investor'
+    deal_id         VARCHAR NOT NULL,          -- e.g. 'deal_a'
+    partner_id      VARCHAR NOT NULL,          -- e.g. 'sponsor', 'investor'
     partner_name    VARCHAR,
     role            VARCHAR,                   -- 'GP', 'LP', 'Operator'
     ownership_pct   DOUBLE,

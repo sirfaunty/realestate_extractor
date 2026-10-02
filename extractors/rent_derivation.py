@@ -21,7 +21,7 @@ Methods, best first:
   none        nothing to derive from
 
 Pure functions, no I/O — measured by
-portfolio_ownership/re_import/rent_tie_out.py against Landlord's MRI rent roll.
+the pilot rent tie-out harness against the landlord's rent roll.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from typing import Optional
 # thousands separator may be OCR'd as '.' ("$5.706.25", "$30.578.35")
 _MONEY = r'\$?\s*(\d{1,3}(?:[,.]\d{3})+(?:\.\d{2})?|\d+\.\d{2})'
 # sanity bound: no single retail/office tenancy in scope pays more than this
-# a month (the largest anchor in the Sponsor set is ~$41k) — larger reads are a
+# a month (the largest anchor in the pilot set is ~$41k) — larger reads are a
 # price, a loan amount or a sum, never a monthly rent
 MAX_MONTHLY = 250_000.0
 _DATE = r'(\d{1,2})/(\d{1,2})/(\d{2,4})'
@@ -432,8 +432,7 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
     # row's rent — exactly one escalation step off. So each row reads from
     # the side whose nearest amount is CLOSEST, measured in letters/digits in
     # between (row labels like "Months 13-24" count; "(", ")", "|" don't).
-    # Tie -> after. Validated on Tenant A, Tenant B, Tenant C, Green
-    # Goods, T-Mobile, Bean Coffee tables (2026-09-29).
+    # Tie -> after. Validated on six real pilot lease tables (2026-09-29).
     def _gap(s):
         # SHORT bracketed row labels ("(2nd Option)") and $/SF columns
         # ("$10.75") say nothing about which row an amount belongs to — don't

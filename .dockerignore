@@ -16,23 +16,18 @@ capactive_sync.ini
 
 # client source data
 portfolio_ownership
-portfolio_cashflow_db
-lease_abstraction_db
-disposition_diligence_db
 Ownership Deliverables
 
-# bespoke client engines / reference material (deal modules degrade to
-# neutral example defaults without them; see modules/deal_seed.py)
-proforma_engine
+# bespoke client engines live outside this repo (modules/bespoke_engines.py);
+# deal modules degrade to neutral example defaults without them
+bespoke_engines.json
 reference_data
 properties.json
 _compare_scorecard
 *.docx
 *.xlsx
 cre_fundamentals.html
-git_push.sh
 scripts
-export_for_mac.py
 
 # large local artifacts
 *.zip
@@ -44,10 +39,5 @@ export_for_mac.py
 # dev/test detritus
 .vscode
 .idea
-TESTING_CHECKLIST.md
 CLAUDE.md
 .claude
-# internal notes that name client entities — dev docs, not runtime
-PROJECT_STATE.md
-docs/HISTORY_SCRUB.md
-docs/multi-property-plan.md

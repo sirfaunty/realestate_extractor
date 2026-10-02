@@ -1,16 +1,16 @@
 """
-Portfolio B / Portfolio Cash Flow module routes.
+Portfolio Cash Flow module routes.
 
 No-code workflow (operates on documents ALREADY stored in Capactive):
-  1. The page lists portfolios; the user picks one (e.g., Portfolio B).
-  2. POST /portfolio_cashflow/api/generate {portfolio_id} — a background job stages that
+  1. The page lists portfolios; the user picks one.
+  2. POST /portfolio-cashflow/api/generate {portfolio_id} — a background job stages that
      portfolio's stored documents, runs the cash-flow engine, validates the NOI
      tie-out, and exports the Excel deliverable.
-  3. GET /portfolio_cashflow/api/status/<job_id> — poll progress.
-  4. GET /portfolio_cashflow/api/download — download the workbook.
+  3. GET /portfolio-cashflow/api/status/<job_id> — poll progress.
+  4. GET /portfolio-cashflow/api/download — download the workbook.
 
-The cash-flow engine is the standalone `portfolio_cashflow_db` package at
-<repo>/portfolio_cashflow_db/. We add that project root to sys.path so it (and the
+The engine lives outside this repo; modules/bespoke_engines.py finds it
+(gitignored bespoke_engines.json) and puts it on sys.path so it (and its
 sibling export_excel.py) can be imported in-process. All work runs locally.
 """
 
@@ -25,18 +25,18 @@ import datetime
 import traceback
 
 from flask import Blueprint, render_template, request, jsonify, send_file, abort, session
+from ..bespoke_engines import engine_root, registry_path
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
-_BARR_ROOT = os.path.join(_REPO_ROOT, 'portfolio_cashflow_db')
-_DATA_DIR = os.path.join(_BARR_ROOT, 'data')
-_STAGE_ROOT = os.path.join(_BARR_ROOT, 'source_docs')
+_REGISTRY = registry_path()
+_ENGINE_ROOT = engine_root('portfolio_cashflow')
+_ENGINE_PKG = os.path.basename(_ENGINE_ROOT)
+_DATA_DIR = os.path.join(_ENGINE_ROOT, 'data')
+_STAGE_ROOT = os.path.join(_ENGINE_ROOT, 'source_docs')
 _CF_DIR = os.path.join(_STAGE_ROOT, 'staged_cash_flows')
 _RR_DIR = os.path.join(_STAGE_ROOT, 'staged_rent_rolls')
-if _BARR_ROOT not in sys.path:
-    sys.path.insert(0, _BARR_ROOT)
 
 portfolio_cashflow_bp = Blueprint('portfolio_cashflow', __name__, url_prefix='/portfolio-cashflow')
 
@@ -86,8 +86,8 @@ def _org_portfolios():
 
 def _properties():
     """Registry-driven property list, each resolved to its app-DB portfolio by name.
-    Falls back to listing the DB portfolios directly if the registry has no portfolio_cashflow
-    entries — so the selector keeps working even if the registry isn't configured."""
+    Falls back to listing the DB portfolios directly if the registry has no
+    entries for this module — so the selector keeps working even if the registry isn't configured."""
     reg = _registry_props()
     org = _org_portfolios()
     if not reg:
@@ -127,7 +127,7 @@ def _stage_documents(rows):
 def _prune_old_workbooks(keep=5):
     """Keep only the most recent generated workbooks on disk."""
     import glob
-    files = sorted(glob.glob(os.path.join(_BARR_ROOT, 'Portfolio B_Portfolio_*.xlsx')),
+    files = sorted(glob.glob(os.path.join(_ENGINE_ROOT, 'Portfolio_Cashflow_*.xlsx')),
                    key=os.path.getmtime, reverse=True)
     for old in files[keep:]:
         try:
@@ -162,14 +162,15 @@ def _run_generate(job_id, org_id, portfolio_id, style='summary'):
             raise RuntimeError('That portfolio has no cash-flow and rent-roll documents '
                                'to build from.')
 
-        from portfolio_cashflow_db.build import build as barr_build
-        from portfolio_cashflow_db.portfolio import Portfolio
-        from portfolio_cashflow_db.validate import validate_noi
+        import importlib
+        build_model = importlib.import_module(f'{_ENGINE_PKG}.build').build
+        Portfolio = importlib.import_module(f'{_ENGINE_PKG}.portfolio').Portfolio
+        validate_noi = importlib.import_module(f'{_ENGINE_PKG}.validate').validate_noi
         import export_excel
 
         step('building', f'Building the cash-flow model from {ncf} cash flows + {nrr} rent rolls…')
-        bdb = os.path.join(_DATA_DIR, 'portfolio_cashflow.db')
-        conn, report = barr_build(_CF_DIR, _RR_DIR, db_path=bdb)
+        bdb = os.path.join(_DATA_DIR, 'cashflow.db')
+        conn, report = build_model(_CF_DIR, _RR_DIR, db_path=bdb)
 
         step('validating', 'Validating NOI tie-out against source…')
         tie = [{'code': c, 'got': got, 'exp': exp, 'ok': bool(ok)}
@@ -191,7 +192,7 @@ def _run_generate(job_id, org_id, portfolio_id, style='summary'):
 
         step('exporting', 'Generating the Excel workbook…')
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        xlsx_path = os.path.join(_BARR_ROOT, f'Portfolio B_Portfolio_{style}_{ts}.xlsx')
+        xlsx_path = os.path.join(_ENGINE_ROOT, f'Portfolio_Cashflow_{style}_{ts}.xlsx')
         if style == 'consolidated':
             export_excel.build_consolidated(conn, xlsx_path, 2026, portfolio_title)
         else:
@@ -216,7 +217,7 @@ def _run_generate(job_id, org_id, portfolio_id, style='summary'):
         _LATEST['xlsx'] = xlsx_path
         _LATEST['summary'] = summary
     except Exception as e:
-        logger.exception('Portfolio B generate failed')
+        logger.exception('Portfolio cash flow generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
 
 

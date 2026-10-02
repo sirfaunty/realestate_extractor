@@ -1,14 +1,14 @@
 """
-Residential Portfolio Module — Sponsor residential assets (6 multifamily + Arbors).
+Residential Portfolio Module — a multifamily portfolio's handoff package.
 
 Read-only surfaces over the residential handoff package: asset roster with
 PM history, quarterly operating trends (occupancy/leasing/NER from weekly
 report extractions), NOI bridge 2026B→2028F, cap-rate valuation matrices,
 scored sales comps, value programs, and the data-source discrepancy report.
 
-Data doctrine: Sponsor internal accounting authoritative for actuals; proforma
-only for forward-looks (labeled F). Deal A cross-links to Capactive's
-deal-analytics pages.
+Data doctrine: internal accounting authoritative for actuals; proforma
+only for forward-looks (labeled F). Assets with deal analytics cross-link to
+Capactive's deal-analytics pages.
 """
 
 from ..base import AbstractModule
@@ -26,8 +26,8 @@ class ResidentialModule(AbstractModule):
 
     @property
     def description(self):
-        return ('Sponsor residential portfolio — operating trends, NOI bridge, '
-                'valuation, comps across 7 assets / 1,350 units')
+        from .engine import DESCRIPTION
+        return f'Residential portfolio — {DESCRIPTION}'
 
     @property
     def version(self):

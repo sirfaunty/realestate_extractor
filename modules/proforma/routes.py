@@ -131,7 +131,7 @@ def register_proforma_routes(app):
     def proforma_drillback(property_id):
         """Serve the self-contained drillback HTML.
 
-        If the proforma_engine engine has generated a DrillBack.html output,
+        If the proforma engine has generated a DrillBack.html output,
         serve it directly. Otherwise generate a citation-traced view
         from extracted data.
         """

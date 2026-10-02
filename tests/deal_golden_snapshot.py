@@ -30,18 +30,13 @@ def compute():
     from realestate_extractor.modules.debt_analysis.engine import (
         DebtAnalysisEngine, default_debt_config)
 
-    scen_attr = ('DEFAULT_SCENARIOS' if hasattr(tif_mod, 'DEFAULT_SCENARIOS')
-                 else 'DEAL_A_SCENARIOS')
-    scenarios = getattr(tif_mod, scen_attr)
-    tif_a = (TIFAssumptions.seeded_defaults() if hasattr(TIFAssumptions, 'seeded_defaults')
-             else TIFAssumptions.proforma_engine_defaults())
+    scenarios = tif_mod.DEFAULT_SCENARIOS
+    tif_a = TIFAssumptions.seeded_defaults()
     te = TIFEngine(tif_a)
     tif = te.compare_scenarios({n: te._make_flat_schedule(t) for n, t in scenarios.items()})
 
-    dist_a = (DistributionAssumptions.seeded_defaults()
-              if hasattr(DistributionAssumptions, 'seeded_defaults')
-              else DistributionAssumptions.proforma_engine_defaults())
-    cf = getattr(dist_mod, 'DEFAULT_CF', None) or getattr(dist_mod, 'DEAL_A_DEFAULT_CF')
+    dist_a = DistributionAssumptions.seeded_defaults()
+    cf = dist_mod.DEFAULT_CF
     dist = DistributionEngine(dist_a).run_distribution(dict(cf)).to_dict()
 
     debt = DebtAnalysisEngine(default_debt_config()).run_analysis().to_dict()

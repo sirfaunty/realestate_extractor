@@ -1,5 +1,5 @@
 """
-Portfolio Ownership Module — read-only UI over the Sponsor portfolio warehouse.
+Portfolio Ownership Module — read-only UI over a portfolio warehouse.
 
 Surfaces the aggregated, page-cited lease & ownership extraction
 (portfolio_warehouse.db): per-property lease rosters, the provision browser
@@ -26,7 +26,7 @@ class PortfolioOwnershipModule(AbstractModule):
     @property
     def description(self):
         return ('Page-cited lease & ownership document extraction across the '
-                'Sponsor portfolio — provisions, rollovers, open items')
+                'portfolio — provisions, rollovers, open items')
 
     @property
     def version(self):

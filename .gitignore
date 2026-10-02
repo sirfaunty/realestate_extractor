@@ -67,26 +67,8 @@ test_*.db
 # Large ZIP uploads (stage locally, don't push)
 *.zip
 
-# Portfolio B source financials (keep local, do not commit)
-portfolio_cashflow_db/source_docs/
-portfolio_cashflow_db/data/
-portfolio_cashflow_db/*.xlsx
-
-# Center C lease-abstraction warehouse — local-only (source docs + text-laden DBs never leave device)
-lease_abstraction_db/data/
-lease_abstraction_db/source_docs/
-lease_abstraction_db/**/*.db
-lease_abstraction_db/**/*.docx
-lease_abstraction_db/_preview*
-lease_abstraction_db/**/*.xlsx
-lease_abstraction_db/_rpv*
-
-# Center D disposition-diligence — local-only (source docs + text-laden DBs never leave device)
-disposition_diligence_db/data/
-disposition_diligence_db/source_docs/
-disposition_diligence_db/**/*.db
-disposition_diligence_db/**/*.docx
-disposition_diligence_db/_*
+# Where the engagement-specific engines live (local paths; modules/bespoke_engines.py)
+bespoke_engines.json
 
 # Data export bundle for mirroring to another machine (local-only)
 capactive_data_export.zip
@@ -102,15 +84,12 @@ capactive_sync.ini
 data/synced_pdfs/
 
 # CLIENT DATA — never in git (docs/PACKAGING_DESIGN.md; copy between
-# machines via export_for_mac.py, not version control)
-portfolio_ownership/PORTFOLIO_MASTER/
+# machines via sync/export, not version control)
 portfolio_ownership/inbox/
 portfolio_ownership/residential/
 _compare_scorecard/
 
-# Client deal material — local only (was tracked before 2026-09-29; untrack with
-# `git rm -r --cached reference_data "Ownership Deliverables" properties.json proforma_engine/config`)
+# Client deal material — local only
 reference_data/
 Ownership Deliverables/
 properties.json
-proforma_engine/config/*.yaml

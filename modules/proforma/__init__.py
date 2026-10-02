@@ -1,7 +1,7 @@
 """
 Proforma Module — CRE financial projection modeling with citation drill-back.
 
-Bridges Capactive's extracted document data into the proforma_engine proforma
+Bridges Capactive's extracted document data into the proforma
 engine, producing forward projections where every number traces back to
 its source document.
 """

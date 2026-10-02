@@ -16,9 +16,9 @@ anchor a tenancy; amendments / letters without one attach by a distinctive
 name token in their filename or opening text. Anything unattached is its
 own row, flagged — never silently merged.
 
-Read-only. Rent method + accuracy measured in
-portfolio_ownership/re_import/rent_tie_out.py (2026-09-29: schedule-derived
-high-confidence answers 23/24 within 2% of Landlord's MRI rent roll).
+Read-only. Rent method + accuracy measured by the pilot rent tie-out
+harness (2026-09-29: schedule-derived high-confidence answers 23/24 within
+2% of the landlord's rent roll).
 """
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         not_analyzed = set()
     terms = _terms(conn, [d['id'] for d in docs])
 
-    # Words every file in this property shares ("EC", "Oak Square",
+    # Words every file in this property shares ("EC", "Elm Court",
     # "Scanned") say nothing about WHICH tenancy a file belongs to.
     common = _common_filename_words([d['filename'] for d in docs])
 
@@ -164,8 +164,8 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     #    tenancy's lease, amendments and assignments under one name ("EC
     #    Bean Coffee - 3rd Lease Amendment") even as the tenant's legal
     #    name changes through assignments (Bean Co LLC -> Roast Holdings ->
-    #    Bean Coffee Inc) — so the file name follows the tenancy; the extracted
-    #    tenant name does not. Validated on the 9 Sponsor pilot properties.
+    #    Bean Coffee Inc) — so the file name follows the tenancy; the
+    #    extracted tenant name does not. Validated on 9 pilot properties.
     # the property's own name ("Elm Court Plaza") — an extracted "tenant"
     # sharing 2+ of its words is the landlord / center, not a tenant
     prop_words = set()
@@ -496,7 +496,7 @@ _DOC_WORDS = {
     'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
     'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
     # generic place words: part of a CENTER's name, never a tenancy's
-    # ("Willow Center Shopping Center - Art Frame ..." vs "Willow Center - ...")
+    # ("Elm Court Shopping Center - Art Frame ..." vs "Elm Court - ...")
     'shopping', 'center', 'centre', 'plaza', 'mall', 'marketplace', 'commons',
 }
 
@@ -510,10 +510,10 @@ def _fn_words(filename: str) -> list[str]:
 def _common_filename_words(filenames: list[str]) -> set:
     """The property / portfolio PREFIX of a property's file names: the
     leading run of words that >= 90% of files start with (all of them when
-    there are only 2) — "EC", "Oak Square", "Birch Commons".
+    there are only 2) — "EC", "Elm Court", "Oak Square".
 
     Leading position, not mere frequency: a tenant word can sit in nearly
-    every name of a small property ("Birch Commons II Best Buy ..." x4 +
+    every name of a small property ("Oak Square II Best Buy ..." x4 +
     "... Corner Liquor Best ...") without being the prefix."""
     lists = [_fn_words(f) for f in filenames]
     n = len(lists)
@@ -538,7 +538,7 @@ def _common_filename_words(filenames: list[str]) -> set:
 
 def _filename_stem(filename: str, common: set) -> str:
     """The tenancy words of a file name: its first two distinctive words
-    ('EC Bean Coffee - CG-PFO 3rd Lease Amendment' -> 'bean coffee')."""
+    ('EC Bean Coffee - EC-BC 3rd Lease Amendment' -> 'bean coffee')."""
     ws = [w for w in _fn_words(filename) if w not in common]
     return ' '.join(ws[:2])
 
@@ -553,7 +553,7 @@ def _clean_identity(name: Optional[str], common: set,
                     prop_words: Optional[set] = None) -> Optional[str]:
     """None for extracted 'tenant names' that are not a tenant: form
     placeholders echoed by the model, the landlord / center's own name,
-    generic parties. (All seen on real Sponsor leases, 2026-09-29.)"""
+    generic parties. (All seen on real pilot leases, 2026-09-29.)"""
     if not name:
         return None
     n = name.strip()
@@ -561,7 +561,7 @@ def _clean_identity(name: Optional[str], common: set,
         return None
     toks = _tokens(n)
     if toks and all(t in common for t in toks):
-        return None                     # "CEDAR STATION" at Cedar Station
+        return None                     # "ELM COURT STATION" at Elm Court Station
     if prop_words and len(set(toks) & prop_words) >= 2:
         return None                     # "Elm Court Plz ..." at Elm Court Plaza
     return n

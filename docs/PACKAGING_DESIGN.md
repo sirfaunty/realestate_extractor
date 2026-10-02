@@ -33,8 +33,8 @@ The split already exists internally; nothing fights it:
   from `property.*` scopes with role templates and per-user overrides — the
   two user classes are mostly *expressible today*.
 - Analytics modules are read-only over databases and never care where
-  extraction ran (proven operationally by the Sponsor workflow and
-  `export_for_mac.py`, which is a manual version of this sync).
+  extraction ran (proven operationally by the pilot workflow and
+  a manual export script, which is a manual version of this sync).
 - `licensing.py` (org keys, encrypted local license file for on-prem) and
   `usage.py` (volume tracking, audit) were built for exactly this.
 - SQLite-per-org isolation means single-tenant hosting requires no schema

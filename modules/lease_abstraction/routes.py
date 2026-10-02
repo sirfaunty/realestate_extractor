@@ -1,9 +1,9 @@
 """
-Center C / Lease Abstraction module routes (deal-aware).
+Lease Abstraction module routes (deal-aware).
 
-Properties come from the shared registry (<repo>/properties.json, module == 'lease_abstraction').
-Each property's data lives in per-deal folders: lease_abstraction_db/data/<slug>/ and
-lease_abstraction_db/source_docs/<slug>/ (lease_and_exhibits/ + returns/). The page shows a
+Properties come from the shared registry (see modules/bespoke_engines.py, module == 'lease_abstraction').
+Each property's data lives in per-deal folders: <engine>/data/<slug>/ and
+<engine>/source_docs/<slug>/ (lease_and_exhibits/ + returns/). The page shows a
 property selector; both deliverables (Lease Abstract Compendium, Co-Tenancy & Returns
 Model) run against the selected property.
 """
@@ -17,14 +17,13 @@ import threading
 import traceback
 
 from flask import Blueprint, render_template, request, jsonify, send_file, abort
+from ..bespoke_engines import engine_root, registry_path
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_ST_ROOT = os.path.join(_REPO_ROOT, 'lease_abstraction_db')
-_REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
-if _ST_ROOT not in sys.path:
-    sys.path.insert(0, _ST_ROOT)
+_ENGINE_ROOT = engine_root('lease_abstraction')
+_REGISTRY = registry_path()
 
 lease_abstraction_bp = Blueprint('lease_abstraction', __name__, url_prefix='/lease-abstraction')
 
@@ -51,8 +50,8 @@ def _valid_slug(slug):
 
 
 def _deal_paths(slug):
-    base = os.path.join(_ST_ROOT, 'data', slug)
-    src = os.path.join(_ST_ROOT, 'source_docs', slug)
+    base = os.path.join(_ENGINE_ROOT, 'data', slug)
+    src = os.path.join(_ENGINE_ROOT, 'source_docs', slug)
     return {
         'warehouse': os.path.join(base, 'lease_warehouse.db'),
         'gold': os.path.join(base, 'gold_lease_warehouse.db'),
@@ -139,7 +138,7 @@ def _run_generate(job_id, slug, lease_rel, force):
         step('exporting', 'Generating the Lease Abstract Compendium…')
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         out_path = os.path.join(paths['out_dir'],
-                                f'Center C_Lease_Abstract_Compendium_{slug}_{ts}.docx')
+                                f'Lease_Abstract_Compendium_{slug}_{ts}.docx')
         compendium_docx.build(wh, out_path, engine=model)
 
         summary = {
@@ -152,7 +151,7 @@ def _run_generate(job_id, slug, lease_rel, force):
         job.update(status='done', step='complete', detail='Compendium ready.', summary=summary)
         _LATEST.setdefault(slug, {}).update(docx=out_path, summary=summary)
     except Exception as e:
-        logger.exception('Center C generate failed')
+        logger.exception('Lease abstraction generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
 
 
@@ -232,7 +231,7 @@ def api_generate_returns():
         os.makedirs(paths['out_dir'], exist_ok=True)
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         out = os.path.join(paths['out_dir'],
-                           f'Center C_CoTenancy_and_Returns_Model_{slug}_{ts}.xlsx')
+                           f'CoTenancy_and_Returns_Model_{slug}_{ts}.xlsx')
         returns_xlsx.build(out)
 
         ct = RM.cotenancy_table()
@@ -254,7 +253,7 @@ def api_generate_returns():
         _LATEST.setdefault(slug, {}).update(returns=out, returns_summary=summary)
         return jsonify(summary)
     except Exception as e:
-        logger.exception('Center C returns generate failed')
+        logger.exception('Lease abstraction returns generate failed')
         return jsonify({'error': str(e)}), 500
 
 

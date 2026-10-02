@@ -1,6 +1,6 @@
-"""Bridge between the Deal A proforma engine and the distribution module.
+"""Bridge between the proforma engine and the distribution module.
 
-Loads the Deal A scenario YAML, runs the proforma under a given TIF
+Loads the deal's scenario YAML, runs the proforma under a given TIF
 scenario, and returns the data the distribution engine needs:
 
   - levered_cash_flow by year (operating distributable CF)
@@ -15,16 +15,26 @@ on every API call.
 
 from __future__ import annotations
 
+import importlib
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from ..bespoke_engines import engine_root
+
 logger = logging.getLogger(__name__)
 
-# Resolve the YAML config path relative to this file
-_CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / 'proforma_engine' / 'config'
-_BASE_YAML = _CONFIG_DIR / 'proforma_engine_base.yaml'
+# The proforma engine lives outside this repo (modules/bespoke_engines.py)
+_ENGINE_ROOT = engine_root('proforma')
+_ENGINE_PKG = os.path.basename(_ENGINE_ROOT)
+_CONFIG_DIR = Path(_ENGINE_ROOT) / 'config'
+_BASE_YAML = next(iter(sorted(_CONFIG_DIR.glob('*_base.yaml'))), _CONFIG_DIR / 'base.yaml')
+
+
+def _engine(mod: str):
+    return importlib.import_module(f'{_ENGINE_PKG}.{mod}')
 
 
 @dataclass
@@ -89,12 +99,11 @@ _snapshot_cache: dict[str, ProformaSnapshot] = {}
 
 
 def _get_scenario():
-    """Lazy-load and cache the Deal A scenario."""
+    """Lazy-load and cache the deal scenario."""
     global _scenario_cache
     if _scenario_cache is None:
-        from proforma_engine.io.yaml_loader import load_scenario_from_yaml
-        logger.info(f'Loading Deal A scenario from {_BASE_YAML}')
-        _scenario_cache = load_scenario_from_yaml(_BASE_YAML)
+        logger.info(f'Loading scenario from {_BASE_YAML}')
+        _scenario_cache = _engine('io.yaml_loader').load_scenario_from_yaml(_BASE_YAML)
     return _scenario_cache
 
 
@@ -114,8 +123,8 @@ def get_proforma_snapshot(
     if tif_scenario in _snapshot_cache:
         return _snapshot_cache[tif_scenario]
 
-    from proforma_engine.engine.runner import run_proforma
-    from proforma_engine.models.tif import TIFScenarioName
+    run_proforma = _engine('engine.runner').run_proforma
+    TIFScenarioName = _engine('models.tif').TIFScenarioName
 
     scenario = _get_scenario()
 
@@ -161,7 +170,7 @@ def get_proforma_snapshot(
     # Persist to analytical warehouse (fire-and-forget)
     try:
         from warehouse.deal_analytics import persist_proforma
-        persist_proforma('proforma_engine', snap)
+        persist_proforma(_ENGINE_PKG, snap)
     except Exception:
         pass  # warehouse is optional
 
@@ -170,7 +179,7 @@ def get_proforma_snapshot(
 
 def get_available_tif_scenarios() -> list[dict]:
     """Return list of available TIF scenarios."""
-    from proforma_engine.models.tif import TIFScenarioName
+    TIFScenarioName = _engine('models.tif').TIFScenarioName
     return [
         {'id': s.value, 'label': s.value.replace('_', ' ').title()}
         for s in TIFScenarioName

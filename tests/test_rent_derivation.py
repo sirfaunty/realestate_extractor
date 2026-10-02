@@ -3,7 +3,7 @@ Regression tests for extractors/rent_derivation.py — current rent from paper.
 
 Every fixture is FICTIONAL (invented tenants, dates, dollars) but copies the
 exact LAYOUT of a real lease table that once broke the parser, found by the
-2026-09-29 rent tie-out against Landlord's rent roll. Client text never goes in
+2026-09-29 rent tie-out against a landlord's rent roll. Client text never goes in
 git; the shapes do.
 
     venv/Scripts/python tests/test_rent_derivation.py      (no pytest needed)

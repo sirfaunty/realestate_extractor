@@ -16,17 +16,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from ..bespoke_engines import data_path
+
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 MASTER_CANDIDATES = [
-    os.path.join(_REPO_ROOT, 'portfolio_ownership',
-                 'PORTFOLIO_MASTER', 'portfolio_warehouse.db'),
+    data_path('portfolio_warehouse'),      # configured (bespoke_engines.json)
     os.path.join(_REPO_ROOT, 'portfolio_ownership', 'portfolio_warehouse.db'),
 ]
 OPS_CANDIDATES = [
-    os.path.join(_REPO_ROOT, 'portfolio_ownership', 'inbox',
-                 'Portfolio Financial Source Data & Modules',
-                 'Financial Modules', 'Final Portfolio Rent Roll Module_7.10.26',
-                 'database', 'portfolio_rentroll.db'),
+    data_path('portfolio_rentroll'),       # configured (bespoke_engines.json)
     # flat fallback (Mac/sample exports drop the db here)
     os.path.join(_REPO_ROOT, 'portfolio_ownership', 'portfolio_rentroll.db'),
 ]

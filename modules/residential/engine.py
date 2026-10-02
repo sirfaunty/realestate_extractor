@@ -1,9 +1,11 @@
 """
-Residential Portfolio Engine — read-only access to the Sponsor residential
-handoff package (portfolio_ownership/residential/handoff_package).
+Residential Portfolio Engine — read-only access to a residential handoff
+package (located via modules/bespoke_engines.py, key 'residential'). The
+portfolio's assets, headline figures and value programs come from the
+package's portfolio_facts.json, not from code.
 
-Data doctrine (from the package's discrepancy review, May 2026):
-Sponsor internal accounting is authoritative for actuals; the proforma is used
+Data doctrine (from the package's discrepancy review):
+internal accounting is authoritative for actuals; the proforma is used
 only for forward-looks (2027F/2028F). Surfaces label forecast numbers as
 such and expose the discrepancy report verbatim.
 
@@ -18,37 +20,35 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-PKG = os.path.join(_REPO_ROOT, 'portfolio_ownership', 'residential', 'handoff_package')
+from ..bespoke_engines import engine_root
 
-# JSON asset keys ↔ display names ↔ CSV property names
-ASSETS = [
-    ('HQ',          'HQ Apartments',   'HQ'),
-    ('Building B',     'The Building B',     'Building B'),
-    ('Deal A', 'Deal A',     'Deal A'),
-    ('Moda',        'Building D', 'MODA'),
-    ('BuildingE',  'Building E',    'Building E'),
-    ('BuildingF', 'Building F',   'Building F'),
-    ('Arbors',      'Building G', 'Arbors'),
-]
+PKG = engine_root('residential')
+
+
+def _facts():
+    try:
+        with open(os.path.join(PKG, 'portfolio_facts.json'), encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+_FACTS = _facts()
+# JSON asset keys <-> display names <-> CSV property names
+ASSETS = [tuple(a) for a in _FACTS.get('assets', [])]
 KEY_TO_NAME = {k: n for k, n, _ in ASSETS}
 KEY_TO_CSV = {k: c for k, _, c in ASSETS}
 CSV_TO_KEY = {c: k for k, _, c in ASSETS}
 
-CAP_RATES = [0.050, 0.0525, 0.055, 0.0575, 0.060]
+CAP_RATES = _FACTS.get('cap_rates', [0.050, 0.0525, 0.055, 0.0575, 0.060])
 
-# Curated facts from HANDOFF.md (provenance: handoff_package/HANDOFF.md)
-VALUE_PROGRAMS = [
-    ('4D Affordable — Building E', '~$250K/yr', 'Building E qualifies first; 2023 effort stalled, being re-examined'),
-    ('4D Affordable — Deal A / Moda / Building B', 'TBD', 'Sequencing follows Building E playbook'),
-    ('HQ shared parking program', 'TBD', 'Underutilized capacity during business hours'),
-    ('Bulk internet stabilization (2027)', '~$600K/yr', 'Already in motion; ramping through 2026'),
-]
-HEADLINES = [
-    ('NOI 2024A → 2028F', '$12.6M → $17.7M (+40%)'),
-    ('Annualized NER 2024A → 2028F', '$22.8M → $27.8M (+22%)'),
-    ('Implied value @ 5.5% cap', '$230M → $322M (+$92M)'),
-]
+# Curated facts from the package's HANDOFF.md
+VALUE_PROGRAMS = [tuple(v) for v in _FACTS.get('value_programs', [])]
+HEADLINES = [tuple(h) for h in _FACTS.get('headlines', [])]
+DEAL_ANALYTICS_ASSETS = set(_FACTS.get('deal_analytics_assets', []))
+PORTFOLIO_LABEL = _FACTS.get('portfolio_label', 'Residential portfolio')
+SUBTITLE = _FACTS.get('subtitle', '')
+DESCRIPTION = _FACTS.get('description', 'operating trends, NOI bridge, valuation, comps')
 
 
 class ResidentialEngine:

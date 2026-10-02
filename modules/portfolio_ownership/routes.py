@@ -1,5 +1,5 @@
 """
-Portfolio Ownership routes — read-only UI over the Sponsor portfolio warehouse.
+Portfolio Ownership routes — read-only UI over a portfolio warehouse.
 
 Server-rendered pages (no async loaders): portfolio index, property detail
 with lease roster + provision browser, open-items register, portfolio search.
@@ -148,7 +148,7 @@ def index():
 
     body = f"""
       <h1>Portfolio Ownership</h1>
-      <div class='sub'>Sponsor portfolio master — page-cited lease &amp; ownership extraction.
+      <div class='sub'>Portfolio master — page-cited lease &amp; ownership extraction.
         Read-only; maintained by the aggregation workflow.</div>
       <div class='cards'>
         <div class='card'><div class='v'>{s['covered_properties']}</div>

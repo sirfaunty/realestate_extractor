@@ -1,6 +1,6 @@
 """
 Tests for lease_roster grouping rules. Fictional file names and tenants that
-copy the real patterns found on the Sponsor pilot properties (2026-09-29).
+copy the real patterns found on the pilot properties (2026-09-29).
 
     venv/Scripts/python tests/test_lease_roster.py
 """

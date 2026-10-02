@@ -1,16 +1,17 @@
 """
-Residential Portfolio routes — read-only UI over the Sponsor residential package.
+Residential Portfolio routes — read-only UI over a residential handoff package.
 
 Pages: portfolio index (roster, NOI bridge, value programs), asset detail
 (quarterly trends, valuation matrix, comps, concessions), discrepancy report.
-Deal A cross-links to Capactive's existing deal-analytics pages.
+Assets listed as deal_analytics_assets cross-link to the deal-analytics pages.
 """
 
 import html as _html
 import logging
 from flask import Blueprint, render_template_string
 
-from .engine import ResidentialEngine, KEY_TO_NAME, CAP_RATES, VALUE_PROGRAMS, HEADLINES
+from .engine import (ResidentialEngine, KEY_TO_NAME, CAP_RATES, VALUE_PROGRAMS, HEADLINES,
+                     DEAL_ANALYTICS_ASSETS, PORTFOLIO_LABEL, SUBTITLE)
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +144,8 @@ def index():
 
     body = f"""
       <h1>Residential Portfolio</h1>
-      <div class='sub'>Sponsor residential — 6 multifamily assets + Arbors senior living, 1,350 units.
-        Actuals per Sponsor internal accounting; <span class='badge fc'>F</span> = proforma forecast
+      <div class='sub'>{_html.escape(PORTFOLIO_LABEL)} — {_html.escape(SUBTITLE)}.
+        Actuals per internal accounting; <span class='badge fc'>F</span> = proforma forecast
         (data doctrine per <a href='/residential/discrepancies'>discrepancy review</a>).</div>
       <div class='cards'>{cards}</div>
       <h2>Assets</h2>
@@ -157,7 +158,7 @@ def index():
       <h2>Value programs (tracked, not in forecasts)</h2>
       <table><thead><tr><th>Program</th><th class='num'>Annual value</th><th>Status</th>
         </tr></thead><tbody>{vrows}</tbody></table>
-      <p class='note'>Source: Sponsor residential handoff package (build chains + internal accounting
+      <p class='note'>Source: residential handoff package (build chains + internal accounting
         + weekly leasing reports). Read-only.</p>
     """
     return _page('Residential Portfolio', body)
@@ -242,8 +243,8 @@ def asset(key):
                      f"{_html.escape(specials)}</p>") if specials else ''
 
     xlink = ''
-    if key == 'Deal A':
-        xlink = ("<p class='note'><b>Capactive deal analytics for Deal A:</b> "
+    if key in DEAL_ANALYTICS_ASSETS:
+        xlink = (f"<p class='note'><b>Capactive deal analytics for {_html.escape(a['name'])}:</b> "
                  "<a href='/debt/'>Debt</a> · <a href='/distribution/'>Distribution</a> · "
                  "<a href='/tif-analysis/'>TIF</a> · <a href='/partnership/'>Partnership</a></p>")
 

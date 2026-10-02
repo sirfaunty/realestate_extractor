@@ -1,9 +1,9 @@
 """
-Citation Bridge — Maps Capactive extracted data into the proforma_engine
-proforma engine's SourceDocumentRegistry and Cited[T] values.
+Citation Bridge — Maps Capactive extracted data into the proforma
+engine's SourceDocumentRegistry and Cited[T] values.
 
 This is the single integration seam between the extraction platform
-and the proforma engine. The proforma_engine engine code stays untouched;
+and the proforma engine. The engine code stays untouched;
 this module translates Capactive's database records into the Pydantic
 models the engine expects.
 """
@@ -15,21 +15,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
-from ...proforma_engine.models.citation import (
-    AuthorityTier,
-    Citation,
-    Cited,
-    DocumentType,
-    Locator,
-    SourceDocument,
-    SourceDocumentRegistry,
-    cite,
-)
+import importlib
+import os
+
+from ..bespoke_engines import engine_root
+
+# The proforma engine lives outside this repo (modules/bespoke_engines.py);
+# without it this import fails and the module stays unavailable, as before.
+_citation = importlib.import_module(
+    f"{os.path.basename(engine_root('proforma'))}.models.citation")
+AuthorityTier = _citation.AuthorityTier
+Citation = _citation.Citation
+Cited = _citation.Cited
+DocumentType = _citation.DocumentType
+Locator = _citation.Locator
+SourceDocument = _citation.SourceDocument
+SourceDocumentRegistry = _citation.SourceDocumentRegistry
+cite = _citation.cite
 
 logger = logging.getLogger(__name__)
 
 # ─── Document Type Mapping ──────────────────────────────────────────
-# Map Capactive's document_type strings to proforma_engine's DocumentType enum
+# Map Capactive's document_type strings to the engine's DocumentType enum
 
 _DOC_TYPE_MAP = {
     'operating_statement': DocumentType.MRI_INCOME_STATEMENT,
@@ -48,7 +55,7 @@ _DOC_TYPE_MAP = {
     'budget': DocumentType.BUDGET_FILE,
 }
 
-# Map Capactive's DOC_TYPE_AUTHORITY scores to proforma_engine AuthorityTier
+# Map Capactive's DOC_TYPE_AUTHORITY scores to the engine's AuthorityTier
 # GL (5), operating_statement/rent_roll (4) -> PRIMARY
 # closing/hud/cost_cert (3) -> SECONDARY
 # everything else -> TERTIARY
@@ -106,7 +113,7 @@ def build_registry_from_db(db, property_id: int) -> SourceDocumentRegistry:
 
     for doc in docs:
         doc_type_str = doc.get('document_type', 'reference')
-        proforma_engine_type = _DOC_TYPE_MAP.get(doc_type_str, DocumentType.OTHER)
+        engine_type = _DOC_TYPE_MAP.get(doc_type_str, DocumentType.OTHER)
         authority = _AUTHORITY_MAP.get(doc_type_str, AuthorityTier.TERTIARY)
 
         slug = _make_doc_slug(doc)
@@ -115,7 +122,7 @@ def build_registry_from_db(db, property_id: int) -> SourceDocumentRegistry:
         try:
             source_doc = SourceDocument(
                 id=slug,
-                doc_type=proforma_engine_type,
+                doc_type=engine_type,
                 authority_tier=authority,
                 title=doc.get('filename', 'Unknown'),
                 description=f"Capactive document #{doc['id']}, type: {doc_type_str}",

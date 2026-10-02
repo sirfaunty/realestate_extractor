@@ -4,8 +4,8 @@ warehouse and canonical module DBs (read-only sources).
 
 First deliverable: the per-property Lease Abstract Compendium (.docx) —
 every tenancy summarized and every page-cited provision rendered with its
-source citation and refi-impact flags. Follows the Center C compendium
-precedent; renders verified data only (no LLM at build time).
+source citation and refi-impact flags. Follows the lease
+abstract compendium precedent; renders verified data only (no LLM at build time).
 """
 
 from ..base import AbstractModule

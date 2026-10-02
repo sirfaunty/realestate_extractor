@@ -1,17 +1,18 @@
 """
-Center D / Disposition Diligence module routes (deal-aware).
+Disposition Diligence module routes (deal-aware).
 
-Properties come from the shared registry (<repo>/properties.json, module == 'disposition_diligence').
-Each property's data lives in a per-deal folder: disposition_diligence_db/data/<slug>/disposition_diligence.db and
-disposition_diligence_db/source_docs/<slug>/. The page shows a property selector; reports run against
+Properties come from the shared registry (see modules/bespoke_engines.py, module == 'disposition_diligence').
+Each property's data lives in a per-deal folder: <engine>/data/<slug>/<warehouse>.db and
+<engine>/source_docs/<slug>/. The page shows a property selector; reports run against
 the selected deal.
 
 Report generation builds from the (already-extracted) warehouse and is fast. The heavy
-OCR + extraction pipeline is a local CLI job (see disposition_diligence_db/README.md), not a web
+OCR + extraction pipeline is a local CLI job (see the engine's README), not a web
 request — but the background job supports it via force= for completeness.
 """
 import os
 import sys
+import glob
 import json
 import uuid
 import logging
@@ -20,14 +21,13 @@ import threading
 import traceback
 
 from flask import Blueprint, render_template, request, jsonify, send_file, abort
+from ..bespoke_engines import engine_root, registry_path
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_CENTER_D_ROOT = os.path.join(_REPO_ROOT, 'disposition_diligence_db')
-_REGISTRY = os.path.join(_REPO_ROOT, 'properties.json')
-if _CENTER_D_ROOT not in sys.path:
-    sys.path.insert(0, _CENTER_D_ROOT)
+_ENGINE_ROOT = engine_root('disposition_diligence')
+_REGISTRY = registry_path()
 
 disposition_diligence_bp = Blueprint('disposition_diligence', __name__, url_prefix='/disposition-diligence')
 
@@ -54,10 +54,10 @@ def _valid_slug(slug):
 
 
 def _deal_paths(slug):
-    base = os.path.join(_CENTER_D_ROOT, 'data', slug)
-    src = os.path.join(_CENTER_D_ROOT, 'source_docs', slug)
+    base = os.path.join(_ENGINE_ROOT, 'data', slug)
+    src = os.path.join(_ENGINE_ROOT, 'source_docs', slug)
     return {
-        'db': os.path.join(base, 'disposition_diligence.db'),
+        'db': next(iter(sorted(glob.glob(os.path.join(base, '*.db')))), os.path.join(base, 'warehouse.db')),
         'text': os.path.join(base, 'ocr_text'),
         'tenant_src': os.path.join(src, 'tenant_packages'),
         'psa_src': os.path.join(src, 'psa'),
@@ -126,18 +126,18 @@ def _run_generate(job_id, slug, force):
                 try:
                     fn(**kw)
                 except Exception as e:      # noqa: BLE001
-                    logger.exception('Center D %s step failed', label)
+                    logger.exception('Disposition diligence %s step failed', label)
                     warnings.append(f'{label}: {str(e)[:100]}')
 
         if not os.path.exists(paths['db']):
             raise RuntimeError('No warehouse for this property yet. Run the extraction '
-                               'pipeline locally first (see disposition_diligence_db/README.md).')
+                               'pipeline locally first (see the engine README).')
 
         step('reporting', 'Generating the Disposition Diligence Report…')
         os.makedirs(os.path.dirname(paths['db']), exist_ok=True)
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         out = os.path.join(os.path.dirname(paths['db']),
-                           f'Center D_Disposition_Diligence_{slug}_{ts}.docx')
+                           f'Disposition_Diligence_{slug}_{ts}.docx')
         diligence_report.build(paths['db'], out)
 
         summary = _summary(slug) or {}
@@ -148,7 +148,7 @@ def _run_generate(job_id, slug, force):
         job.update(status='done', step='complete', detail='Report ready.', summary=summary)
         _LATEST[slug] = {'docx': out, 'summary': summary}
     except Exception as e:
-        logger.exception('Center D generate failed')
+        logger.exception('Disposition diligence generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
 
 

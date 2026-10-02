@@ -113,8 +113,8 @@ class ExtractionEngine:
             }
         }
 
-        # Segment-first path for leases (validated on the Pine Plaza pilot:
-        # 7% -> 71% tie-out vs the Sponsor master, zero LLM timeouts).
+        # Segment-first path for leases (validated on a pilot property:
+        # 7% -> 71% tie-out vs the landlord's lease master, zero LLM timeouts).
         # Instrument-chain detection + article/section segmentation, then
         # small per-segment prompts instead of one whole-document pass.
         if template.document_type == 'lease' and doc.pages:
@@ -1914,13 +1914,13 @@ class ExtractionEngine:
                                    page_numbers: Dict[int, int]) -> List[Dict]:
         """
         Parse fixed-length rent roll records where unit number, unit type,
-        and sqft are on separate lines (e.g., Building F / Yardi style).
+        and sqft are on separate lines (e.g., a Yardi-style export).
 
         Record structure (~10 lines, no "Total" delimiter):
             101              ← unit number (plain integer)
             4302b12p         ← unit type code
             1,070.00 t001450 ← sqft + tenant ID (or "sqft VACANT")
-            Jordan Example     ← tenant name
+            Jordan Example   ← tenant name
             1,885.00         ← market rent
             1,855.00         ← actual rent
             300.00           ← deposit

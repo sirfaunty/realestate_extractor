@@ -1,7 +1,7 @@
 """
-Center D / Disposition Diligence module.
+Disposition Diligence module.
 
-Wraps the standalone `disposition_diligence_db` engine (tenant certification docs -> OCR ->
+Wraps a standalone engine (tenant certification docs -> OCR ->
 structured lease-abstract warehouse + PSA/REA extraction + missing-document tracker
 -> a Word Disposition Diligence Report) in a no-code UI: view the diligence summary,
 optionally re-run the local extraction pipeline, and download the report.
@@ -12,7 +12,7 @@ All processing runs locally on the host that serves the app.
 from ..base import AbstractModule
 
 
-class Center DModule(AbstractModule):
+class DispositionDiligenceModule(AbstractModule):
 
     @property
     def name(self):
@@ -46,4 +46,4 @@ class Center DModule(AbstractModule):
         }]
 
 
-module_instance = Center DModule()
+module_instance = DispositionDiligenceModule()

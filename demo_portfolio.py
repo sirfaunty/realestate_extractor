@@ -4,8 +4,8 @@ Fictional demo portfolio generator.
 Produces a believable small commercial portfolio — every name, address,
 entity, dollar and date invented — as real PDFs the extraction engine can
 chew on, plus a manifest.json of the ground-truth terms (so extraction can
-be tied out against it, exactly like the Sponsor campaign harness did against
-Landlord's masters). Deterministic: same --seed, same portfolio.
+be tied out against it, exactly like the pilot harnesses do against a
+landlord's own lease master). Deterministic: same --seed, same portfolio.
 
 Uses: sales demos with zero client data, landing-page screenshots, a rich
 fixture for exercising every module on the staging instance, and a

@@ -1,7 +1,7 @@
 """
-Center C / Lease Abstraction module.
+Lease Abstraction module.
 
-Wraps the standalone `lease_abstraction_db` engine (lease .docx -> provision warehouse ->
+Wraps a standalone engine (lease .docx -> provision warehouse ->
 local-model 3-tier abstracts -> Word compendium) in a no-code UI: pick a lease,
 click generate, and the module segments the lease, abstracts every provision on
 this device with the local model, and produces the Lease Abstract Compendium for
@@ -13,7 +13,7 @@ All processing runs locally on the host that serves the app.
 from ..base import AbstractModule
 
 
-class Center CModule(AbstractModule):
+class LeaseAbstractionModule(AbstractModule):
 
     @property
     def name(self):
@@ -46,4 +46,4 @@ class Center CModule(AbstractModule):
         }]
 
 
-module_instance = Center CModule()
+module_instance = LeaseAbstractionModule()

@@ -31,7 +31,7 @@
     <div class="card-header">Register a device</div>
     <form method="POST" style="display: flex; gap: 12px; align-items: center;">
         <input type="hidden" name="action" value="register">
-        <input type="text" name="device_name" placeholder="Device name (e.g. 'Landlord — office workstation')"
+        <input type="text" name="device_name" placeholder="Device name (e.g. 'Front office workstation')"
                style="width: 340px;" required>
         <button type="submit" class="btn btn-sm btn-primary"
                 {% if active_count >= seat_limit %}disabled title="All extraction seats in use"{% endif %}>

@@ -1677,7 +1677,7 @@ class PropertyAnalyzer:
 
         These docs have two main layouts:
           1. Surplus cash distribution table:
-             Date | Description | Amount | Split | Due to Sponsor | Due to Investor
+             Date | Description | Amount | Split | Due to <sponsor> | Due to <investor>
           2. Equity return calculation:
              Label | Contribution | Balance | Dates | Days | Rate | Return | Total
 
@@ -1772,12 +1772,12 @@ class PropertyAnalyzer:
                                 }
                                 break
 
-                # ── Partner distribution splits (Sponsor / Investor amounts) ──
-                # Grand Total rows with amounts in "Due to Sponsor" and "Due to Investor" cols
+                # ── Partner distribution splits (sponsor / investor amounts) ──
+                # Grand Total rows with amounts in the two "Due to <partner>" cols
                 if 'grand total' in label_lower:
                     cell1 = str(row[1] or '').lower() if len(row) > 1 else ''
                     if 'total distribution' in cell1 or 'total' in cell1:
-                        # Sponsor amount is typically col 6, Investor col 7
+                        # sponsor amount is typically col 6, investor col 7
                         for ci in range(5, min(9, len(row))):
                             val = self._safe_float(
                                 str(row[ci] or '').replace(',', '').replace('$', ''))
@@ -1803,7 +1803,7 @@ class PropertyAnalyzer:
                                         'section_ref': 'Surplus cash distribution',
                                     }
 
-                # ── Grand total return (Investor preferred return) ──
+                # ── Grand total return (investor preferred return) ──
                 # Row: "Grand Total at 12-31-29" | ... | | | ... | | | | | 930,716.78
                 if ('grand total at' in label_lower and
                         'total_preferred_return' not in found):
@@ -1824,7 +1824,7 @@ class PropertyAnalyzer:
                             break
 
                 # ── Distribution split percentage ──
-                # Cell containing "75% / 25% split" or "75% to Sponsor"
+                # Cell containing "75% / 25% split" or "75% to <partner>"
                 for ci in range(len(row)):
                     cell = str(row[ci] or '')
                     cell_lower = cell.lower()

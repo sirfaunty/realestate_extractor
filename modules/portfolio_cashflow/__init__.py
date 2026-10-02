@@ -1,7 +1,7 @@
 """
-Portfolio B / Portfolio Cash Flow module.
+Portfolio Cash Flow module.
 
-Wraps the standalone `portfolio_cashflow_db` extractor (cash flow + rent roll ->
+Wraps a standalone cash-flow engine (cash flow + rent roll ->
 SQLite -> portfolio cash flow / capital / lease-rollover model) in a no-code
 UI: a user uploads the source cash-flow and rent-roll documents, the module
 rebuilds the database on this device, validates the NOI tie-out, and produces
@@ -13,7 +13,7 @@ All processing runs locally on the host that serves the app.
 from ..base import AbstractModule
 
 
-class Portfolio BModule(AbstractModule):
+class PortfolioCashflowModule(AbstractModule):
 
     @property
     def name(self):
@@ -45,4 +45,4 @@ class Portfolio BModule(AbstractModule):
         }]
 
 
-module_instance = Portfolio BModule()
+module_instance = PortfolioCashflowModule()

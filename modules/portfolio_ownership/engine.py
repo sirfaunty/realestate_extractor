@@ -1,5 +1,5 @@
 """
-Portfolio Ownership Engine — read-only access to the Sponsor portfolio warehouse.
+Portfolio Ownership Engine — read-only access to a portfolio warehouse.
 
 The master (portfolio_warehouse.db) is maintained EXCLUSIVELY by the
 aggregation workflow (merge harnesses + 214-check verify suite). This engine
@@ -17,10 +17,11 @@ from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
 
+from ..bespoke_engines import data_path
+
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 DB_CANDIDATES = [
-    os.path.join(_REPO_ROOT, 'portfolio_ownership',
-                 'PORTFOLIO_MASTER', 'portfolio_warehouse.db'),
+    data_path('portfolio_warehouse'),      # configured (bespoke_engines.json)
     os.path.join(_REPO_ROOT, 'portfolio_ownership', 'portfolio_warehouse.db'),
 ]
 
@@ -72,7 +73,7 @@ def parse_lease_date(raw):
 
 
 class OwnershipEngine:
-    """Read-only query layer over the Sponsor portfolio warehouse."""
+    """Read-only query layer over the portfolio warehouse."""
 
     def __init__(self, db_path: str = None):
         self._explicit_path = db_path
@@ -96,7 +97,7 @@ class OwnershipEngine:
         path = self.db_path()
         if path is None:
             raise FileNotFoundError(
-                'Sponsor portfolio_warehouse.db not found under portfolio_ownership/')
+                'portfolio_warehouse.db not found (set portfolio_warehouse in bespoke_engines.json)')
         mtime = os.path.getmtime(path)
         cur = getattr(self._local, 'con', None)
         key = getattr(self._local, 'key', None)

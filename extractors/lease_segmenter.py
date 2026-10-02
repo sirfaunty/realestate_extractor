@@ -1,7 +1,7 @@
 """
-Segment-first lease extraction — the validated Pine Plaza pilot pattern
-(portfolio_ownership/pilot_pine_plaza/, 7% -> 71% tie-out vs the Sponsor master;
-100% of document-derivable fields) generalized for the Capactive engine.
+Segment-first lease extraction — the pattern validated on a pilot property
+(7% -> 71% tie-out vs the landlord's lease master; 100% of
+document-derivable fields) generalized for the Capactive engine.
 
 Three stages, all operating on a page list [(page_number, text), ...]:
 
@@ -35,7 +35,7 @@ from collections import Counter
 
 logger = logging.getLogger(__name__)
 
-# ─── Heading + instrument grammar (validated 90% vs Sponsor master) ───────────
+# ─── Heading + instrument grammar (validated 90% vs a lease master) ───────────
 
 ROMAN = {'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7,
          'viii': 8, 'ix': 9, 'x': 10, 'xi': 11, 'xii': 12, 'xiii': 13,
@@ -48,7 +48,7 @@ ORDINALS = ('FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
 
 INSTRUMENT_PATTERNS = [
     # a fresh lease agreement mid-package (renewals shipped as complete
-    # leases — the a national salon chain pattern) starts its own instrument
+    # leases — common for national salon / service chains) starts its own instrument
     (r'^(?:SHOPPING\s+CENTER\s+)?LEASE\s+AGREEMENT\s*$', 'lease'),
     (r'^RENEWAL\s+(?:OF\s+)?LEASE', 'lease'),
     (r'^(?:' + '|'.join(ORDINALS) + r')\s+AMENDMENT\s+(?:TO|OF)\s+LEASE', 'amendment'),
@@ -359,8 +359,8 @@ def split_subprovisions(seg, style):
     for i, (pg, l) in enumerate(lines):
         s = l.strip()
         if style in ('article', 'caps'):
-            # both notations occur under ARTICLE headings: Article
-            # 'Section N.' lines AND decimal '2.5. Percentage Rent.' (national-tenant form)
+            # both notations occur under ARTICLE headings: 'Section N.'
+            # lines AND decimal '2.5. Percentage Rent.' (a national-tenant form)
             mm = RE_SUBSEC_ART.match(s)
             if mm and len(s) > 12:      # a bare 'Section 2' TOC echo is noise
                 marks.append((i, pg, mm.group(1), mm.group(2)))
@@ -1004,21 +1004,21 @@ def _party(flat, role):
     label-AFTER convention:  X, a Minnesota LLC ("Landlord")."""
     # Anchor on the connective that introduces the party ("between X" /
     # "and Y") so a mixed-case name can't collapse to its suffix — the
-    # first version returned "LLC" as the tenant on real Sponsor leases.
+    # first version returned "LLC" as the tenant on real pilot leases.
     patterns = (
         # ("Landlord") label-after convention
         r'(?:\bbetween|\band)\s+(?:the\s+)?([A-Z][^()"“]{2,160}?)\s*'
         r'\(\s*(?:hereinafter\s+(?:called|referred\s+to\s+as)\s+)?'
         rf'(?:the\s+)?["“]{role}["”]',
-        # older/institutional forms: "… between ELM RIDGE PROPERTIES, A NORTH
-        # DAKOTA LIMITED PARTNERSHIP, as Landlord, and NORTHFIELD GROCERS, INC.,
+        # older/institutional forms: "… between ELM RIDGE PROPERTIES, A
+        # LIMITED PARTNERSHIP, as Landlord, and NORTHFIELD GROCERS, INC.,
         # an Iowa corporation, as Tenant."
         r'(?:\bbetween|\band)\s+(?:the\s+)?([A-Z][^()"“;]{2,160}?),?\s+'
         rf'as\s+(?:the\s+)?{role}\b',
     )
     # A capture may never contain ANOTHER party's role clause — the first
-    # cut of the "as Tenant" form ran from "between ELM RIDGE … as Landlord, and
-    # NORTHFIELD" and returned the landlord as the tenant.
+    # cut of the "as Tenant" form ran from "between ELM RIDGE … as Landlord,
+    # and NORTHFIELD" and returned the landlord as the tenant.
     role_clause = re.compile(r'\bas\s+(?:the\s+)?(?:Landlord|Tenant|Lessor|Lessee)\b'
                              r'|["“](?:Landlord|Tenant)["”]', re.I)
     name = None
