@@ -7,10 +7,10 @@ registry live OUTSIDE this repo (a private sibling repo). A gitignored
 `bespoke_engines.json` at the repo root says where they are, e.g.:
 
     {
-      "registry": "../capactive-sponsor/properties.json",
-      "portfolio_cashflow": "../capactive-sponsor/<engine folder>",
-      "lease_abstraction": "../capactive-sponsor/<engine folder>",
-      "disposition_diligence": "../capactive-sponsor/<engine folder>"
+      "registry": "../capactive-private/properties.json",
+      "portfolio_cashflow": "../capactive-private/<engine folder>",
+      "lease_abstraction": "../capactive-private/<engine folder>",
+      "disposition_diligence": "../capactive-private/<engine folder>"
     }
 
 Relative paths are resolved from the repo root. A module whose engine isn't

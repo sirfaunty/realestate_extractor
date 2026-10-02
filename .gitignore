@@ -77,7 +77,6 @@ _import/
 
 # staged source documents (re-extractable from inbox zips)
 portfolio_ownership/re_import/staging/
-portfolio_ownership/pilot_pine_plaza/sources/
 
 # sync client config (contains device token) + synced PDF store
 capactive_sync.ini
