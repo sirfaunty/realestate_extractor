@@ -172,7 +172,7 @@ class TIFEngine:
     Usage
     -----
     >>> engine = TIFEngine()
-    >>> result = engine.run_scenario('Current', [45_000_000] * 19)
+    >>> result = engine.run_scenario('Current', [50_000_000] * 19)
     >>> comparison = engine.compare_scenarios()
     >>> breakeven = engine.breakeven_analysis()
     >>> sweep = engine.sensitivity_sweep()
@@ -549,25 +549,23 @@ class TIFEngine:
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    engine = TIFEngine()
+    engine = TIFEngine(TIFAssumptions.seeded_defaults())
 
-    # Verify single year math against Excel row 6 (Pay-2026, TMV = 45,000,000)
-    r = engine.run_scenario('Current', engine._make_flat_schedule(45_000_000))
+    # Single-year math for the first seeded scenario (values depend on the
+    # deployment's deal seed; tests/deal_golden_snapshot.py pins them)
+    name, tmv = next(iter(DEFAULT_SCENARIOS.items()))
+    r = engine.run_scenario(name, engine._make_flat_schedule(tmv))
     y0 = r.years[0]
-    print(f"Year {y0['year']}:")
-    print(f"  NTC            = {y0['ntc']:>14,.2f}   (expect n/a)")
-    print(f"  Captured NTC   = {y0['captured_ntc']:>14,.2f}   (expect n/a)")
-    print(f"  Tax Increment  = {y0['tax_increment']:>14,.2f}   (expect n/a)")
-    print(f"  OSA            = {y0['osa']:>14,.2f}   (expect n/a)")
-    print(f"  Admin          = {y0['admin']:>14,.2f}   (expect n/a)")
-    print(f"  Net TIF        = {y0['net_tif']:>14,.2f}   (expect n/a)")
+    print(f"{name}, year {y0['year']} (TMV {tmv:,.0f}):")
+    for key in ('ntc', 'captured_ntc', 'tax_increment', 'osa', 'admin', 'net_tif'):
+        print(f"  {key:14s} = {y0[key]:>14,.2f}")
     print(f"  Payoff year    = {r.payoff_year}")
     print()
 
     # Breakeven
     be = engine.breakeven_analysis()
-    print(f"Breakeven TMV    = {be['breakeven_tmv']:>14,.2f}   (expect n/a)")
-    print(f"Required annual  = {be['required_annual_pmt']:>14,.2f}   (expect n/a)")
+    print(f"Breakeven TMV    = {be['breakeven_tmv']:>14,.2f}")
+    print(f"Required annual  = {be['required_annual_pmt']:>14,.2f}")
     print()
 
     # Comparison

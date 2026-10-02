@@ -191,7 +191,7 @@ def api_sensitivity():
 
     Query params:
       steps — number of sweep points (default 12)
-      baseline — baseline TMV (default 45000000)
+      baseline — baseline TMV (default: the seeded current scenario)
     """
     eng = _get_engine(_deal_id())
     steps = int(request.args.get('steps', 12))

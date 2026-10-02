@@ -426,10 +426,10 @@ class PartnershipDashboardEngine:
                 calendar_years={str(k): v for k, v in snap.calendar_years.items()},
             )
         else:
-            # Minimal defaults
+            # Minimal neutral defaults (no proforma engine / deal seed loaded)
             pf_snap = ProformaSnapshot(
-                hold_years=10, initial_equity=10_000_000.0,
-                acquisition_cost_basis=40_000_000.0, exit_cap_rate=0.055,
+                hold_years=10, initial_equity=0.0,
+                acquisition_cost_basis=0.0, exit_cap_rate=0.055,
                 net_sale_proceeds=0.0, gross_sale_price=0.0,
                 levered_irr=None, equity_multiple=0.0, avg_dscr=0.0,
             )
