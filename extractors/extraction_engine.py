@@ -136,9 +136,40 @@ class ExtractionEngine:
             elif mode == ExtractionMode.TABULAR:
                 results["tabular_data"] = self._extract_tabular(doc, template)
 
+        if template.document_type == 'lease' and doc.pages:
+            results["financial_terms"] = self._lease_fallback_overrides(
+                doc, results["financial_terms"])
         return results
 
     # ─── Segment-First Lease Extraction ──────────────────────────────
+
+    # Lease facts the legacy value-first rule layer may not supply: it reads
+    # a field from nearby words and was wrong on identity, dates, SF, rent
+    # and deposits (demo tie-out 2026-09-28; blind test 2026-10-02: the SF
+    # as the deposit, the tenant as the landlord, annual rent as monthly).
+    _LEASE_OWNED = {'tenant_name', 'landlord_name', 'lease_commencement',
+                    'lease_expiration', 'expiration_date',
+                    'square_footage', 'square_feet', 'rentable_sf',
+                    'base_rent', 'monthly_rent', 'escalation_rate',
+                    'security_deposit'}
+
+    def _lease_fallback_overrides(self, doc: DocumentContent,
+                                  terms: List[Dict]) -> List[Dict]:
+        """Lease that could not be segmented: keep the legacy layer for what
+        it is good at, but take parties / SF / rent / deposit from the
+        deterministic reader, never from nearest-word guesses. Legacy dates
+        are kept only where the reader finds none."""
+        from .lease_segmenter import _deterministic_lease_fields
+        pages = [(p.page_number, p.text or '') for p in doc.pages]
+        det = _deterministic_lease_fields(pages, {}, set())
+        det_types = {t['term_type'] for t in det}
+        if 'tenant_identity' in det_types:
+            det_types.add('tenant_name')
+        dates = {'lease_commencement', 'lease_expiration', 'expiration_date'}
+        kept = [t for t in terms
+                if t['term_type'] not in self._LEASE_OWNED
+                or (t['term_type'] in dates and t['term_type'] not in det_types)]
+        return det + kept
 
     def _extract_lease_segmented(self, doc: DocumentContent,
                                  template: DocumentTemplate) -> Optional[Dict[str, Any]]:
@@ -175,9 +206,7 @@ class ExtractionEngine:
         # commencement = expiration 12/12, SF = the CAM rate). The segment
         # engine reads those from the governing clause — the rule layer may
         # not supply them at all, even as a fallback.
-        _SEGMENT_OWNED = {'tenant_name', 'landlord_name', 'lease_commencement',
-                          'lease_expiration', 'expiration_date',
-                          'square_footage', 'base_rent', 'escalation_rate'}
+        _SEGMENT_OWNED = self._LEASE_OWNED
         rule_terms = [t for t in rule_terms
                       if t['term_type'] not in _SEGMENT_OWNED]
 
