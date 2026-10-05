@@ -159,9 +159,18 @@ class ExtractionEngine:
         it is good at, but take parties / SF / rent / deposit from the
         deterministic reader, never from nearest-word guesses. Legacy dates
         are kept only where the reader finds none."""
-        from .lease_segmenter import _deterministic_lease_fields
+        from .lease_segmenter import _deterministic_lease_fields, _scan_expiration
         pages = [(p.page_number, p.text or '') for p in doc.pages]
         det = _deterministic_lease_fields(pages, {}, set())
+        # short instruments (amendments, renewal-option letters) land here:
+        # they state the new expiration and nothing else
+        exp, src = _scan_expiration([{'kind': 'lease', 'pages': pages,
+                                      'page_start': pages[0][0] if pages else 1}])
+        if exp:
+            det.append({'term_type': 'governing_expiration',
+                        'term_label': f'Expiration (governing: deterministic: {src})'[:120],
+                        'value_raw': exp, 'expiration_date': exp, 'confidence': 0.8,
+                        'section_ref': src})
         det_types = {t['term_type'] for t in det}
         if 'tenant_identity' in det_types:
             det_types.add('tenant_name')

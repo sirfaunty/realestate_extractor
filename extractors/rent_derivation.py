@@ -559,7 +559,14 @@ def derive_current_rent(*, as_of: date,
     #    supersede it -> never high (flag later_schedule_unplaced).
     flat = re.sub(r'\s+', ' ', schedule_text or '')
     rows = parse_rent_schedule(schedule_text) if schedule_text else []
-    how = _anchor(rows, comm, exp, flat)
+    # A dated row that already ENDS on the expiration means that dated table
+    # governs the term end — back-dating another, undated table from the same
+    # date is circular (it moved a correct row to a wrong one, 2026-10-05).
+    exp_for_backdate = exp
+    if exp and re.search(rf'\b\d{{1,2}}/\d{{1,2}}/\d{{4}}\s*(?:to|through|thru|[-–])?\s*'
+                         rf'0?{exp.month}/0?{exp.day}/{exp.year}\b', flat):
+        exp_for_backdate = None
+    how = _anchor(rows, comm, exp_for_backdate, flat)
 
     dated = parse_dated_rows(schedule_text) if schedule_text else []
     cov = [r for r in dated if r.start <= as_of <= r.end]

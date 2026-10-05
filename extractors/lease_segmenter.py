@@ -481,6 +481,11 @@ def _to_mdy(s):
     if m and m.group(1).lower() in MONTHS:
         mth, d, y = MONTHS[m.group(1).lower()], int(m.group(2)), int(m.group(3))
         return f'{mth}/{d}/{y}' if _valid_mdy(mth, d, y) else None
+    # "the 31st day of August, 2029"
+    m = re.search(r'(\d{1,2})(?:st|nd|rd|th)?\s+day\s+of\s+([A-Za-z]+),?\s+(\d{4})', s)
+    if m and m.group(2).lower() in MONTHS:
+        mth, d, y = MONTHS[m.group(2).lower()], int(m.group(1)), int(m.group(3))
+        return f'{mth}/{d}/{y}' if _valid_mdy(mth, d, y) else None
     return None
 
 
@@ -559,13 +564,23 @@ RE_DATE_RANGE = re.compile(
 _MONTH_DATE = (r'(?:January|February|March|April|May|June|July|August|September|'
                r'October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|'
                r'Nov|Dec)\.?\s+\d{1,2}\s*,?\s*\d{4}|\d{1,2}/\d{1,2}/\d{4}')
+_DAY_OF = (r'\d{1,2}(?:st|nd|rd|th)?\s+day\s+of\s+(?:January|February|March|April|May|June|'
+           r'July|August|September|October|November|December),?\s+\d{4}')
 RE_EXPIRE_STMT = re.compile(
     rf'(?i)(?:expire|expiring|ending|terminat\w+)[^.]{{0,140}}?on\s+({_MONTH_DATE})'
     # summary label: "1.7 EXPIRATION DATE: July 31, 2018"
     rf'|(?i:expiration\s+date)\s*[:.\-]\s*({_MONTH_DATE})'
     # term clause: "commencing February 1, 2018 and ending January 31, 2021"
     rf'|(?i:commenc\w+|beginning)\s+(?:on\s+)?(?:{_MONTH_DATE})\s*(?:\([^)]{{0,40}}\))?\s*,?\s*'
-    rf'(?i:and\s+ending)\s+(?:on\s+)?({_MONTH_DATE})')
+    rf'(?i:and\s+ending)\s+(?:on\s+)?({_MONTH_DATE})'
+    # amendment: "... through August 31, 2030 (the “Expiration Date”)"
+    rf'|({_MONTH_DATE}|{_DAY_OF})\s*\(\s*(?:the\s+)?["“]?(?i:expiration|termination)\s+date'
+    # "continuing thereafter to and including the 31st day of August, 2029"
+    rf'|(?i:continuing\s+(?:thereafter\s+)?(?:to\s+and\s+including|through|until)|'
+    rf'expire\s+on|ending\s+on)\s+(?:the\s+)?({_DAY_OF})')
+
+# lease-summary rent tables: "7/1/2033 6/30/2034 $29,601.00" (no "to")
+RE_DATE_ROW = re.compile(r'(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}/\d{1,2}/\d{4})\s+\$')
 
 
 def _scan_expiration(instruments):
@@ -602,10 +617,11 @@ def _scan_expiration(instruments):
                     dt = parse(next(g for g in mm.groups() if g))
                     if dt:
                         stated.append((dt, f'stated p{pg}'))
-            for mm in RE_DATE_RANGE.finditer(text):
-                dt = parse(mm.group(2))
-                if dt:
-                    ranges.append((dt, f'rent-schedule end p{pg}'))
+            for rx in (RE_DATE_RANGE, RE_DATE_ROW):
+                for mm in rx.finditer(text):
+                    dt = parse(mm.group(2))
+                    if dt:
+                        ranges.append((dt, f'rent-schedule end p{pg}'))
     if stated:
         best = max(stated)
         return f'{best[0].month}/{best[0].day}/{best[0].year}', best[1]
