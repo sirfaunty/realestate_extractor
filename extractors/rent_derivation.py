@@ -211,7 +211,10 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
         if _RANGE.search(pre):
             continue            # explicitly dated row — parse_dated_rows owns it
         mm = list(re.finditer(r'(?i)months?\s*(\d{1,3})\s*(?:-|–|to|through)\s*(\d{1,3})', pre))
-        yr = list(re.finditer(r'(?i)(?:lease\s+)?years?\s*(\d{1,2})\s*(?:-|–|to|through)\s*(\d{1,2})\b', pre))
+        yr = list(re.finditer(r'(?i)(?:lease\s+)?years?\s*(\d{1,2})\s*(?:-|–|to|through)\s*(\d{1,2})\b', pre)) or \
+            list(re.finditer(          # "1-5 (Initial Term) | $60,000.00 | $5,000.00" — terms run in years
+                r'(?i)(?<![\d/$.,])(\d{1,2})\s*-\s*(\d{1,2})\s*\(\s*(?:the\s+)?(?:initial|first|second|'
+                r'third|fourth|fifth|extended|extension|renewal|option)\b[^)]{0,30}?\bterm\s*\)', pre))
         yy = list(re.finditer(r'(?i)(?:lease\s+)?year\s*(\d{1,2})\b', pre))
         tm = list(_TERM_LABEL.finditer(pre))
         if tm and not (mm or yr or yy):
@@ -480,10 +483,42 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
         s = re.sub(_MONEY, '', s)
         return len(re.sub(r'[^A-Za-z0-9]', '', s))
 
+    # Column-scrambled tables: text extraction can emit a table column by
+    # column — "January 1, 2025 through December 31, 2025 January 1, 2026 ...
+    # Period $3,000.00 $36,000.00 $3,090.00 $37,080.00 ..." — k ranges with no
+    # amounts between them, then k self-verifying pairs: row i = pair i.
+    columnar = {}
+    i = 0
+    while i < len(ranges):
+        j = i
+        while j + 1 < len(ranges) and not _amounts(flat[ranges[j].end():ranges[j + 1].start()]):
+            j += 1
+        if j > i:
+            nxt = ranges[j + 1].start() if j + 1 < len(ranges) else len(flat)
+            am = [v for _, _, v in _amounts(flat[ranges[j].end():min(nxt, ranges[j].end() + 600)])]
+            pairs, k = [], 0
+            while k + 1 < len(am):
+                if _is_pair(am[k], am[k + 1]):
+                    pairs.append(am[k + 1]); k += 2
+                elif _is_pair(am[k + 1], am[k]):
+                    pairs.append(am[k]); k += 2
+                else:
+                    break
+            if len(pairs) >= j - i + 1 and 'rent' in flat[max(0, ranges[i].start() - 600):ranges[i].start()].lower():
+                for n in range(i, j + 1):
+                    columnar[n] = pairs[n - i]
+        i = j + 1
+
     out = []
     for i, m in enumerate(ranges):
         start, end = parse_date(m.group(1)), parse_date(m.group(2))
         if not start or not end or end <= start or (end - start).days > 366 * 25:
+            continue
+        if i in columnar:
+            r = ScheduleRow(monthly=columnar[i], annual=round(columnar[i] * 12, 2),
+                            start=start, end=end, label='dates')
+            r.pos = m.start()
+            out.append(r)
             continue
         nxt = ranges[i + 1].start() if i + 1 < len(ranges) else len(flat)
         prv = ranges[i - 1].end() if i else 0
@@ -503,6 +538,48 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
             continue
         monthly = _monthly_from(seg, flat[max(0, m.start() - 500):m.start()],
                                 nearest_last=before)
+        if not monthly or not (50 <= monthly <= MAX_MONTHLY):
+            continue
+        r = ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),
+                        start=start, end=end, label='dates')
+        r.pos = m.start()
+        out.append(r)
+    return out + _defined_term_rows(flat)
+
+
+# "The current term of the Lease began on March 1, 2024 and ends on
+# February 28, 2029 (the “Extended Term”). ... during the Extended Term,
+# Tenant shall pay ... annual Minimum Rent ... ($30,000.00) in monthly
+# installments of ... ($2,500.00)." — a period defined once, its rent stated
+# in prose further on. Only a named TERM with both dates, and only a sentence
+# that proves its monthly figure (annual/monthly pair, or "monthly
+# installments of $X"); tables ("as follows") are the relative parser's.
+_DEFINED_TERM = re.compile(
+    r'(' + _D + r')\s*,?\s*(?:and\s+(?:to\s+)?(?:end|ends|ending|expires?|expiring|terminat\w+)(?:\s+on)?|'
+    r'through|thru|to|until)\s+(' + _D + r')\s*\(\s*(?:the\s+)?["“]([A-Z][A-Za-z ]{0,30}?Term)["”]\s*\)', re.I)
+
+
+def _defined_term_rows(flat: str) -> list[ScheduleRow]:
+    out = []
+    for m in _DEFINED_TERM.finditer(flat):
+        start, end = parse_date(m.group(1)), parse_date(m.group(2))
+        if not start or not end or end <= start:
+            continue
+        d = re.search(r'(?i)during\s+the\s+' + re.escape(m.group(3)) + r'\b', flat[m.end():m.end() + 600])
+        if not d:
+            continue
+        s0 = m.end() + d.end()
+        sent = flat[s0:s0 + 400]
+        stop = re.search(r'(?<![\d$])\.\s', sent)
+        sent = sent[:stop.start()] if stop else sent
+        if re.search(r'(?i)as\s+follows|\byear\s*\d|months?\s+\d', sent) or 'rent' not in sent.lower() \
+                or _BAD_CTX.search(sent.lower()):
+            continue
+        am = [v for _, _, v in _amounts(sent)]
+        monthly = next((b for a, b in zip(am, am[1:]) if _is_pair(a, b)), None)
+        if monthly is None:
+            mi = re.search(r'(?i)monthly\s+installments?\s+of\b[^$]{0,160}?' + _MONEY, sent)
+            monthly = _num(mi.group(1)) if mi and len(am) == 1 else None
         if not monthly or not (50 <= monthly <= MAX_MONTHLY):
             continue
         r = ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),

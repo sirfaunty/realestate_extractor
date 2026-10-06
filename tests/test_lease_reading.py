@@ -389,6 +389,12 @@ def test_amendment_restates_rent_and_certified_sf():
     assert best_sf(t) == 20150, best_sf(t)
 
 
+def test_square_footage_label_and_abbreviations():
+    t = flat("Tenant's Store Number: 4 Square Footage: 1840 sq. feet TABLE OF CONTENTS "
+             'Rental Space: Store #4 Square Footage: 1840 sf. (3.10 % of shopping center)')
+    assert best_sf(t) == 1840, best_sf(t)
+
+
 def test_building_definition_is_not_the_premises():
     t = flat('E. “Building”: The building on the land, containing approximately 40,000 rentable '
              'square feet. F. “Premises”: Suite 100 containing approximately 9,500 square feet '

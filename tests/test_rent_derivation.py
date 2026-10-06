@@ -429,6 +429,41 @@ def test_single_amount_table_read_when_no_pairs():
     assert r2.monthly == 2750.00, r2
 
 
+def test_defined_extension_term_with_prose_rent():
+    # an amendment defines the period once and states its rent in prose
+    t = ("2. Minimum Rent. The current term of the Lease began on March 1, 2024 and ends on "
+         "February 28, 2029 (the “Extended Term”). Landlord and Tenant hereby agree that during "
+         "the Extended Term, Tenant shall pay to Landlord annual Minimum Rent in the amount of "
+         "Thirty Thousand and no/100 dollars ($30,000.00) in monthly installments of Two "
+         "Thousand Five Hundred and no/100 dollars ($2,500.00). Monthly installments ...")
+    r = rent(t, commencement=date(2010, 3, 1), commencement_confirmed=True)
+    assert (r.monthly, r.confidence) == (2500.00, 'high'), r
+    # "... to commence on X, and to expire on Y (the "Fourth Extension Term")"
+    t2 = ('1. Term. The Term is hereby extended, to commence on May 1, 2025, and to expire on '
+          'April 30, 2030 (the "Fourth Extension Term"). 2. Rent. For and during the Fourth '
+          'Extension Term, Tenant shall pay fixed annual gross rent of $96,000.00, payable in '
+          'monthly installments of $8,000.00. 3. Other.')
+    assert rent(t2).monthly == 8000.00, rent(t2)
+
+
+def test_bare_year_ranges_tagged_with_term():
+    t = ("3.3 Base Rent. Tenant shall pay Base Rent in the amounts set forth below: "
+         "1-5 (Initial Term) | $60,000.00 | $5,000.00 6-10 (Initial Term) | $66,000.00 | "
+         "$5,500.00 11-15 (First Extended Term) | $72,600.00 | $6,050.00")
+    r = rent(t, commencement=date(2023, 1, 1), commencement_confirmed=True)
+    assert (r.monthly, r.confidence) == (5000.00, 'high'), r
+
+
+def test_column_scrambled_dated_table():
+    # extraction emitted the date column, then the amount column
+    t = ("3. Minimum Rent. Monthly installments of Minimum Rent shall be as follows: "
+         "January 1, 2025 through December 31, 2025 January 1, 2026 through December 31, 2026 "
+         "January 1, 2027 through December 31, 2027 Period $3,000.00 $36,000.00 $3,090.00 "
+         "$37,080.00 $3,182.70 $38,192.40")
+    r = rent(t)
+    assert (r.monthly, r.confidence) == (3090.00, 'high'), r
+
+
 def test_flat_year1_is_low():
     r = rent('', year1_monthly='$2,000.00')
     assert (r.method, r.confidence) == ('flat', 'low')

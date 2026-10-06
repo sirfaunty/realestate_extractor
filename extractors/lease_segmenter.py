@@ -1056,9 +1056,11 @@ def _sf_num(tok):
 # feet", "an approximate 29,938 square foot unit"
 _SF_RX = re.compile(r'([\dIl][\dIlO,]{2,7})\)?\s*(?:total\s+)?(?:net\s+)?'
                     r'(?:rentable\s+|usable\s+|leasable\s+)?'
-                    r'(?:square\s+(?:fe+t|foot)|sq\.?\s*ft\.?|s\.\s?f\.)', re.I)
-# label-first forms: "Approximate leasable area of premises: 7,139"
-_SF_LABEL_RX = re.compile(r'(?:leasable|rentable|floor)\s+area(?:\s+of\s+(?:the\s+)?premises)?'
+                    r'(?:square\s+(?:fe+t|foot)|sq\.?\s*(?:ft|feet)\.?|s\.\s?f\.|sf\b)', re.I)
+# label-first forms: "Approximate leasable area of premises: 7,139";
+# "Square Footage: 2080 sq. feet"
+_SF_LABEL_RX = re.compile(r'(?:(?:leasable|rentable|floor)\s+area(?:\s+of\s+(?:the\s+)?premises)?|'
+                          r'square\s+footage)'
                           r'\s*[:\-]\s*(?:approximately\s+)?([\d,]{3,8})\b', re.I)
 
 
