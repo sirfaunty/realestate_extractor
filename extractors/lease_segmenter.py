@@ -571,8 +571,8 @@ RE_EXPIRE_STMT = re.compile(
     # summary label: "1.7 EXPIRATION DATE: July 31, 2018"
     rf'|(?i:expiration\s+date)\s*[:.\-]\s*({_MONTH_DATE})'
     # term clause: "commencing February 1, 2018 and ending January 31, 2021"
-    rf'|(?i:commenc\w+|beginning)\s+(?:on\s+)?(?:{_MONTH_DATE})\s*(?:\([^)]{{0,40}}\))?\s*,?\s*'
-    rf'(?i:and\s+ending)\s+(?:on\s+)?({_MONTH_DATE})'
+    rf'|(?i:commenc\w+|beginning|starting|began|begins)\s+(?:on\s+)?(?:{_MONTH_DATE})\s*'
+    rf'(?:\([^)]{{0,40}}\))?\s*,?\s*(?i:and\s+ending|and\s+ends)\s+(?:on\s+)?({_MONTH_DATE})'
     # amendment: "... through August 31, 2030 (the “Expiration Date”)"
     rf'|({_MONTH_DATE}|{_DAY_OF})\s*\(\s*(?:the\s+)?["“]?(?i:expiration|termination)\s+date'
     # "continuing thereafter to and including the 31st day of August, 2029"
@@ -615,19 +615,36 @@ def _scan_expiration(instruments):
             if inst['kind'] in LEASE_BODY_KINDS:
                 for mm in RE_EXPIRE_STMT.finditer(text):
                     dt = parse(next(g for g in mm.groups() if g))
-                    if dt:
-                        stated.append((dt, f'stated p{pg}'))
+                    # an unexercised option period's end is not the term's end —
+                    # judged by the statement's OWN sentence (a nearby option
+                    # clause is normal next to the real term)
+                    sent = text[max(0, text.rfind('.', 0, mm.start()) + 1):mm.start()]
+                    if dt and not re.search(r'option\s+(?:period|term)', sent, re.I):
+                        stated.append((dt, f'stated p{pg}', pg))
             for rx in (RE_DATE_RANGE, RE_DATE_ROW):
                 for mm in rx.finditer(text):
                     dt = parse(mm.group(2))
-                    if dt:
-                        ranges.append((dt, f'rent-schedule end p{pg}'))
+                    # a schedule row labelled "(2nd Option)" or "Option Period:
+                    # 7/1/2013 - 6/30/2018" is not the term
+                    if dt and not re.search(r'^\W{0,4}\(?\s*\w{0,4}\s*option',
+                                            text[mm.end():mm.end() + 25], re.I) \
+                            and not re.search(r'option\s*(?:period|term|years?)?\s*[:\-]?\s*$',
+                                              text[max(0, mm.start() - 30):mm.start()], re.I):
+                        ranges.append((dt, f'rent-schedule end p{pg}', pg))
+
+    def fmt(b):
+        return f'{b[0].month}/{b[0].day}/{b[0].year}', b[1]
+
+    best_r = max(ranges) if len(ranges) >= 2 else None   # a lone range is too weak
     if stated:
         best = max(stated)
-        return f'{best[0].month}/{best[0].day}/{best[0].year}', best[1]
-    if len(ranges) >= 2:      # a lone range is too weak a signal
-        best = max(ranges)
-        return f'{best[0].month}/{best[0].day}/{best[0].year}', best[1]
+        # a LATER instrument's dated schedule running past the latest stated
+        # date (e.g. a relocation amendment's rent table) governs
+        if best_r and best_r[0] > best[0] and best_r[2] > best[2]:
+            return fmt(best_r)
+        return fmt(best)
+    if best_r:
+        return fmt(best_r)
     return None, None
 
 
@@ -947,6 +964,12 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
             if 'square' not in text.lower():
                 text = _despace(text)
             _sf_scan(text, base, s['page_start'], cands)
+        # later instruments that RESTATE the premises (expansion, relocation,
+        # surrender) govern over the original lease — always considered
+        for inst in instruments:
+            if inst['kind'] == 'amendment':
+                _sf_scan('\n'.join(t for _pg, t in inst['pages']), 2,
+                         inst['page_start'], cands, restate_only=True)
         if not any(c[0] >= 2 for c in cands):
             # last resort: amendments/exhibits (expansion riders live there)
             for inst in instruments:
@@ -1034,13 +1057,37 @@ _SF_LABEL_RX = re.compile(r'(?:leasable|rentable|floor)\s+area(?:\s+of\s+(?:the\
                           r'\s*[:\-]\s*(?:approximately\s+)?([\d,]{3,8})\b', re.I)
 
 
-def _sf_scan(text, base, pg, cands):
+# an amendment RESTATING the premises after expansion / relocation / surrender:
+# "the total rentable square feet of the New Premises is approximately N",
+# "shall thereafter contain approximately N", "(from 3,071 square feet to N",
+# "a total of approximately N square feet (the Premises)"
+_SF_RESTATE_RX = re.compile(
+    r'new\s+premises|thereafter\s+contain|combined\s+premises|enlarg\w*\s+the\s+total|'
+    r'square\s+f(?:ee|oo)t\s+to\s*$|\bto\s+a\s+total\s+of|containing\s+a\s+total\s+of|'
+    r'leased\s+premises\s+shall\s+(?:now|thereafter)', re.I)
+# a PART of the premises or a cap, never the premises: "increase by 420 square
+# feet", "adding thereto approximately N", "Additional Premises", "In no event
+# ... more than N square feet"
+_SF_PART_RX = re.compile(
+    r'increase\w*\s+by\s*$|decrease\w*\s+by\s*$|adding\s+(?:thereto\s+)?(?:approximately\s+)?$|'
+    r'additional\s+premises|expansion\s+(?:area|space)\s+(?:consisting|containing)|'
+    r'surrender\w*\s+premises|in\s+no\s+event|not\s+(?:to\s+)?exceed|more\s+than\s*$|'
+    r'less\s+than\s*$|\bfrom\s*$', re.I)
+
+
+def _sf_scan(text, base, pg, cands, restate_only=False):
     """Score every premises-size mention: the operative statement ('Premises
     ... containing approximately N') beats boilerplate (patio, parking
-    ratio, radius, building total, storage)."""
+    ratio, radius, building total, storage); a later restatement of the
+    premises (new / combined / thereafter-contain) beats the original.
+    restate_only: keep only restatement candidates (used on amendments)."""
     hits = [(m, 0) for m in _SF_RX.finditer(text)] + \
            [(m, 3) for m in _SF_LABEL_RX.finditer(text)]
     for m, bonus in hits:
+        ctx_raw = re.sub(r'\s+', ' ', text[max(0, m.start() - 160):m.start()])
+        restated = bool(_SF_RESTATE_RX.search(ctx_raw[-160:]))
+        if restate_only and not restated:
+            continue
         v = _sf_num(m.group(1))
         if v is None or not (100 < v < 100000):
             continue
@@ -1072,6 +1119,10 @@ def _sf_scan(text, base, pg, cands):
         after = re.sub(r'\s+', ' ', text[m.end():m.end() + 40]).lower()[:30]
         if re.search(r'^\W{0,3}\(\s*["“]?premises|^\)?\s*of\s+(?:floor|rentable|leasable)', after):
             score += 1     # the operative definition: '... square feet ("Premises")'
+        if restated:
+            score += 6     # the premises as restated by a later instrument
+        if _SF_PART_RX.search(ctx_raw[-60:]):
+            score -= 6     # an increment, add-on, cap or prior size — not the premises
         cands.append((score, v, pg))
 
 
