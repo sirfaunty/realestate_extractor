@@ -245,12 +245,50 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
     # each table's own start date, if the text states one ("... during the
     # Extended Term ... beginning on November 1, 2017") — amendment tables
     # count their years from THAT, not from the original commencement
+    if not out:
+        out = _single_amount_rows(flat)
     for t in {r.table for r in out}:
         trs = [r for r in out if r.table == t]
         a = _table_anchor(flat, trs[0].pos, trs[-1].pos)
         for r in trs:
             r.anchor = a
     return out
+
+
+# A one-amount-per-row table under a header that says what the rows count and
+# what the amount is:  "Years  Monthly Rent  1 - 3 $1,850.00 ($20.00 psf
+# annually)  4 - 7 $2,035.00 ..."  — no annual/monthly pair to self-verify,
+# so it is only read when no paired table exists, and only as consecutive
+# ranges (1-3, 4-7, ...) under a rent header.
+_SINGLE_HDR = re.compile(
+    r'(?i)\b(?:lease\s+)?(years?|months?)\b[^$]{0,40}?\b(monthly|annual)\s+'
+    r'(?:base\s+|minimum\s+|fixed\s+)?rent\b'
+    r'|\b(monthly|annual)\s+(?:base\s+|minimum\s+|fixed\s+)?rent\b[^$]{0,40}?\b(?:lease\s+)?(years?|months?)\b')
+_SINGLE_ROW = re.compile(r'(?i)(?:(?:lease\s+)?(?:years?|months?)\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*\$\s*([\d,]+\.\d{2})')
+
+
+def _single_amount_rows(flat: str) -> list[ScheduleRow]:
+    for h in _SINGLE_HDR.finditer(flat):
+        kind = (h.group(1) or h.group(4) or '').lower()
+        unit = (h.group(2) or h.group(3) or '').lower()
+        before = flat[max(0, h.start() - 300):h.start()].lower()
+        if re.search(r'sublease|subtenant|option\s+(?:period|term)', before):
+            continue
+        rows, nxt = [], None
+        for m in _SINGLE_ROW.finditer(flat, h.end(), min(len(flat), h.end() + 700)):
+            a, b, v = int(m.group(1)), int(m.group(2)), _num(m.group(3))
+            if not v or b < a or (nxt is not None and a != nxt) or (nxt is None and a != 1):
+                break
+            monthly = v if unit == 'monthly' else round(v / 12, 2)
+            if monthly > MAX_MONTHLY:
+                break
+            rows.append(ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),
+                                    label=f"{'years' if kind.startswith('year') else 'months'} {a}-{b}",
+                                    table=1, pos=m.start()))
+            nxt = b + 1
+        if len(rows) >= 2:
+            return rows
+    return []
 
 
 # Named-term rows: "Initial Term:" -> term 0, "First Extended Term:" /
@@ -540,6 +578,9 @@ def derive_current_rent(*, as_of: date,
     commencement_confirmed: the commencement came from a user confirmation
     or the rent roll, not from reading the lease — a stated Year-1 rent rolled
     forward by a stated fixed escalation is then fully determined (high)."""
+    # scanned PDFs use typographic dashes ("1 ‐ 3", U+2010) the table
+    # patterns don't know; one hyphen for all of them
+    schedule_text = re.sub('[‐‑‒–—−]', '-', schedule_text or '')
     comm = commencement if isinstance(commencement, date) else parse_date(commencement)
     exp = expiration if isinstance(expiration, date) else parse_date(expiration)
     y1 = _num(year1_monthly)
@@ -604,6 +645,11 @@ def derive_current_rent(*, as_of: date,
         # expiration back-dating are medium
         if _later_unplaced(rows, flat, r.pos, dated):
             flags.append('later_schedule_unplaced')
+        # within a month of a step, which row applies hinges on the exact
+        # commencement day and billing practice — not certain enough to show
+        # unreviewed (pilot what-if 2026-10-06: 2 of 4 wrong HIGH were here)
+        if (as_of - r.start).days < 31 or (r.end - as_of).days < 31:
+            flags.append('near_step_boundary')
         conf = ('high' if not (set(flags) - {'multi_space_sum'})
                 and not r.label.startswith('seq')
                 and r.label.endswith('[commencement]') else 'medium')

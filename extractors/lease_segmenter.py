@@ -482,7 +482,7 @@ def _to_mdy(s):
         mth, d, y = MONTHS[m.group(1).lower()], int(m.group(2)), int(m.group(3))
         return f'{mth}/{d}/{y}' if _valid_mdy(mth, d, y) else None
     # "the 31st day of August, 2029"
-    m = re.search(r'(\d{1,2})(?:st|nd|rd|th)?\s+day\s+of\s+([A-Za-z]+),?\s+(\d{4})', s)
+    m = re.search(r'(\d{1,2})(?:st|nd|rd|th)?\s+day\s+of\s+([A-Za-z]+)\s*,?\s+(\d{4})', s)
     if m and m.group(2).lower() in MONTHS:
         mth, d, y = MONTHS[m.group(2).lower()], int(m.group(1)), int(m.group(3))
         return f'{mth}/{d}/{y}' if _valid_mdy(mth, d, y) else None
@@ -565,11 +565,16 @@ _MONTH_DATE = (r'(?:January|February|March|April|May|June|July|August|September|
                r'October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|'
                r'Nov|Dec)\.?\s+\d{1,2}\s*,?\s*\d{4}|\d{1,2}/\d{1,2}/\d{4}')
 _DAY_OF = (r'\d{1,2}(?:st|nd|rd|th)?\s+day\s+of\s+(?:January|February|March|April|May|June|'
-           r'July|August|September|October|November|December),?\s+\d{4}')
+           r'July|August|September|October|November|December)\s*,?\s+\d{4}')
 RE_EXPIRE_STMT = re.compile(
     rf'(?i)(?:expire|expiring|ending|terminat\w+)[^.]{{0,140}}?on\s+({_MONTH_DATE})'
     # summary label: "1.7 EXPIRATION DATE: July 31, 2018"
-    rf'|(?i:expiration\s+date)\s*[:.\-]\s*({_MONTH_DATE})'
+    # also "K. TERMINATION DATE: ...", "The lease expiration date shall be ..."
+    rf'|(?i:expiration|termination)\s+date\s*(?:[:.\-]|shall\s+be|is)\s*({_MONTH_DATE})'
+    # "beginning on the Commencement Date and ending December 31, 2018";
+    # "The term of this Lease shall be from June 20, 2022 to June 30, 2025"
+    rf'|\band\s+ending\s+({_MONTH_DATE})'
+    rf'|(?i:term\s+of\s+this\s+lease\s+shall\s+be)\s+from\s+(?:{_MONTH_DATE})\s+(?:to|through|until)\s+({_MONTH_DATE})'
     # term clause: "commencing February 1, 2018 and ending January 31, 2021"
     rf'|(?i:commenc\w+|beginning|starting|began|begins)\s+(?:on\s+)?(?:{_MONTH_DATE})\s*'
     rf'(?:\([^)]{{0,40}}\))?\s*,?\s*(?i:and\s+ending|and\s+ends)\s+(?:on\s+)?({_MONTH_DATE})'
@@ -1115,6 +1120,16 @@ def _sf_scan(text, base, pg, cands, restate_only=False):
             score += 3     # post-expansion / whole-premises total
         if re.search(r'storage|basement|shared|common|patio|mezzanine', ctx):
             score -= 3
+        # inside a definitions list, the nearest label says whose area it is:
+        # 'E. “Building”: ... containing approximately 38,130 rentable square
+        # feet. F. “Premises”: ...'; also '(based upon a building containing N)'
+        # '“Rentable area in the Building” shall be 38,130 square feet'
+        lab = re.findall(r'["“]\s*([A-Za-z][A-Za-z ]{1,40}?)\s*["”]\s*(?::|shall\s+be|means|is\b)',
+                         ctx_raw, re.I)
+        if (lab and re.search(r'(?i)\b(?:building|land|project|property|shopping\s+center|'
+                              r'center|development|complex)$', lab[-1].strip())) or \
+                re.search(r'based\s+(?:up)?on\s+(?:a|the)\s+building', ctx):
+            score -= 6
         if re.search(r'radius|within|miles|parking|ratio|per\s+\d|building is|'
                      r'of the building|area of the building|shopping center contains|'
                      r'gross leasable|\bgla\b|site plan|example|illustrat|relates only|'
@@ -1124,6 +1139,11 @@ def _sf_scan(text, base, pg, cands, restate_only=False):
         after = re.sub(r'\s+', ' ', text[m.end():m.end() + 40]).lower()[:30]
         if re.search(r'^\W{0,3}\(\s*["“]?premises|^\)?\s*of\s+(?:floor|rentable|leasable)', after):
             score += 1     # the operative definition: '... square feet ("Premises")'
+        # "The Premises contain 30,296 square feet of Rentable Area as
+        # certified in accordance with BOMA" — a measured area is final
+        if re.search(r'^\W{0,3}(?:rentable\s+)?(?:square\s+feet\s+)?(?:of\s+rentable\s+area\s+)?as\s+'
+                     r'(?:certified|re-?measured)', after60):
+            restated = True
         if restated:
             score += 6     # the premises as restated by a later instrument
         if _SF_PART_RX.search(ctx_raw[-60:]):
@@ -1142,7 +1162,8 @@ def _looks_like_party(name):
         return False
     if re.search(r'\b\d{5}(?:-\d{4})?\b', name):            # ZIP code
         return False
-    if re.match(r'\s*\d', name):                              # street number
+    entity = re.search(r'\b(?:LLC|L\.L\.C|Inc|Corp|LP|L\.P|Ltd|Company)\b', name, re.I)
+    if re.match(r'\s*\d', name) and not entity:              # street number
         return False
     if re.search(r'\b(?:Avenue|Street|Boulevard|Road|Suite|Drive|Floor)\b', name, re.I) \
             and not re.search(r'\b(?:LLC|L\.L\.C|Inc|Corp|LP|L\.P|Ltd|Company)\b', name, re.I):
@@ -1162,32 +1183,38 @@ def _party(flat, role):
     conn = r'(?i:\bbetween|\band)'
     patterns = (
         # ("Landlord") label-after convention, incl. "(herein called “Landlord”)"
-        conn + r'\s+(?:the\s+)?([A-Z][^()"“]{2,160}?)\s*'
-        r'\(\s*(?:(?i:herein(?:after)?)\s+(?i:called|referred\s+to\s+as)\s+)?'
+        # "(and any successor or assign, hereafter called “Landlord”)";
+        # names may start with a street-number style digit ("3001 Griffin ...")
+        conn + r'\s+(?:the\s+)?([A-Z0-9][^()"“]{2,160}?)\s*'
+        r'\(\s*(?:[^()"“]{0,60}?,\s*)?(?:(?i:here(?:in)?(?:after)?)\s+(?i:called|referred\s+to\s+as|designated\s+as)\s+)?'
         rf'(?:the\s+)?["“]\s*(?i:{r_role})\s*["”]',
         # "..., hereinafter referred to as “LANDLORD”" (no parentheses; the
-        # party's address can sit in between)
+        # party's address can sit in between); "hereinafter designated as"
         conn + r'\s+(?:the\s+)?([A-Z][^()"“;]{2,300}?),?\s+'
-        rf'(?i:herein(?:after)?\s+(?:called|referred\s+to\s+as))\s+(?:the\s+)?["“]?(?i:{r_role})\b',
+        rf'(?i:here(?:in)?(?:after)?\s+(?:called|referred\s+to\s+as|designated\s+as))\s+(?:the\s+)?["“]?(?i:{r_role})\b',
         # older/institutional forms: "… between ELM RIDGE PROPERTIES, A
         # LIMITED PARTNERSHIP, as Landlord, and NORTHFIELD GROCERS, INC.,
         # an Iowa corporation, as Tenant."; also AS "LANDLORD"
+        # (the role closes the clause — "at such time as Landlord is able"
+        # is prose, not a party)
         conn + r'\s+(?:the\s+)?([A-Z][^()"“;]{2,160}?),?\s+'
-        rf'(?i:as)\s+(?:the\s+)?["“]?(?i:{r_role})\b',
+        rf'(?i:as)\s+(?:the\s+)?(?:["“](?i:{r_role})["”]|(?i:{r_role})\b(?=\s*(?:[,.;:)]|(?i:and)\b|$)))',
         # summary label-first: "1.2 Landlord: The Realty Associates Fund VIII,
         # L.P., a Delaware ..."; "1.1 LANDLORD: CIM/H&H RETAIL, L.P., a ..."
-        rf'(?<![A-Za-z’\'])["“]?(?i:{r_role[3:-1]})["”]?\s*:\s*'
+        rf'(?<![A-Za-z’\'])["“]?\s*(?i:{r_role[3:-1]})\s*["”]?\s*:\s*'
         r'([A-Z][^:;]{2,120}?)(?=,?\s+(?:an?|A|AN)\s+[A-Za-z]+\s+(?i:limited|corporation|general|'
         r'company|LLC|liability|partnership)|\s+\d{1,2}\.\d{1,2}\s|\s+[A-Z]\.\s|'
-        r'\s+(?i:address)\s*:|\s+\(\w\)\s)',
+        r'\s+(?i:address)\s*:|\s+\(\w\)\s|\s+(?i:c/o)\s|'
+        # the next summary field: "Advantage Therapy, LLC Tenant Contact Information:"
+        r'\s+(?:Tenant|Landlord|Lessee|Lessor)(?:’s|\'s)?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*:)',
     )
     if role == 'Landlord':
         # cover page: "LEASE BETWEEN X, LLC A Nevada LLC Landlord And Y Tenant"
-        patterns += (r'(?i:\bbetween)\s+([A-Z][^()"“;]{2,120}?)\s+(?:Landlord|Lessor)\s+'
-                     r'(?i:and)\s+[A-Z][^()"“;]{2,120}?\s+(?:Tenant|Lessee)\b',)
+        patterns += (r'(?i:\bbetween)\s+([A-Z][^()"“;]{2,200}?)\s+(?i:Landlord|Lessor)\s+'
+                     r'(?i:and)\s+[A-Z][^()"“;]{2,120}?\s+(?i:Tenant|Lessee)\b',)
     else:
-        patterns += (r'(?i:\bbetween)\s+[A-Z][^()"“;]{2,120}?\s+(?:Landlord|Lessor)\s+'
-                     r'(?i:and)\s+([A-Z][^()"“;]{2,120}?)\s+(?:Tenant|Lessee)\b',)
+        patterns += (r'(?i:\bbetween)\s+[A-Z][^()"“;]{2,200}?\s+(?i:Landlord|Lessor)\s+'
+                     r'(?i:and)\s+([A-Z][^()"“;]{2,120}?)\s+(?i:Tenant|Lessee)\b',)
     # A capture may never contain ANOTHER party's role clause — the first
     # cut of the "as Tenant" form ran from "between ELM RIDGE … as Landlord,
     # and NORTHFIELD" and returned the landlord as the tenant.
@@ -1195,7 +1222,9 @@ def _party(flat, role):
                              r'|["“](?:Landlord|Tenant|Owner)["”]'
                              r'|herein(?:after)?\s+(?:called|referred\s+to\s+as)\s+["“]?'
                              r'(?:Landlord|Tenant|Lessor|Lessee|Owner)\b', re.I)
-    name = None
+    # first candidate that cleans up to a plausible name wins — a summary
+    # "Tenant: <name> <street address> ... 1.08" that runs on is skipped for
+    # the definition further down, not the end of the search
     for rx in patterns:
         for m in re.finditer(rx, flat):
             cand = m.group(1)
@@ -1205,15 +1234,21 @@ def _party(flat, role):
                 if role_clause.search(tail):
                     continue
                 cand = tail
-            name = cand
-            break
-        if name:
-            break
-    if not name:
-        return None
+            name = _clean_party(cand)
+            if name:
+                return name
+    return None
+
+
+def _clean_party(name):
     # cut the entity description: ", a Minnesota limited liability company",
     # ", whose address is ...", "LLC A Nevada Limited Liability Company"
     name = re.split(r',\s*(?:an?|as|its|whose|with|having)\s', name, maxsplit=1)[0]
+    # ... and what follows the name on cover pages / notice blocks: "c/o ...",
+    # a street address ("Inc., 29006 W. Eight Mile Road", "BANK 1250 Hwy 35"),
+    # "OWNER OF <center> By <managing agent>"
+    name = re.split(r',?\s+(?i:c/o)\s|,?\s+\d{3,6}\s+(?:[NSEW]\.?\s+)?[A-Z][a-z]|'
+                    r'\s+(?i:owner\s+of)\s|\s+(?:By|BY):?\s+(?=[A-Z])', name, maxsplit=1)[0]
     name = re.split(r'\s+(?:A|AN|An|a|an)\s+(?=[A-Z][a-z]+\s+(?:Limited|Corporation|Company|'
                     r'corporation|limited|general|LLC))', name, maxsplit=1)[0]
     name = re.sub(r',?\s+party\s+of\s+the\s+(?:first|second)\s+part.*$', '', name, flags=re.I)
@@ -1275,9 +1310,21 @@ def _year1_monthly_rent(rent_txt, flat, sf=None):
                     return v, m.group(1), label
         return None
 
+    # 0. an amendment that restates the rent governs the original's table:
+    #    "Fixed Rent shall be amended as follows: Lease Yr. Monthly Annual
+    #    1-5 $36,607.67 $439,292" (the x12 pair proves the monthly column)
+    for src in srcs:
+        for m in re.finditer(r'(?:base|fixed|minimum|basic)\s+rent(?:al)?\s+(?:shall\s+be|is\s+hereby)\s+'
+                             r'amended[^$]{0,160}?' + amt + r'\s*\$\s*([\d,]+(?:\.\d{2})?)', src, re.I):
+            a, b = _money(m.group(1)), _money(m.group(2))
+            if a and b and a >= 100 and abs(a * 12 - b) <= 12:
+                return a, m.group(1), 'Base rent, as amended'
     # 1. "Year 1 ... $X per month"
     hit = first(r'(?:Lease\s+)?Year\s*1\b[^$]{0,60}?(?:\$[\d,]+\.\d{2}\s*per\s*sq[^$]{0,20})?'
                 + amt + r'\s*per\s*month', 'Base rent, Year 1 monthly')
+    # "Months 1 - 60 at $1,700.00 per month"; "Years 1-10 $9,164.42 per month"
+    hit = hit or first(r'(?:Months?|(?:Lease\s+)?Years?)\s+1\s*-\s*\d{1,3}\s*:?\s*(?:at\s+)?'
+                       + amt + r'\s*(?:per\s+month|/\s*mo\b|monthly)', 'Base rent, first row monthly')
     if hit:
         return hit
     # 1a. both stated in one breath: "$51,591.96 per year ($4,299.33 per
@@ -1304,11 +1351,13 @@ def _year1_monthly_rent(rent_txt, flat, sf=None):
             if b >= 1200 and abs(b / 12 - a) <= 0.02:
                 return a, pm.group(1), 'Base rent, first scheduled monthly'
     # 1b. stated monthly: "Base Rent: $X per month", "Monthly base rent: ... $X"
-    hit = first(r'(?:monthly\s+(?:base\s+|minimum\s+)?rent(?:al)?|base\s+rent|minimum\s+rent)[^$]{0,80}'
+    hit = first(r'(?:monthly\s+(?:base\s+|basic\s+|minimum\s+)?rent(?:al)?|bas(?:e|ic)\s+rent|minimum\s+rent)[^$]{0,80}'
                 + amt + r'\s*(?:per\s+month|/\s*mo\b|monthly|a\s+month|each\s+month)',
                 'Base rent, monthly') or \
-        first(r'monthly\s+(?:base\s+|minimum\s+)?rent(?:al)?\b[^$]{0,120}?' + amt,
-              'Base rent, monthly (labeled)')
+        first(r'monthly\s+(?:base\s+|basic\s+|minimum\s+)?rent(?:al)?\b[^$]{0,120}?' + amt,
+              'Base rent, monthly (labeled)') or \
+        first(r'rent(?:al)?\s+per\s+month\b[^$]{0,120}?\bMonths?\s+1\s*-\s*\d{1,3}\s+'
+              + amt + r'(?!\s*[;,|/]?\s*\$)', 'Base rent, monthly table first row')
     if hit:
         return hit
     # 3. rate x SF: "$1.91 ... $110,002.63" (monthly per SF), "$23.25 per
@@ -1320,6 +1369,11 @@ def _year1_monthly_rent(rent_txt, flat, sf=None):
                 r = _money(rm.group(1))
                 if (not r or not _rent_ctx_ok(src, rm.start(), 400)
                         or _option_ctx(src, rm.start())):
+                    continue
+                # "$35.00 per square foot Tenant Allowance ($263,200.00)" is
+                # rate x SF too — but money TO the tenant, not rent
+                if re.search(r'allowance|improvement|contribution|credit|reimburse',
+                             src[max(0, rm.start() - 80):rm.end() + 60], re.I):
                     continue
                 win_lo, win_hi = max(0, rm.start() - 60), rm.end() + 120
                 for am in re.finditer(amt, src[win_lo:win_hi]):
@@ -1354,25 +1408,36 @@ def _security_deposit(flat):
     lease states none / doesn't state an amount. Only reads constructions
     that NAME the deposit — the old nearest-dollar guess took the SF, a CAM
     estimate or a rental tax for the deposit on 5 of 14 blind-test leases."""
-    amt = r'\$\s*([\d,]+\.\d{2})'
+    # cents, or whole dollars written with a thousands comma ("$12,000")
+    amt = r'\$\s*(\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?![\d,])|\d+\.\d{2})'
     if re.search(r'security\s+deposit\s*["”)]*\s*:?\s*(?:none\b|n/?a\b|not\s+applicable|waived|'
                  r'\$\s*0(?:\.00)?\b|\$\s*-0-)', flat, re.I):
         return None
-    words = r'(?:[A-Za-z0-9/\- ,]{0,160}?dollars\s*(?:and\s+\d+/100\s*)?\(\s*)?'
+    words = r'(?:[A-Za-z0-9/\- ,]{0,160}?(?:dollars\s*(?:and\s+\d+/100\s*)?)?\(\s*)?'
+    sec = r'security\s+(?:/\s*damage\s+)?deposit'
     pats = (
         r'total\s+security\s+deposit[^$]{0,30}?' + amt,
-        # label: "Security Deposit: $X", "...: Two month's base rent, or $X"
-        r'security\s+deposit\s*(?:\(\w\))?\s*:\s*(?:[A-Za-z0-9\'’/\- ,]{0,80}?\bor\s+)?' + words + amt,
+        # label: "Security Deposit: $X", "...: Two month's base rent, or $X",
+        # "SECURITY DEPOSIT AMOUNT: $X", "...: One month's Basic Rent, $X"
+        sec + r'(?:\s+amount)?\s*(?:\(\w\))?\s*:\s*(?:[A-Za-z0-9\'’/\- ,]{0,80}?(?:\bor\s+|,\s*))?'
+        + words + amt,
         amt + r'\s*\)?\s*(?:in\s+the\s+form\s+of\s+a\s+|as\s+(?:a|the)\s+)["“]?security\s+deposit',
         # "Tenant shall deposit / has deposited with Landlord the sum of [words]
         # ($9,800.00) as security"
         r'deposit(?:ed)?\s+with\s+(?:the\s+)?(?:landlord|lessor|owner)\s+(?:the\s+(?:sum|amount)\s+of\s+)?'
         + words + amt + r'\s*\)?\s+as\s+(?:a\s+|the\s+)?security\b',
+        # "Landlord acknowledges the receipt of [words] ($1,700.00) Dollars
+        # which he is to retain as security"
+        r'receipt\s+of\s+' + words + amt + r'[^.$]{0,80}?\bas\s+security\b',
         # "... (the first) installment of the Security Deposit in the amount of"
         # is a PART of the deposit, never the deposit
-        r'(?<!installment of the )(?<!installment of )security\s+deposit[^$.;]{0,60}?'
+        r'(?<!installment of the )(?<!installment of )' + sec + r'[^$.;]{0,60}?'
         r'(?:of|in\s+the\s+(?:amount|sum)\s+of|the\s+sum\s+of|shall\s+be|'
         r'equal\s+to)\s+' + words + amt,
+        # "deposit with Landlord the sum of [words] ($31,000)" in the security
+        # deposit section / followed by "(“Security Deposit”)"
+        r'security\s+deposit\b[^$]{0,160}?\bdeposit(?:ed)?\s+with\s+(?:the\s+)?(?:landlord|lessor|owner)\s+'
+        r'the\s+(?:sum|amount)\s+of\s+' + words + amt,
     )
     for rx in pats:
         for m in re.finditer(rx, flat, re.I):
@@ -1425,7 +1490,16 @@ def _deterministic_lease_fields(pages, tgt, have, sf=None):
                    # summary label: "1.06 Commencement Date: January 23, 2012."
                    rf'Commencement\s+Date\s*[:\-]\s*({_LONG_DATE})',
                    # "commence on the 25th day of September, 2014"
-                   rf'commenc\w*\s+(?:on\s+)?(?:the\s+)?({_DAY_OF})'):
+                   rf'commenc\w*\s+(?:on\s+)?(?:the\s+)?({_DAY_OF})',
+                   # "the Commencement Date shall be March 6, 2008"
+                   rf'commencement\s+date\s+(?:shall\s+be|is)\s+({_LONG_DATE})',
+                   # "The term of this Lease shall be from June 20, 2022 to ...";
+                   # "For the term of 5 years from and after the 15th day of
+                   # February, 2005"
+                   # (not "the first eight months of the Term, from January 1"
+                   # — an abatement window)
+                   rf'(?:term\s+of\s+this\s+lease\s+shall\s+be|for\s+the\s+term\s+of\s+[^.$]{{0,40}}?)'
+                   rf'\s+from\s+(?:and\s+after\s+)?(?:the\s+)?({_LONG_DATE}|{_DAY_OF})'):
             for mm in re.finditer(rx, flat, re.I):
                 mdy = _to_mdy(re.sub(r'\s+', ' ', mm.group(1)))
                 if mdy:

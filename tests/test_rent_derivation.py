@@ -403,6 +403,32 @@ def test_escalation_with_confirmed_commencement_is_high():
     assert r2.confidence != 'high', r2
 
 
+def test_near_step_boundary_is_not_high():
+    # relative schedule dated from a confirmed commencement: as-of a week after
+    # a step -> which row applies depends on the exact day -> not shown unreviewed
+    t = """Tenant shall pay Landlord Minimum Rent as follows:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Months 1-12 $24,000.00 $2,000.00
+    Months 13-24 $25,200.00 $2,100.00
+    Months 25-36 $26,400.00 $2,200.00"""
+    near = rent(t, commencement=date(2024, 6, 23), commencement_confirmed=True)
+    mid = rent(t, commencement=date(2024, 1, 1), commencement_confirmed=True)
+    assert near.confidence != 'high' and 'near_step_boundary' in near.flags, near
+    assert mid.confidence == 'high' and mid.monthly == 2200.00, mid
+
+
+def test_single_amount_table_read_when_no_pairs():
+    # one amount per row (monthly header), typographic dashes from OCR
+    t = ("Rent: Years Monthly Rent 1 ‐ 3 $1,850.00 ($20.00 psf annually) "
+         "4 ‐ 7 $2,035.00 ($22.00 psf annually) Tenant's share 4.10%")
+    r = rent(t, commencement=date(2021, 9, 1), commencement_confirmed=True)
+    assert (r.monthly, r.confidence) == (2035.00, 'high'), r
+    # annual header -> /12; a range that doesn't continue ends the table
+    t2 = "Lease Years Annual Base Rent 1-5 $30,000.00 6-10 $33,000.00 15-20 $99,000.00"
+    r2 = rent(t2, commencement=date(2021, 1, 1), commencement_confirmed=True)
+    assert r2.monthly == 2750.00, r2
+
+
 def test_flat_year1_is_low():
     r = rent('', year1_monthly='$2,000.00')
     assert (r.method, r.confidence) == ('flat', 'low')

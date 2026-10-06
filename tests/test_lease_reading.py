@@ -296,6 +296,106 @@ def test_option_schedule_row_is_not_the_term():
     assert scan(t) == '6/30/2013', scan(t)
 
 
+# ─── round 3 shapes (2026-10-06) ─────────────────────────────────────
+
+def test_prose_as_landlord_is_not_a_party():
+    t = flat('if any occupant holds over and Tenant agrees to accept possession at such time '
+             'as Landlord is able to tender the same. A “ Landlord ”: MAPLE FORGE PARTNERSHIP, '
+             'a Texas general partnership B. Address of Landlord: 1 Example Row')
+    assert _party(t, 'Landlord') == 'MAPLE FORGE PARTNERSHIP', _party(t, 'Landlord')
+
+
+def test_designated_as_and_address_after_name():
+    t = flat('THIS LEASE made by and between J. Q. Example, c/o 100 W. Elm, Ste. 2, Anytown, '
+             'Ohio, the Lessor, hereinafter designated as the Landlord, and Bluebird Radio, Inc., '
+             '2900 W. Oak Road, Anytown, Oh, the Lessee, hereinafter designated as the Tenant.')
+    assert _party(t, 'Landlord') == 'J. Q. Example', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Bluebird Radio, Inc', _party(t, 'Tenant')
+
+
+def test_hereafter_called_with_lead_in_and_numeric_name():
+    t = flat('by and between 4100 Harbor Partners LLC, a Florida limited liability company '
+             '(and any successor or assign, hereafter called “Landlord”) and Kestrel Media, '
+             'Inc., a Delaware corporation (hereafter called the “Tenant”).')
+    assert _party(t, 'Landlord') == '4100 Harbor Partners LLC', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Kestrel Media, Inc', _party(t, 'Tenant')
+
+
+def test_caps_cover_page_with_agent_and_address():
+    t = flat('LEASE AGREEMENT Between OAKVALE ASSOCIATES, LP OWNER OF OAKVALE PLAZA By OAKVALE '
+             'MANAGEMENT, Inc. GENERAL PARTNER BY JANE ROE, PRESIDENT LANDLORD AND RIVERSIDE '
+             'SAVINGS BANK 1250 Hwy 9 Anytown, NJ 00000 TENANT Dated: 1 March 2005')
+    assert _party(t, 'Landlord') == 'OAKVALE ASSOCIATES, LP', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'RIVERSIDE SAVINGS BANK', _party(t, 'Tenant')
+
+
+def test_summary_label_runs_on_then_definition():
+    t = flat('2. Tenant: Heron Therapy, LLC Tenant Contact Information: Heron Therapy, LLC '
+             'C/O Parent Co. 1 Example Circle')
+    assert _party(t, 'Tenant') == 'Heron Therapy, LLC', _party(t, 'Tenant')
+
+
+def test_deposit_wordings_round3():
+    cases = [
+        ('The Landlord herewith acknowledges the receipt of One Thousand Two Hundred ($1,200.00 ) '
+         'Dollars which he is to retain as security for the faithful performance', 1200.0),
+        ('18. Security Deposit: One month’s Basic Rent, $ 9,100.50 , due at lease signing.', 9100.5),
+        ('O. SECURITY DEPOSIT AMOUNT: $ 11,000.00 P. PARKING:', 11000.0),
+        ('is paid herewith along with a security / damage deposit of $1,800.00. So long as', 1800.0),
+        ('SECURITY DEPOSIT. Tenant has deposited with Landlord the sum of nine thousand dollars '
+         '($9,000), (“Security Deposit”).', 9000.0),
+    ]
+    for t, want in cases:
+        got = _security_deposit(flat(t))
+        assert got and got[0] == want, (t[:40], got)
+
+
+def test_round3_dates():
+    assert stated('K. TERMINATION DATE: February 28, 2021 L. ANNUAL BASE RENT') == '2/28/2021'
+    assert stated('3. The lease expiration date shall be SEPTEMBER 30, 2019.') == '9/30/2019'
+    assert stated('“Lease Term”: The period beginning on the Commencement Date and ending '
+                  'December 31, 2020.') == '12/31/2020'
+    assert stated('2. Term The term of this Lease shall be from June 20, 2021 to June 30, 2024.') \
+        == '6/30/2024'
+
+
+def test_abatement_window_is_not_the_term():
+    t = flat('Tenant shall pay no Rent during the first six (6) months of the Term, from '
+             'March 1, 2015, through August 31, 2015 (the “Rent Abatement Period”).')
+    assert stated(t) is None, stated(t)
+
+
+def test_round3_rent_rows():
+    for t, want in [('payable monthly as follows: Months 1 - 60 at $1,500.00 per month', 1500.0),
+                    ('Initial Term: Years 1-10 $8,000.00 per month Years 11-15 $8,800.00 per month', 8000.0),
+                    ('Rent per month shall be per the schedule below: Months 1-12 $1,750.00 '
+                     'Months 13-24 $1,800.00', 1750.0)]:
+        got = _year1_monthly_rent(flat(t), flat(t))
+        assert got and got[0] == want, (t[:40], got)
+    # a tenant allowance at $/SF x SF is not rent
+    t = flat('Tenant Allowance: a $30.00 per square foot Tenant Allowance ($150,000.00). '
+             'Basic Rent: Years 1 to 5: $18.00/sq. ft.')
+    got = _year1_monthly_rent(t, t, sf=5000)
+    assert not got or got[0] != 12500.0, got
+
+
+def test_amendment_restates_rent_and_certified_sf():
+    t = flat('FIRST AMENDMENT 2. Premises. The Premises contain 20,150 square feet of Rentable '
+             'Area as certified in accordance with BOMA standards 4. Fixed Rent. Fixed Rent '
+             'shall be amended as follows: Lease Yr. Monthly Annual Per Sq.Ft. 1-5 $25,187.50 '
+             '$302,250 $15.00 LEASE ... the Premises containing approximately 20,000 square feet '
+             '... Fixed Rent: 1-5 $25,000.00 $300,000.00')
+    assert _year1_monthly_rent(t, t)[0] == 25187.50, _year1_monthly_rent(t, t)
+    assert best_sf(t) == 20150, best_sf(t)
+
+
+def test_building_definition_is_not_the_premises():
+    t = flat('E. “Building”: The building on the land, containing approximately 40,000 rentable '
+             'square feet. F. “Premises”: Suite 100 containing approximately 9,500 square feet '
+             'of rentable area. G. “Rentable area in the Building” shall be 40,000 square feet.')
+    assert best_sf(t) == 9500, best_sf(t)
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
