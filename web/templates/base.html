@@ -742,6 +742,10 @@ fetch('/api/status')
                 const pct = job.total ? Math.round(job.progress / job.total * 100) : 0;
 
                 lastType = job.type;
+                // the button was left at href="#" while a job ran ("View
+                // progress" did nothing) — point it at this job's page
+                link.textContent = 'View progress';
+                link.href = '/job/' + encodeURIComponent(job.id);
 
                 if (job.status === 'queued') {
                     label.textContent = 'Queued: ' + job.filename;

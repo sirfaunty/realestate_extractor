@@ -1647,6 +1647,15 @@ class ExtractionEngine:
         if not all_lines:
             return []
 
+        # Format D — one tenant per line (MRI / commercial rent rolls):
+        #   "1005 110 Example Pizza 1/1/2009 12/31/2030 1,440 2,346.00 19.55 ..."
+        # Tried first: its bare building-id lines otherwise look like
+        # Format C unit numbers and every row collapses into a tenant name.
+        if sum(1 for l in all_lines if self._RR_LINE.match(l)) >= 2:
+            rows = self._parse_rent_roll_one_line(all_lines, page_numbers)
+            if rows:
+                return rows
+
         # Detect format: look for "Total" delimiters
         has_totals = any(l.lower() == 'total' for l in all_lines)
 
@@ -1695,6 +1704,83 @@ class ExtractionEngine:
             if has_totals:
                 return self._parse_rent_roll_format_b(all_lines, page_numbers)
             return []
+
+    # Format D row: building id, suite, occupant, rent start, expiration, sqft,
+    # then the money columns (monthly base rent, annual rate PSF, recoveries…).
+    # The suite may be alphanumeric ("10A", "LAND"); the sqft may be 0.
+    _RR_LINE = re.compile(
+        r'^(?P<bldg>\d{2,6})\s+(?P<suite>[A-Za-z0-9][A-Za-z0-9\-]{0,7})\s+(?P<name>.+?)\s+'
+        r'(?P<start>\d{1,2}/\d{1,2}/\d{4})\s+(?P<end>\d{1,2}/\d{1,2}/\d{4})\s+'
+        r'(?P<sqft>\d[\d,]*)(?P<rest>(?:\s+.*)?)$')
+    _RR_VACANT = re.compile(r'^(?P<bldg>\d{2,6})\s+(?P<suite>[A-Za-z0-9\-]{1,8})\s+Vacant\s+(?P<sqft>\d[\d,]*)\s*$', re.I)
+    # scheduled changes, on the row's tail or on their own continuation lines:
+    # "RNT 8/1/2026 3,783.75 9.00" (rent step), "PTX"/"N72"/"CON" = other charges
+    _RR_STEP = re.compile(r'\b(?P<cat>[A-Z][A-Z0-9]{2})\s+(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+(?P<amt>-?[\d,]+\.\d{2})\s+(?P<psf>-?[\d,]+\.\d{2})')
+    _RR_MONEY = re.compile(r'-?[\d,]+\.\d{2}')
+
+    def _parse_rent_roll_one_line(self, lines: List[str],
+                                  page_numbers: Dict[int, int]) -> List[Dict]:
+        """Format D: each occupied suite is ONE text line in column order;
+        future rent steps follow on the same line or on 'RNT date amt psf'
+        continuation lines. Section headings ('New Leases', 'Vacant Suites',
+        'Occupied Suites') set the status; 'Totals' ends the data."""
+        rows: List[Dict] = []
+        status = 'occupied'
+        for i, line in enumerate(lines):
+            low = line.lower().strip(': ')
+            if low in ('new leases', 'future leases'):
+                status = 'future'
+                continue
+            if low in ('vacant suites', 'vacant'):
+                status = 'vacant'
+                continue
+            if low in ('occupied suites', 'occupied'):
+                status = 'occupied'
+                continue
+            if low.startswith('total'):
+                break
+            vm = self._RR_VACANT.match(line)
+            if vm:
+                rows.append({'unit_number': vm.group('suite'), 'tenant_name': None,
+                             'square_footage': vm.group('sqft').replace(',', ''),
+                             'status': 'vacant', 'page_number': page_numbers.get(i)})
+                continue
+            m = self._RR_LINE.match(line)
+            if m:
+                rest = m.group('rest') or ''
+                first_step = self._RR_STEP.search(rest)
+                money = self._RR_MONEY.findall(rest[:first_step.start()] if first_step else rest)
+                monthly = float(money[0].replace(',', '')) if money else None
+                psf = float(money[1].replace(',', '')) if len(money) > 1 else None
+                sqft = float(m.group('sqft').replace(',', ''))
+                meta = {'building_id': m.group('bldg'), 'format': 'one_line'}
+                # the annual-rate column proves the monthly column when there is SF
+                if monthly and psf and sqft:
+                    meta['psf_check'] = 'ok' if abs(monthly * 12 / sqft - psf) <= 0.06 else 'off'
+                steps = [{'cat': s.group('cat'), 'date': s.group('date'),
+                          'monthly': float(s.group('amt').replace(',', ''))}
+                         for s in self._RR_STEP.finditer(rest)]
+                rows.append({'unit_number': m.group('suite'), 'tenant_name': m.group('name').strip(),
+                             'lease_start': m.group('start'), 'lease_end': m.group('end'),
+                             'square_footage': sqft, 'monthly_rent': monthly,
+                             'annual_rent': round(monthly * 12, 2) if monthly else None,
+                             'rent_psf': psf, 'status': status,
+                             'page_number': page_numbers.get(i), 'metadata': meta,
+                             '_steps': steps})
+                continue
+            # continuation: more scheduled steps for the previous row
+            if rows and rows[-1].get('_steps') is not None and self._RR_STEP.match(line.strip()):
+                for s in self._RR_STEP.finditer(line):
+                    rows[-1]['_steps'].append({'cat': s.group('cat'), 'date': s.group('date'),
+                                               'monthly': float(s.group('amt').replace(',', ''))})
+        for r in rows:
+            steps = r.pop('_steps', None)
+            if steps:
+                r['metadata']['future_rent'] = [s for s in steps if s['cat'] == 'RNT']
+                other = [s for s in steps if s['cat'] != 'RNT']
+                if other:
+                    r['metadata']['other_charges'] = other
+        return rows if sum(1 for r in rows if r.get('tenant_name')) >= 2 else []
 
     def _parse_rent_roll_format_a(self, lines: List[str],
                                    page_numbers: Dict[int, int]) -> List[Dict]:

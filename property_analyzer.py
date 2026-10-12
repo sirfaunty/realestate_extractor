@@ -113,6 +113,7 @@ class PropertyAnalyzer:
                             'UPDATE documents SET document_type=?, analysis_status=?, metadata=? WHERE id=?',
                             (new_type, 'ingested', meta, doc['id'])
                         )
+                        self.db.conn.commit()   # per doc: don't hold the write lock across the loop
                         doc['document_type'] = new_type
                         doc['analysis_status'] = 'ingested'
                         doc['metadata'] = meta
@@ -291,6 +292,7 @@ class PropertyAnalyzer:
                             'UPDATE documents SET document_type=?, analysis_status=?, metadata=? WHERE id=?',
                             (new_type, 'ingested', meta, doc['id'])
                         )
+                        self.db.conn.commit()   # per doc: don't hold the write lock across the loop
                         doc['document_type'] = new_type
                         doc['analysis_status'] = 'ingested'
                         doc['metadata'] = meta
@@ -612,10 +614,6 @@ class PropertyAnalyzer:
         if pkg_counts.get('rent_roll', 0) > 0:
             return pkg_counts['rent_roll']
 
-        # Clear any existing rent roll data for this document
-        self.db.conn.execute(
-            "DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
-
         # Use the extraction engine's text parser
         rows = self.engine._extract_rent_roll_from_text(doc)
 
@@ -624,6 +622,11 @@ class PropertyAnalyzer:
             template = get_template('rent_roll')
             if template:
                 rows = self.engine._extract_tabular(doc, template)
+
+        # Clear any existing rent roll data for this document (after parsing —
+        # never hold a write lock through slow work)
+        self.db.conn.execute(
+            "DELETE FROM rent_roll_entries WHERE document_id = ?", (doc_id,))
 
         # Validate and filter rent roll entries — reject headers, summaries,
         # and rows without meaningful data
@@ -639,7 +642,9 @@ class PropertyAnalyzer:
             if unit_lower in _GARBAGE_UNITS:
                 continue
             # Skip entries where unit_number is the property name
-            prop_name = doc_record.get('property_name', '').lower()
+            # property_name is NULL on documents filed by property id (Review
+            # approve / upload-to-property) — .get's default doesn't cover None
+            prop_name = (doc_record.get('property_name') or '').lower()
             if prop_name and unit_lower == prop_name:
                 continue
             # Skip if the tenant name looks like a header
@@ -673,6 +678,7 @@ class PropertyAnalyzer:
             try:
                 self.db.insert_rent_roll_entry(
                     document_id=doc_id,
+                    property_id=doc_record.get('property_id'),
                     property_name=property_name,
                     unit_number=row.get('unit_number'),
                     tenant_name=row.get('tenant_name'),
@@ -710,10 +716,6 @@ class PropertyAnalyzer:
         if pkg_counts.get('operating_items', 0) > 0:
             return pkg_counts['operating_items']
 
-        # Clear existing
-        self.db.conn.execute(
-            "DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))
-
         # Strategy 1: Columnar year-table parser (best for XLSX financial reports)
         rows = self._extract_columnar_financials(doc_id, doc_record)
 
@@ -726,6 +728,10 @@ class PropertyAnalyzer:
             template = get_template('operating_statement')
             if template:
                 rows = self.engine._extract_tabular(doc, template)
+
+        # Clear existing (after parsing — never hold a write lock through slow work)
+        self.db.conn.execute(
+            "DELETE FROM operating_statement_items WHERE document_id = ?", (doc_id,))
 
         # Store results
         property_name = doc_record.get('property_name')
@@ -1880,12 +1886,15 @@ class PropertyAnalyzer:
     def _analyze_with_engine(self, doc_id: int, doc: DocumentContent,
                               template) -> Dict[str, int]:
         """Run the full extraction engine for lease/loan/closing/accounting docs."""
-        # Clear existing extracted data for this document
-        for tbl in self._EXTRACTION_TABLES:
-            self.db.conn.execute(f"DELETE FROM {tbl} WHERE document_id = ?", (doc_id,))
-
         # Run extraction — standard engine (prose/legal patterns)
         extraction = self.engine.extract(doc, template)
+
+        # Clear existing extracted data for this document — AFTER the slow
+        # extraction: the DELETE opens a write transaction, and holding it
+        # through OCR/LLM work locked the org DB for every other writer
+        # (Review "approve" failed with "database is locked")
+        for tbl in self._EXTRACTION_TABLES:
+            self.db.conn.execute(f"DELETE FROM {tbl} WHERE document_id = ?", (doc_id,))
 
         # Supplement with table-aware extraction for XLSX docs
         # that have stored raw tables

@@ -2962,7 +2962,9 @@ class Database:
     # ─── Rent Roll Operations ────────────���───────────────────────────
 
     def insert_rent_roll_entry(self, document_id: int, run_id: int = None, **kwargs) -> int:
-        fields = ['property_name', 'unit_number', 'tenant_name', 'suite',
+        # property_id: the roster reads a property's rent roll by it — entries
+        # without it were invisible to the roster (live test 2026-10-11)
+        fields = ['property_id', 'property_name', 'unit_number', 'tenant_name', 'suite',
                   'square_footage', 'lease_start', 'lease_end', 'monthly_rent',
                   'annual_rent', 'rent_psf', 'status', 'notes', 'page_number', 'metadata']
         values = {f: kwargs.get(f) for f in fields}

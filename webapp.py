@@ -256,8 +256,11 @@ def enqueue_job(job_id, process_fn):
     _work_queue.put({'job_id': job_id, 'fn': process_fn})
 
 
-def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_name):
+def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_name,
+                               property_id=None):
     """Process a single document in its own thread with its own DB connection.
+    property_id: the property chosen at upload — the document is linked and
+    approved as it lands, so it never waits in the Review queue.
     Returns (result, error_occurred) tuple."""
     fname = os.path.basename(filepath)
     db = None
@@ -268,6 +271,20 @@ def _process_single_doc_thread(org_id, user_id, filepath, doc_type, property_nam
         result = processor.process_single(
             filepath, document_type=doc_type,
             property_name=property_name)
+        if property_id and result.success and result.document_id:
+            db.approve_document_match(result.document_id, int(property_id))
+        elif property_id and (result.error or '').startswith('Duplicate'):
+            # re-uploading a file that is still waiting in Review files it to
+            # the chosen property; one already filed elsewhere is left alone
+            from .pdf_ingestion import compute_file_hash
+            row = db.conn.execute(
+                "SELECT id, review_status FROM documents WHERE file_hash = ?",
+                (compute_file_hash(filepath),)).fetchone()
+            if row and row['review_status'] == 'pending_review':
+                db.approve_document_match(row['id'], int(property_id))
+                result.document_id = row['id']
+                result.success = True
+                result.error = None
         return result, False
     except Exception as doc_err:
         result = ProcessingResult(
@@ -824,7 +841,14 @@ def index():
 @login_required
 def file_extractor():
     """Unified file extractor page — single files, folders, or ZIP archives."""
-    return render_template('file_extractor.html', templates=list_templates())
+    db = get_org_db(session['org_id'])
+    try:
+        props = db.list_properties()
+    finally:
+        db.close()
+    return render_template('file_extractor.html', templates=list_templates(),
+                           properties=props,
+                           selected_property=request.args.get('property_id', type=int))
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -863,7 +887,20 @@ def upload():
             return redirect(request.url)
 
         doc_type = request.form.get('doc_type') or None
-        property_name = request.form.get('property_name') or None
+        # Every upload names its property up front: documents link as they
+        # land instead of being matched one by one in the Review queue
+        property_id = request.form.get('property_id', type=int)
+        prop = None
+        if property_id:
+            pdb = get_org_db(org_id)
+            try:
+                prop = pdb.get_property(property_id)
+            finally:
+                pdb.close()
+        if not prop:
+            flash('Choose the property these documents belong to.', 'error')
+            return redirect(url_for('file_extractor'))
+        property_name = prop['name']
 
         # Check document type entitlement
         if doc_type:
@@ -981,7 +1018,7 @@ def upload():
                     fname, fpath = saved[0]
                     on_step('ingesting', f'Reading {fname}...')
                     result, was_error = _process_single_doc_thread(
-                        org_id, user_id, fpath, doc_type, property_name)
+                        org_id, user_id, fpath, doc_type, property_name, property_id)
                     _on_result(result, was_error)
                 else:
                     # Multiple files — process in parallel
@@ -992,7 +1029,7 @@ def upload():
                             future = executor.submit(
                                 _process_single_doc_thread,
                                 org_id, user_id, fpath,
-                                doc_type, property_name
+                                doc_type, property_name, property_id
                             )
                             futures[future] = fname
 
