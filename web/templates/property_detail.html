@@ -62,6 +62,11 @@
                         <strong>Versioned Re-analyze</strong>
                         <span>Re-extract &amp; keep old data for comparison</span>
                     </button>
+                    <div style="padding: 6px 12px; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">Slow</div>
+                    <button onclick="runAnalysis('full', true)" class="analyze-menu-item" title="Adds the local AI model's pass for summaries and clause gaps. About a minute per lease; rents, square feet and dates come from the rules either way.">
+                        <strong>Full Re-run with AI</strong>
+                        <span>~1 min per lease; adds summaries &amp; clause gaps</span>
+                    </button>
                     <div style="border-top: 1px solid var(--border);">
                         <button onclick="runAssessment()" class="analyze-menu-item" style="border-bottom: none;">
                             <strong>Assess Health</strong>
@@ -1471,13 +1476,15 @@ document.addEventListener('click', () => {
     document.getElementById('analyze-menu').style.display = 'none';
 });
 
-/* ── Run analysis (mode: 'full' | 'smart' | 'new_only' | 'versioned') ── */
-function runAnalysis(mode) {
+/* ── Run analysis (mode: 'full' | 'smart' | 'new_only' | 'versioned';
+      withAI: also run the slow local-model pass — rules-only by default) ── */
+function runAnalysis(mode, withAI) {
     document.getElementById('analyze-menu').style.display = 'none';
+    withAI = !!withAI;
 
     // Versioned re-analyze uses a different endpoint
     if (mode === 'versioned') {
-        return runVersionedReanalyze();
+        return runVersionedReanalyze(withAI);
     }
 
     const btn = document.getElementById('analyze-btn');
@@ -1486,6 +1493,7 @@ function runAnalysis(mode) {
     toggle.disabled = true;
 
     const modeLabels = {full: 'Full re-run', smart: 'Smart re-run', new_only: 'New docs only'};
+    if (withAI) { for (const k in modeLabels) modeLabels[k] += ' with AI'; }
     btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:4px;"></span> ' + (modeLabels[mode] || 'Analyzing') + '...';
 
     document.getElementById('analysis-progress').style.display = 'block';
@@ -1494,7 +1502,7 @@ function runAnalysis(mode) {
     fetch('/api/property/{{ prop.id }}/analyze-selective', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({mode: mode})
+        body: JSON.stringify({mode: mode, ai: withAI})
     })
         .then(r => r.json())
         .then(data => {
@@ -1556,7 +1564,7 @@ function pollAnalysis(jobId) {
 }
 
 /* ── Versioned Re-analyze ── */
-function runVersionedReanalyze() {
+function runVersionedReanalyze(withAI) {
     const btn = document.getElementById('analyze-btn');
     const toggle = document.getElementById('analyze-dropdown-toggle');
     btn.disabled = true;
@@ -1569,6 +1577,7 @@ function runVersionedReanalyze() {
     fetch('/api/property/{{ prop.id }}/reanalyze', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ai: !!withAI})
     })
         .then(r => r.json())
         .then(data => {

@@ -647,6 +647,29 @@ class ExtractionEngine:
             return None
         return total + fractional
 
+    @staticmethod
+    def _scan_with_context(pattern, text, before, after=0):
+        """Every match of a VALUE pattern with the text around it, exactly as
+        the old '(.{0,before}?) VALUE (.{0,after})' patterns yielded it: the
+        context before runs back at most `before` chars and never into the
+        previous match (or its after-context), and the next search resumes
+        after the after-context. Without the lazy prefix the regex engine no
+        longer retries up to 150 prefixes at every position of the text —
+        that retry made the rule layer take ~40 s on a 100-page lease
+        (99% of a rules-only analysis; measured 2026-10-12)."""
+        out = []
+        pos = 0
+        n = len(text)
+        while pos <= n:
+            m = pattern.search(text, pos)
+            if not m:
+                break
+            ctx_before = text[max(pos, m.start() - before):m.start()]
+            ctx_after = text[m.end():m.end() + after] if after else ''
+            out.append((ctx_before, m, ctx_after))
+            pos = m.end() + after if m.end() > m.start() else m.end() + 1
+        return out
+
     def _extract_financial_rules(self, doc: DocumentContent,
                                   template: DocumentTemplate) -> List[Dict]:
         """
@@ -667,7 +690,6 @@ class ExtractionEngine:
 
         # ── Pass 1A: Written-out dollar amounts (most reliable) ──
         written_dollar_pattern = re.compile(
-            r'(.{0,150}?)'
             r'((?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|'
             r'twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|'
             r'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|'
@@ -677,9 +699,9 @@ class ExtractionEngine:
             re.IGNORECASE
         )
         dollar_matches = []
-        for m in written_dollar_pattern.finditer(text):
-            context_before = m.group(1).strip()
-            written_amount = m.group(2).strip()
+        for ctx_b, m, _ in self._scan_with_context(written_dollar_pattern, text, 150):
+            context_before = ctx_b.strip()
+            written_amount = m.group(1).strip()
             numeric = self._parse_written_number(written_amount)
             if numeric and numeric > 0:
                 dollar_matches.append({
@@ -693,16 +715,13 @@ class ExtractionEngine:
 
         # ── Pass 1B: Numeric dollar amounts as fallback ──
         dollar_num_pattern = re.compile(
-            r'(.{0,120}?)'
             r'\$\s*'
             r'([\d,.\s]{3,20})'
-            r'(.{0,60})',
-            re.DOTALL
         )
-        for m in dollar_num_pattern.finditer(text):
-            context_before = m.group(1).strip()
-            raw_num = re.sub(r'[,.\s]+$', '', m.group(2)).strip()
-            context_after = m.group(3).strip()
+        for ctx_b, m, ctx_a in self._scan_with_context(dollar_num_pattern, text, 120, 60):
+            context_before = ctx_b.strip()
+            raw_num = re.sub(r'[,.\s]+$', '', m.group(1)).strip()
+            context_after = ctx_a.strip()
             # Try to parse - but these are often garbled
             cleaned = re.sub(r'[^\d.]', '', raw_num)
             # Handle garbled patterns like "3000,.00000" -> likely 3,000,000
@@ -719,7 +738,6 @@ class ExtractionEngine:
 
         # ── Pass 2A: Written-out percentages (most reliable) ──
         written_pct_pattern = re.compile(
-            r'(.{0,150}?)'
             r'((?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|'
             r'twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|'
             r'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)[\s\-]+)*'
@@ -731,9 +749,9 @@ class ExtractionEngine:
             re.IGNORECASE
         )
         pct_matches = []
-        for m in written_pct_pattern.finditer(text):
-            context = m.group(1).strip()
-            raw_pct = m.group(2).strip()
+        for ctx_b, m, _ in self._scan_with_context(written_pct_pattern, text, 150):
+            context = ctx_b.strip()
+            raw_pct = m.group(1).strip()
             numeric = self._parse_written_number(raw_pct)
             if numeric is not None:
                 pct_matches.append({
@@ -749,13 +767,12 @@ class ExtractionEngine:
         rate_keywords = {'interest', 'rate', 'coupon', 'spread', 'margin', 'floor', 'cap', 'default'}
 
         num_pct_pattern = re.compile(
-            r'(.{0,120}?)'
             r'([\d]+[.\s]*[\d/]*)\s*(?:percent|%|per\s*(?:cent|annum))',
             re.IGNORECASE
         )
-        for m in num_pct_pattern.finditer(text):
-            context = m.group(1).strip()
-            raw_pct = m.group(2).strip()
+        for ctx_b, m, _ in self._scan_with_context(num_pct_pattern, text, 120):
+            context = ctx_b.strip()
+            raw_pct = m.group(1).strip()
             ctx_lower = context.lower()
             is_rate = any(kw in ctx_lower for kw in rate_keywords)
             numeric = self._parse_percentage(raw_pct, is_rate_field=is_rate)
@@ -768,7 +785,6 @@ class ExtractionEngine:
 
         # ── Pass 3: Extract dates with context ──
         date_pattern = re.compile(
-            r'(.{0,120}?)'
             r'(\d{1,2}(?:st|nd|rd|th)?\s+day\s+of\s+\w+,?\s*\d{4}'
             r'|(?:first|second|third|1st|2nd|3rd)\s+day\s+of\s+\w+,?\s*\d{4}'
             r'|\b(?:January|February|March|April|May|June|July|August|'
@@ -777,9 +793,9 @@ class ExtractionEngine:
             re.IGNORECASE
         )
         date_matches = []
-        for m in date_pattern.finditer(text):
-            context = m.group(1).strip()
-            raw_date = m.group(2).strip()
+        for ctx_b, m, _ in self._scan_with_context(date_pattern, text, 120):
+            context = ctx_b.strip()
+            raw_date = m.group(1).strip()
             date_matches.append({
                 'context': context,
                 'raw': raw_date,
@@ -788,14 +804,13 @@ class ExtractionEngine:
         # ── Pass 4: Extract named entities (company/partnership names) ──
         # More flexible pattern - handles newlines in names
         entity_pattern = re.compile(
-            r'(.{0,100}?)'
             r'([A-Z][A-Z\s,.\-&\']{4,80}?'
             r'(?:COMPANY|CORPORATION|PARTNERSHIP|LLC|LP|INC|TRUST|BANK|L\.P\.))',
         )
         entity_matches = []
-        for m in entity_pattern.finditer(text):
-            context = m.group(1).strip()
-            entity = re.sub(r'\s+', ' ', m.group(2)).strip().rstrip(',.')
+        for ctx_b, m, _ in self._scan_with_context(entity_pattern, text, 100):
+            context = ctx_b.strip()
+            entity = re.sub(r'\s+', ' ', m.group(1)).strip().rstrip(',.')
             # Skip false positives that are too short or look like headers
             if len(entity) < 8:
                 continue

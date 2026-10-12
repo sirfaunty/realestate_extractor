@@ -28,7 +28,7 @@ from .database import Database
 from .batch_processor import BatchProcessor, ProcessingResult
 from .property_analyzer import PropertyAnalyzer
 from .financial_synthesis import FinancialSynthesizer
-from .extractors.llm_client import LocalLLMClient
+from .extractors.llm_client import LocalLLMClient, DisabledLLMClient
 from .extractors.extraction_engine import DocumentClassifier
 from .templates.document_templates import list_templates, TEMPLATES
 from .reconciliation import reconcile_terms
@@ -397,7 +397,15 @@ def _close_cached_stores(exc):
             except Exception:
                 pass
 
-def get_llm():
+def get_llm(use_ai=True):
+    """The LLM client. Property analysis passes use_ai=False unless the
+    operator asks for the AI pass: rules-only is what every accuracy harness
+    measures, and the model adds ~1 min per lease (18 min for a 14-document
+    property on the laptop) and, measured against the rent roll, no rent
+    accuracy. Ingest classification, reclassify and the status page keep the
+    real client."""
+    if not use_ai:
+        return DisabledLLMClient(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
     return LocalLLMClient(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
 
 def allowed_file(filename):
@@ -3239,8 +3247,11 @@ def api_reextract(doc_id):
 @login_required
 def api_versioned_reanalyze(property_id):
     """Re-analyze all documents for a property with extraction versioning.
-    Creates new extraction runs so results can be compared against previous runs."""
+    Creates new extraction runs so results can be compared against previous runs.
+    Body (JSON, optional): ai: true runs the slow AI pass as well."""
     org_id = session['org_id']
+    body = request.get_json(silent=True) or {}
+    use_ai = bool(body.get('ai'))
 
     _cleanup_expired_jobs()
     job_id = str(uuid.uuid4())[:8]
@@ -3249,7 +3260,8 @@ def api_versioned_reanalyze(property_id):
         'org_id': org_id,
         'status': 'processing',
         'type': 'versioned_reanalyze',
-        'filename': f'Versioned re-analysis of property {property_id}',
+        'ai': use_ai,
+        'filename': f'Versioned re-analysis of property {property_id}' + (' (with AI)' if use_ai else ''),
         'total': 1,
         'progress': 0,
         'results': [],
@@ -3274,7 +3286,7 @@ def api_versioned_reanalyze(property_id):
         db2 = None
         try:
             db2 = get_org_db(org_id)
-            llm = get_llm()
+            llm = get_llm(use_ai)
             from .property_analyzer import PropertyAnalyzer
             analyzer = PropertyAnalyzer(db2, llm)
             analyzer._on_step = on_step
@@ -3572,8 +3584,9 @@ def api_bulk_reextract():
     })
 
 
-def _queue_property_analysis(org_id, property_id, trigger='manual'):
-    """Queue Phase 2 (LLM) analysis for a property's documents.
+def _queue_property_analysis(org_id, property_id, trigger='manual', use_ai=False):
+    """Queue Phase 2 analysis for a property's documents (rules-only unless
+    use_ai; the auto-trigger never uses the AI pass).
 
     Shared by the manual Analyze button and the auto-trigger that fires
     when an upload/batch finishes (product decision 2026-09-16: operators
@@ -3606,6 +3619,8 @@ def _queue_property_analysis(org_id, property_id, trigger='manual'):
     label = f'Analyzing {prop["name"]}'
     if trigger == 'auto':
         label += ' (auto)'
+    if use_ai:
+        label += ' (with AI)'
     jobs[job_id] = {
         'id': job_id,
         'org_id': org_id,
@@ -3613,6 +3628,7 @@ def _queue_property_analysis(org_id, property_id, trigger='manual'):
         'type': 'analysis',
         'property_id': property_id,
         'trigger': trigger,
+        'ai': use_ai,
         'filename': label,
         'total': len(docs),
         'progress': 0,
@@ -3636,7 +3652,7 @@ def _queue_property_analysis(org_id, property_id, trigger='manual'):
         db2 = None
         try:
             db2 = get_org_db(org_id)
-            llm = get_llm()
+            llm = get_llm(use_ai)
             analyzer = PropertyAnalyzer(db2, llm)
             analyzer._on_step = on_step
             summary = analyzer.analyze_property(property_id)
@@ -3694,9 +3710,11 @@ def _auto_queue_analysis_for_results(org_id, results):
 @app.route('/api/property/<int:property_id>/analyze', methods=['POST'])
 @login_required
 def api_analyze_property(property_id):
-    """Run Phase 2 analysis on all ingested documents for a property."""
+    """Run Phase 2 analysis on all ingested documents for a property.
+    Body (JSON, optional): ai: true runs the slow AI pass as well."""
+    body = request.get_json(silent=True) or {}
     job_id, info = _queue_property_analysis(session['org_id'], property_id,
-                                            trigger='manual')
+                                            trigger='manual', use_ai=bool(body.get('ai')))
     if not job_id:
         status = 404 if info == 'Property not found' else 400
         return jsonify({'error': info}), status
@@ -4014,11 +4032,13 @@ def api_analyze_selective(property_id):
     POST body (JSON):
         mode: 'full' | 'smart' | 'new_only'  (default: 'full')
         doc_types: ['closing', 'loan', ...]   (optional filter)
+        ai: true to run the slow AI pass as well (default: rules-only)
     """
     org_id = session['org_id']
     body = request.get_json(force=True) if request.data else {}
     mode = body.get('mode', 'full')
     doc_types = body.get('doc_types')
+    use_ai = bool(body.get('ai'))
 
     if mode not in ('full', 'smart', 'new_only'):
         return jsonify({'error': f'Invalid mode: {mode}'}), 400
@@ -4071,13 +4091,14 @@ def api_analyze_selective(property_id):
         db.close()
 
     job_id = _start_analysis_job(org_id, property_id, prop['name'], mode, doc_types,
-                                 process_ids, skip_ids, total_docs=len(docs))
+                                 process_ids, skip_ids, total_docs=len(docs), use_ai=use_ai)
     return jsonify({
         'success': True,
         'job_id': job_id,
         'processing': len(process_ids),
         'skipped': len(skip_ids),
         'mode': mode,
+        'ai': use_ai,
     })
 
 
@@ -4110,9 +4131,11 @@ def _auto_analyze_new_docs(org_id, property_ids) -> int:
 
 
 def _start_analysis_job(org_id, property_id, prop_name, mode, doc_types,
-                        process_ids, skip_ids, total_docs):
+                        process_ids, skip_ids, total_docs, use_ai=False):
     """Queue a Phase 2 analysis job for the given documents; returns its id."""
     mode_label = {'full': 'Full re-run', 'smart': 'Smart (needs rerun only)', 'new_only': 'New docs only'}.get(mode, mode)
+    if use_ai:
+        mode_label += ' with AI'
     _cleanup_expired_jobs()
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {
@@ -4120,6 +4143,7 @@ def _start_analysis_job(org_id, property_id, prop_name, mode, doc_types,
         'org_id': org_id,
         'status': 'processing',
         'type': 'analysis',
+        'ai': use_ai,
         'filename': f'{mode_label} — {prop_name}',
         'total': len(process_ids),
         'progress': 0,
@@ -4151,7 +4175,7 @@ def _start_analysis_job(org_id, property_id, prop_name, mode, doc_types,
         db2 = None
         try:
             db2 = get_org_db(org_id)
-            llm = get_llm()
+            llm = get_llm(use_ai)
 
             # Clear extraction data for docs being re-processed
             if _mode == 'full':

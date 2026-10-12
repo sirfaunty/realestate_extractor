@@ -324,6 +324,24 @@ class LocalLLMClient:
         return chunks
 
 
+class DisabledLLMClient(LocalLLMClient):
+    """An LLM client that is never available: every extraction path falls
+    through to its deterministic rules. This is what the harnesses measure
+    (`--model none`) and the product's default analysis mode — the model
+    costs ~1 min per lease and, measured against ground truth, added no rent
+    accuracy (it lowered high-confidence rents 28 -> 24 by reading stale
+    expirations). The AI pass is an explicit opt-in."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def is_available(self) -> bool:
+        return False
+
+    def generate_structured(self, prompt: str, system_prompt: str = "") -> Optional[Any]:
+        return None
+
+
 # ─── CLI Helper ─────────────────────────────────────────────────────
 #
 #   python -m realestate_extractor.extractors.llm_client --pin
