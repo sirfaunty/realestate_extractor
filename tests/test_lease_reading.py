@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.extractors.lease_segmenter import (  # noqa: E402
-    RE_EXPIRE_STMT, _party, _scan_expiration, _security_deposit, _sf_scan, _to_mdy,
+    RE_EXPIRE_STMT, _TRADE_NAME_RX, _party, _scan_expiration, _security_deposit, _sf_scan, _to_mdy,
     _year1_monthly_rent)
 
 
@@ -78,6 +78,104 @@ def test_hereinafter_referred_to_without_parens():
              'hereinafter referred to as “TENANT”.')
     assert _party(t, 'Landlord') == 'Cedar Station, L.L.C', _party(t, 'Landlord')
     assert _party(t, 'Tenant') == 'Maple Tack Retail, Inc', _party(t, 'Tenant')
+
+
+def test_cover_title_names_tenant_and_center():
+    # scanned shopping-center leases: the title page is the only place the
+    # first pages name the tenant (the preamble is deeper in the package)
+    t = flat('SHOPPING CENTER LEASE AGREEMENT FOR HARBOR LIGHT DENTAL, P.L.L.C. AT WILLOW BEND '
+             'SHOPPING CENTER T:\\FILES\\WILLOW BEND\\LEASE.DOCX REPAIRS Section 1. Landlord shall '
+             'keep the foundations in good repair.')
+    assert _party(t, 'Tenant') == 'HARBOR LIGHT DENTAL, P.L.L.C', _party(t, 'Tenant')
+    # body prose with "lease for ... at" is not a title
+    t = flat('Tenant accepts this Lease for a term of five years at the rent stated in Article 3.')
+    assert _party(t, 'Tenant') is None, _party(t, 'Tenant')
+
+
+def test_basic_provisions_block_labels():
+    t = flat("Section 1.1 Basic Lease Provisions DATE: January 8, 1999 LANDLORD: Willow Bend, Inc. "
+             "ADDRESS OF LANDLORD: 111 Example Avenue, Suite 211 Springfield, ZZ 00000 LANDLORD'S FEDERAL "
+             "ID NO: 00-0000000 TENANT: Hilltop Shoes, Inc. ADDRESS OF TENANT: 3520 Example Drive "
+             "Centerville, ZZ 00001 TENANT'S TRADE NAME: Hilltop Shoes 230 8 LEASED PREMISES: Space No. 4")
+    assert _party(t, 'Landlord') == 'Willow Bend, Inc', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Hilltop Shoes, Inc', _party(t, 'Tenant')
+    assert _TRADE_NAME_RX.search(t).group(1).strip() == 'Hilltop Shoes'
+    assert _TRADE_NAME_RX.search('Pine Air, LLC d/b/a Pine Air Fitness, a Minnesota').group(1) == 'Pine Air Fitness'
+
+
+def test_cover_quoted_roles_without_parentheses_ocr():
+    # cover page as a scanner reads it: stray punctuation, "Tenant" garbled
+    t = flat('LEASE AGREEMENT Between. -Oakridge Holdings, Incorporated “Landlord” and, '
+             'Maple Fabrics, LLC’ “Tenaot” Dated: July 22 ; 2016° measurement. Tenant and '
+             'Landlord shall each be responsible for one-half of the fees.')
+    assert _party(t, 'Landlord') == 'Oakridge Holdings, Incorporated', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Maple Fabrics, LLC', _party(t, 'Tenant')
+
+
+def test_cover_title_mixed_case_dba_and_terminators():
+    assert _party(flat('SHOPPING CENTER LEASE AGREEMENT FOR Willow Nails, LLC AT CEDAR ROW '
+                       'SHOPPING CENTER Section 2. Notwithstanding'), 'Tenant') == 'Willow Nails, LLC'
+    t = flat('LEASE AGREEMENT FOR P & Q EXAMPLE, LLC (dba Pupville) AT ELMWOOD SHOPPING CENTER')
+    assert _party(t, 'Tenant') == 'P & Q EXAMPLE, LLC', _party(t, 'Tenant')
+    assert _TRADE_NAME_RX.search(t).group(1) == 'Pupville'
+    t = flat('RETAIL LEASE AGREEMENT Retail/Office Building FOR QRS EXAMPLE LLC Doing business as '
+             'Noodle Grill AT RIVER ROW T:\\X\\LEASE.DOCX hired by Landlord')
+    assert _party(t, 'Tenant') == 'QRS EXAMPLE LLC', _party(t, 'Tenant')
+    assert _TRADE_NAME_RX.search(t).group(1) == 'Noodle Grill'
+    t = flat('RETAIL LEASE AGREEMENT FOR ALEX EXAMPLE dba: BLUE LEAF SMOKES AT RIVER ROW by')
+    assert _party(t, 'Tenant') == 'ALEX EXAMPLE', _party(t, 'Tenant')
+    # ends at the file path, no "AT"
+    t = flat('LEASE AGREEMENT FOR EVERGREEN CLINIC OF EXAMPLE, LLC T: X\\ELMWOOD\\LEASE.DOCX shall be construed')
+    assert _party(t, 'Tenant') == 'EVERGREEN CLINIC OF EXAMPLE, LLC', _party(t, 'Tenant')
+    # "AT ," as the scanner reads it
+    t = flat('SHOPPING CENTER LEASE AGREEMENT FOR FAIRWAY EXAMPLE GOLF LLC AT , ELMWOOD SQUARE I '
+             'SHOPPING CENTER T:\\X\\LEASE.DOCX any renewal')
+    assert _party(t, 'Tenant') == 'FAIRWAY EXAMPLE GOLF LLC', _party(t, 'Tenant')
+    # the center's own name is not a tenant
+    t = flat('LEASE.AGREEMENT FOR ELMWOOD SQUARE SHOPPING CENTER T:\\X\\LEASE (4.10.17).DOCX prior notice')
+    assert _party(t, 'Tenant') is None, _party(t, 'Tenant')
+    # a title naming the BUILDING: the role clauses win, and the building's
+    # name (part of the landlord's) is never the tenant
+    t = flat('Exhibit 10.20 OFFICE LEASE AGREEMENT FOR GRANITE TOWER AT RIVERSIDE LANDING GRANITE TOWER '
+             'OWNER LLC, a Delaware limited liability company as Landlord and THE EXAMPLE CORP., a '
+             'Delaware corporation as Tenant Dated: May 17, 2019')
+    assert _party(t, 'Tenant') == 'THE EXAMPLE CORP', _party(t, 'Tenant')
+    assert _party(flat('OFFICE LEASE AGREEMENT FOR GRANITE TOWER AT RIVERSIDE LANDING GRANITE TOWER OWNER '
+                       'LLC (“Landlord”) leases to the tenant named below'), 'Tenant') is None
+
+
+def test_cover_bracketed_roles():
+    t = flat('LEASE AGREEMENT BIRCHWOOD VENTURES, L.L.C. [Landlord] AND TIDEWATER BARBERS, INC. [Tenant] '
+             'FOR 918 square feet of GREAT CUTS ELMWOOD, ZZ 00000 fees) incurred by Landlord')
+    assert _party(t, 'Landlord') == 'BIRCHWOOD VENTURES, L.L.C', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'TIDEWATER BARBERS, INC', _party(t, 'Tenant')
+    t = flat('kwiktag ~ 000 000 000 LEASE AGREEMENT BIRCHWOOD VENTURES, LLC [Landlord] AND LEE EXAMPLE dba '
+             'RIVER LIQUOR DEPOT [Tenant] installed or located within the Premises.')
+    assert _party(t, 'Tenant') == 'LEE EXAMPLE', _party(t, 'Tenant')
+    assert _TRADE_NAME_RX.search(t).group(1) == 'RIVER LIQUOR DEPOT'
+
+
+def test_cover_lessor_lessee_labels_and_role_after_name():
+    t = flat('Lessor: Southgate Retail, LLC Lessee: Pat Example SHOPPING CENTER LEASE AGREEMENT '
+             'SOUTHGATE Document1 term shall be equitably prorated')
+    assert _party(t, 'Landlord') == 'Southgate Retail, LLC', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Pat Example', _party(t, 'Tenant')
+    t = flat('Prairie Example Bank, a national banking association chartered under Federal law and '
+             'authorized to do business in Minnesota TENANT and River Row Station, LLC LANDLORD '
+             'RIVER ROW STATION RETAIL LEASE AGREEMENT Retail/Office Building')
+    assert _party(t, 'Tenant') == 'Prairie Example Bank', _party(t, 'Tenant')
+    assert _party(t, 'Landlord') == 'River Row Station, LLC', _party(t, 'Landlord')
+
+
+def test_amendment_roles_in_parentheses_without_quotes():
+    t = flat('SECOND AMENDMENT TO LEASE This Second Amendment to Lease, dated as of 1998 (Second '
+             'Amendment), between Ole Example, successor in interest to Elmwood Plaza Limited '
+             'Partnership (Landlord) and Pawprint Pet Supply Outlet, Inc. (Tenant). WITNESSETH, '
+             'that: WHEREAS, Landlord and Tenant have entered into a Lease dated February 11, 1990')
+    assert _party(t, 'Landlord') == 'Ole Example', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Pawprint Pet Supply Outlet, Inc', _party(t, 'Tenant')
+    # the role word itself is never a party
+    assert _party(flat('agreed by Landlord and Tenant (Tenant) that the rent'), 'Tenant') is None
 
 
 def test_address_is_not_a_tenant():

@@ -809,13 +809,17 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
             break
     found = []
     m = re.search(r"([A-Z][A-Za-z0-9 .,&'’-]{2,60}?)\s*[,(]\s*"
-                  r'(?:an?\s+[^()\n]{0,60}?)?\(?["“]?Tenant["”]?\)',
+                  r'(?:(?i:an?)\s+[^()\n]{0,60}?)?\(?["“]?Tenant["”]?\)',
                   body[:20000])
     if m:
-        found.append(m.group(1).strip(' ,'))
-    m = re.search(r"d[./]?b[./]?a[./]?\s*([A-Z][A-Za-z0-9 .&'’-]{2,40})",
-                  body[:20000])
-    if m:
+        # cleaned like every other party: an entity description alone ("A
+        # Delaware Corporation" left on its own line by the scan) is not a name
+        cleaned = _clean_party(m.group(1).strip(' ,'))
+        if cleaned:
+            found.append(cleaned)
+    m = _TRADE_NAME_RX.search(body[:20000])
+    if m and not re.match(r'(?i)^(?:section|article|exhibit|schedule|page|witnesseth|tenant|landlord)\b',
+                          m.group(1)):      # a scan put the heading where the name was
         found.append(m.group(1).strip())
     net = ' / '.join(dict.fromkeys(found)) if found else None
     if net and not _looks_like_party(net):
@@ -1154,6 +1158,16 @@ def _sf_scan(text, base, pg, cands, restate_only=False):
 
 
 # New York / Texas forms call the landlord "Owner"
+# the trade name next to the legal one: "d/b/a Hilltop Shoes" in a preamble,
+# or "TENANT'S TRADE NAME: Hilltop Shoes" in a basic-provisions block. It
+# becomes a second tenant_identity (an alias the roster can show and match
+# the rent roll on — rent rolls carry trade names, not legal names).
+# The name ends at punctuation, a number, the next LABEL: or lowercase prose
+# ("Hilltop Shoes 230 8 LEASED PREMISES:" -> "Hilltop Shoes").
+_TRADE_NAME_RX = re.compile(r"(?:\bd[./]?b[./]?a[./]?:?|(?i:doing\s+business\s+as)|(?i:trade\s+name)\s*:)\s*"
+                            r"([A-Z][A-Za-z0-9 .&'’-]{2,40}?)"
+                            r"(?=\s*(?:[,();:\[\]]|\.\s|$)|\s\d|\s[A-Z][A-Z'’ ]+:|\s[a-z]{3,}\b)")
+
 _ROLE_ALIASES = {'Landlord': '(?:Landlord|Lessor|Owner)', 'Tenant': '(?:Tenant|Lessee)'}
 _OTHER_ROLE = {'Landlord': 'Tenant', 'Tenant': 'Landlord'}
 
@@ -1200,15 +1214,45 @@ def _party(flat, role):
         # (the role closes the clause — "at such time as Landlord is able"
         # is prose, not a party)
         conn + r'\s+(?:the\s+)?([A-Z][^()"“;]{2,160}?),?\s+'
-        rf'(?i:as)\s+(?:the\s+)?(?:["“](?i:{r_role})["”]|(?i:{r_role})\b(?=\s*(?:[,.;:)]|(?i:and)\b|$)))',
+        rf'(?i:as)\s+(?:the\s+)?(?:["“](?i:{r_role})["”]|(?i:{r_role})\b(?=\s*(?:[,.;:)]|(?i:and)\b|$)|\s+(?i:dated)\b))',
         # summary label-first: "1.2 Landlord: The Realty Associates Fund VIII,
         # L.P., a Delaware ..."; "1.1 LANDLORD: CIM/H&H RETAIL, L.P., a ..."
         rf'(?<![A-Za-z’\'])["“]?\s*(?i:{r_role[3:-1]})\s*["”]?\s*:\s*'
         r'([A-Z][^:;]{2,120}?)(?=,?\s+(?:an?|A|AN)\s+[A-Za-z]+\s+(?i:limited|corporation|general|'
         r'company|LLC|liability|partnership)|\s+\d{1,2}\.\d{1,2}\s|\s+[A-Z]\.\s|'
         r'\s+(?i:address)\s*:|\s+\(\w\)\s|\s+(?i:c/o)\s|'
+        # basic-provisions blocks: "TENANT: Hilltop Shoes, Inc. ADDRESS OF
+        # TENANT: ..." / "LANDLORD'S FEDERAL ID NO:" / "TENANT'S TRADE NAME:"
+        r'\s+(?i:address\s+of)\s|\s+(?:TENANT|LANDLORD|LESSEE|LESSOR)(?:’|\')S\s|'
+        r'\s+(?:Tenant|Landlord|Lessee|Lessor|TENANT|LANDLORD|LESSEE|LESSOR)\s*:|'
+        r'\s+(?:SHOPPING\s+CENTER\s+|RETAIL\s+)?LEASE\s+AGREEMENT\b|'
         # the next summary field: "Advantage Therapy, LLC Tenant Contact Information:"
         r'\s+(?:Tenant|Landlord|Lessee|Lessor)(?:’s|\'s)?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*:)',
+        # cover page with quoted roles and NO parentheses — "Between Oakridge
+        # Holdings, Incorporated “Landlord” and, Maple Fabrics, LLC’ “Tenant”".
+        # Scanned covers garble the role word ("Tenaot"), so after a quoted
+        # Landlord the quoted word that closes the second party is accepted
+        # loosely; the Landlord itself must read cleanly.
+        (r'(?i:\bbetween)\.?\s+[^"“]{2,200}?["“]\s*(?i:Landlord|Lessor)\s*["”]\s+'
+         r'(?i:and),?\s+([A-Z][^"“]{2,120}?)[’\']?\s*["“]\s*(?i:Ten[a-z]{2,3}t|Lessee)\s*["”]'
+         if role == 'Tenant' else
+         r'(?i:\bbetween)\.?\s+-?([A-Z][^"“]{2,120}?)[’\']?\s*["“]\s*(?i:Landlord|Lessor)\s*["”]\s+(?i:and)\b'),
+        # amendment preambles with the role in parentheses and NO quotes:
+        # "between Ole Example, successor in interest to Elmwood Plaza Limited
+        # Partnership (Landlord) and Pawprint Pet Supply Outlet, Inc. (Tenant)"
+        conn + rf'\s+(?:the\s+)?([A-Z0-9][^()"“]{{2,160}}?)\s*\(\s*(?i:{r_role})\s*\)',
+        # cover sheet with bracketed roles: "LEASE AGREEMENT BIRCHWOOD VENTURES,
+        # L.L.C. [Landlord] AND TIDEWATER BARBERS, INC. [Tenant] FOR 918 square feet"
+        (r'\[\s*(?i:Landlord|Lessor)\s*\]\s+(?i:and)\s+([A-Z][^\[\]]{2,120}?)\s*\[\s*(?i:Tenant|Lessee)\s*\]'
+         if role == 'Tenant' else
+         # the name may not run back over the title word ("LEASE AGREEMENT X")
+         r'\b(?!AGREEMENT\s)([A-Z](?:(?!\bAGREEMENT\s)[^\[\]]){2,120}?)\s*\[\s*(?i:Landlord|Lessor)\s*\]'),
+        # cover sheet naming the parties with the role AFTER each, at the very
+        # top: "Prairie Example Bank, a national banking association ...
+        # TENANT and River Row Station, LLC LANDLORD ... LEASE AGREEMENT"
+        (r'^\W*([A-Z][^\n]{2,160}?),?\s+TENANT\s+(?i:and)\s+'
+         if role == 'Tenant' else
+         r'\sTENANT\s+(?i:and)\s+([A-Z][^\n]{2,160}?),?\s+LANDLORD\b'),
     )
     if role == 'Landlord':
         # cover page: "LEASE BETWEEN X, LLC A Nevada LLC Landlord And Y Tenant"
@@ -1239,13 +1283,44 @@ def _party(flat, role):
             name = _clean_party(cand)
             if name:
                 return name
+    if role == 'Tenant':
+        return _title_tenant(flat)
     return None
+
+
+def _title_tenant(flat):
+    """Fallback when no role clause names the tenant: the cover title
+    "SHOPPING CENTER LEASE AGREEMENT FOR HARBOR LIGHT DENTAL, P.L.L.C. AT
+    WILLOW BEND SHOPPING CENTER" (scanned packages whose first pages are the
+    title and an unrelated middle page). Keywords stay upper-case so body
+    prose ("this Lease Agreement for the Premises at ...") never matches; the
+    name may be mixed case ("FOR Willow Nails, LLC AT ..."), carry a dba, and
+    end at "AT <center>", at the file path ("T:\\...") or at the first section.
+    A title can also name the BUILDING ("OFFICE LEASE AGREEMENT FOR <tower>
+    AT <project>"), so a name that is part of the landlord's, or that ends in
+    a center word, is not a tenant."""
+    m = re.search(r"\bLEASE[.\s]+AGREEMENT(?:\s+[A-Za-z/]+){0,3}\s+FOR\s+"
+                  r"([A-Za-z][A-Za-z0-9 .,&'’()/:-]{2,100}?)"
+                  r"(?=\s+AT\s*,?\s+[A-Z]|\s+[A-Z]:[\\ ]|\s+Section\s+\d|\s+(?i:this\s+lease)\b|$)",
+                  flat[:600])
+    if not m or re.search(r'(?i)\b(?:shopping\s+cent(?:er|re)|cent(?:er|re)|plaza|mall|square|'
+                          r'station|commons|marketplace|village|tower|building)\s*$', m.group(1)):
+        return None
+    name = _clean_party(m.group(1))
+    if not name:
+        return None
+    ll = _party(flat, 'Landlord') or ''
+    toks = {t for t in re.findall(r'[a-z0-9]{3,}', name.lower())
+            if t not in ('llc', 'inc', 'the', 'and', 'corp', 'company')}
+    if toks and toks <= set(re.findall(r'[a-z0-9]{3,}', ll.lower())):
+        return None
+    return name
 
 
 def _clean_party(name):
     # cut the entity description: ", a Minnesota limited liability company",
     # ", whose address is ...", "LLC A Nevada Limited Liability Company"
-    name = re.split(r',\s*(?:an?|as|its|whose|with|having)\s', name, maxsplit=1)[0]
+    name = re.split(r',\s*(?:an?|as|its|whose|with|having|successor|formerly|f/k/a|n/k/a)\s', name, maxsplit=1)[0]
     # ... and what follows the name on cover pages / notice blocks: "c/o ...",
     # a street address ("Inc., 29006 W. Eight Mile Road", "BANK 1250 Hwy 35"),
     # "OWNER OF <center> By <managing agent>"
@@ -1254,11 +1329,17 @@ def _clean_party(name):
     name = re.split(r'\s+(?:A|AN|An|a|an)\s+(?=[A-Z][a-z]+\s+(?:Limited|Corporation|Company|'
                     r'corporation|limited|general|LLC))', name, maxsplit=1)[0]
     name = re.sub(r',?\s+party\s+of\s+the\s+(?:first|second)\s+part.*$', '', name, flags=re.I)
-    name = re.sub(r'\s+(?:d/?b/?a|doing business as)\s.*$', '', name, flags=re.I)
+    name = re.sub(r'\s*\(?\s*(?:d/?b/?a:?|doing business as)\s.*$', '', name, flags=re.I)
     name = re.sub(r'^(?:between|and)\s+', '', name.strip(), flags=re.I)   # "BY AND BETWEEN X"
-    name = re.sub(r'\s+', ' ', name).strip(' ,.;:')
+    # scanned covers leave a stray quote or dash on the name ("LLC’", "-Oakridge")
+    name = re.sub(r'\s+', ' ', name).strip(' ,.;:’\'-')
     if not _looks_like_party(name):
         return None
+    if re.match(r'(?i)^(?:an?|the)\s+(?:\w+\s+){0,3}(?:corporation|company|limited|llc|l\.l\.c\.?|'
+                r'partnership|association|trust|individual)\.?$', name):
+        return None                     # "A Delaware Corporation", "an individual"
+    if re.match(r'(?i)^(?:the\s+)?(?:tenant|landlord|lessee|lessor|owner|licensee|licensor)$', name):
+        return None                     # the role word itself
     suffixes = {'llc', 'inc', 'co', 'corp', 'ltd', 'lp', 'llp', 'pa', 'pc',
                 'company', 'corporation', 'partnership', 'limited', 'the'}
     words = [w for w in re.findall(r"[A-Za-z0-9&'’]+", name)
