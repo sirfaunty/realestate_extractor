@@ -29,6 +29,7 @@ from .batch_processor import BatchProcessor, ProcessingResult
 from .property_analyzer import PropertyAnalyzer
 from .financial_synthesis import FinancialSynthesizer
 from .extractors.llm_client import LocalLLMClient, DisabledLLMClient
+from .worker_pool import run_analysis
 from .extractors.extraction_engine import DocumentClassifier
 from .templates.document_templates import list_templates, TEMPLATES
 from .reconciliation import reconcile_terms
@@ -3286,11 +3287,8 @@ def api_versioned_reanalyze(property_id):
         db2 = None
         try:
             db2 = get_org_db(org_id)
-            llm = get_llm(use_ai)
-            from .property_analyzer import PropertyAnalyzer
-            analyzer = PropertyAnalyzer(db2, llm)
-            analyzer._on_step = on_step
-            summary = analyzer.analyze_property(property_id, versioned=True)
+            summary = run_analysis(db2.db_path, property_id, versioned=True, use_ai=use_ai,
+                                   on_step=on_step, ollama_url=OLLAMA_URL, ollama_model=OLLAMA_MODEL)
             on_step('complete', f'Re-analysis complete — {summary.get("doc_count", 0)} documents')
             jobs[job_id]['results'] = [summary]
             jobs[job_id]['progress'] = 1
@@ -3652,10 +3650,8 @@ def _queue_property_analysis(org_id, property_id, trigger='manual', use_ai=False
         db2 = None
         try:
             db2 = get_org_db(org_id)
-            llm = get_llm(use_ai)
-            analyzer = PropertyAnalyzer(db2, llm)
-            analyzer._on_step = on_step
-            summary = analyzer.analyze_property(property_id)
+            summary = run_analysis(db2.db_path, property_id, use_ai=use_ai, on_step=on_step,
+                                   ollama_url=OLLAMA_URL, ollama_model=OLLAMA_MODEL)
 
             jobs[job_id]['results'] = [summary]
             jobs[job_id]['progress'] = summary.get('doc_count', 0)
@@ -4175,7 +4171,6 @@ def _start_analysis_job(org_id, property_id, prop_name, mode, doc_types,
         db2 = None
         try:
             db2 = get_org_db(org_id)
-            llm = get_llm(use_ai)
 
             # Clear extraction data for docs being re-processed
             if _mode == 'full':
@@ -4196,13 +4191,13 @@ def _start_analysis_job(org_id, property_id, prop_name, mode, doc_types,
                         db2.conn.execute(f"DELETE FROM {table} WHERE document_id IN ({ph})", _process_ids)
                     db2.conn.commit()
 
-            analyzer = PropertyAnalyzer(db2, llm)
-            analyzer._on_step = on_step
-
-            if _mode == 'full' and not doc_types:
-                summary = analyzer.analyze_property(property_id)
-            else:
-                summary = analyzer.analyze_documents(property_id, _process_ids)
+            # the analysis itself runs in a worker process (worker_pool.py);
+            # this job thread just waits and relays progress
+            summary = run_analysis(
+                db2.db_path, property_id,
+                doc_ids=None if (_mode == 'full' and not doc_types) else _process_ids,
+                use_ai=use_ai, on_step=on_step,
+                ollama_url=OLLAMA_URL, ollama_model=OLLAMA_MODEL)
 
             summary['skipped'] = len(_skip_ids)
             summary['mode'] = _mode
