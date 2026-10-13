@@ -30,7 +30,7 @@ from datetime import date
 from typing import Optional
 
 from .extractors.rent_derivation import (
-    derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num)
+    derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num, _text_memo)
 
 _ENTITY_WORDS = {'llc', 'inc', 'incorporated', 'corp', 'corporation', 'company',
                  'co', 'lp', 'llp', 'ltd', 'pa', 'pllc', 'dba', 'the', 'of', 'and'}
@@ -455,6 +455,7 @@ _RESTATED_SF = [re.compile(p, re.I) for p in (
 )]
 
 
+@_text_memo
 def _restated_sf(chain_text: str) -> Optional[float]:
     """The LAST premises restatement in the chain (later instrument = the
     current premises), or None."""

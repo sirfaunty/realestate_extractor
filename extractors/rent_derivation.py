@@ -26,10 +26,54 @@ the pilot rent tie-out harness against the landlord's rent roll.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import re
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Optional
+
+# ─── memo for the text parsers ────────────────────────────────────
+# Every roster view re-parsed every lease's full text (2.1 s for 19
+# tenancies, measured 2026-10-13; parse_dated_rows alone 1.0 s). The parsers
+# are pure functions of the text (+ a scalar or two), so their results are
+# kept per text hash. Callers get a deep copy: _anchor dates the rows in
+# place, and one view's dating must not leak into the next.
+_MEMO: "OrderedDict[tuple, object]" = OrderedDict()
+_MEMO_MAX = 2048
+_MEMO_LOCK = threading.Lock()
+
+
+def _text_memo(fn):
+    """Memoise fn(text, *scalars) on a hash of the text and the scalars."""
+    name = fn.__name__
+
+    def wrapper(text, *args, **kwargs):
+        key = (name, hashlib.sha1((text or '').encode('utf-8', 'surrogatepass')).hexdigest(),
+               args, tuple(sorted(kwargs.items())))
+        with _MEMO_LOCK:
+            hit = _MEMO.get(key)
+            if hit is not None:
+                _MEMO.move_to_end(key)
+                return copy.deepcopy(hit[0])
+        out = fn(text, *args, **kwargs)
+        with _MEMO_LOCK:
+            _MEMO[key] = (copy.deepcopy(out),)      # a 1-tuple: a cached None is a hit too
+            while len(_MEMO) > _MEMO_MAX:
+                _MEMO.popitem(last=False)
+        return out
+
+    wrapper.__wrapped__ = fn
+    wrapper.__name__ = name
+    wrapper.__doc__ = fn.__doc__
+    return wrapper
+
+
+def clear_parse_cache():
+    with _MEMO_LOCK:
+        _MEMO.clear()
 
 # thousands separator may be OCR'd as '.' ("$5.706.25", "$30.578.35")
 _MONEY = r'\$?\s*(\d{1,3}(?:[,.]\d{3})+(?:\.\d{2})?|\d+\.\d{2})'
@@ -141,6 +185,7 @@ def lease_years_elapsed(commencement: date, as_of: date) -> int:
 
 # ─── schedule parsing ─────────────────────────────────────────────
 
+@_text_memo
 def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleRow]:
     """Rent-schedule rows = consecutive self-verifying annual/monthly pairs.
 
@@ -320,6 +365,7 @@ def _term_index(m) -> Optional[int]:
     return k
 
 
+@_text_memo
 def _term_lengths(flat: str) -> tuple[Optional[int], Optional[int]]:
     """(initial term, each extension) in months, from the Term article:
     'The Initial Term ... shall run ... for fifteen (15) years',
@@ -469,6 +515,7 @@ def _monthly_from(seg: str, header: str, nearest_last: bool = False) -> Optional
     return None
 
 
+@_text_memo
 def parse_dated_rows(text: str) -> list[ScheduleRow]:
     """Rows whose period is an explicit date range, in any of the forms
     real leases use: table rows ('11/1/2013 through 10/31/2014 $21,645.00
@@ -675,6 +722,7 @@ _EXERCISED = re.compile(
     r'[^.]{0,80}?(?:expir\w+|end\w*|through|until)\s+(?:on\s+)?(' + _D + ')')
 
 
+@_text_memo
 def _exercised_options(flat: str) -> list[tuple[date, int]]:
     out = {}
     for m in _EXERCISED.finditer(flat):

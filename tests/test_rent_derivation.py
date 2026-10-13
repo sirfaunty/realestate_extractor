@@ -555,6 +555,23 @@ def test_seasonal_lease_lump_sum_is_not_a_monthly_rent():
     assert '$22,500.00' in r.detail and '2026-06-15..2026-11-23' in r.detail, r.detail
 
 
+def test_parse_memo_returns_equal_independent_copies():
+    from realestate_extractor.extractors import rent_derivation as rd
+    rd.clear_parse_cache()
+    t = NAMED_TERM_LEASE + '\n\n' + LETTER_1 + '\n\n' + LETTER_2
+    a = parse_rent_schedule(t, sf=9000)
+    b = parse_rent_schedule(t, sf=9000)         # served from the memo
+    assert a == b and a is not b and a[0] is not b[0]
+    # dating one view's rows in place must not reach the next view
+    r = rent(t, square_feet=9000)
+    assert r.monthly == 5250.00
+    c = parse_rent_schedule(t, sf=9000)
+    assert all(x.start is None and '[' not in x.label for x in c), [(x.label, x.start) for x in c]
+    # a different SF is a different entry
+    assert parse_rent_schedule(t, sf=4500)[0].monthly == 2250.00
+    assert parse_dated_rows(t) == parse_dated_rows(t)
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
