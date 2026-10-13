@@ -577,6 +577,64 @@ def test_premises_shown_on_site_plan_and_recital_consisting_of():
     assert best_sf(t) == 9850, best_sf(t)
 
 
+def test_round2_shapes_parties():
+    # abstract form, lettered blocks, columns interleaved by extraction
+    t = flat('1.1 PARTIES A. LANDLORD Name: Oakridge Commercial Property Phone: (630)555-0100 Management, '
+             'Inc., an Illinois B. OWNER Name: Oakridge Real Estate LB I LLC Phone: (630)555-0100 '
+             'C. TENANT Name: (and Maple Fabrics, Inc., a California Phone:Store (323)555-0111')
+    assert _party(t, 'Landlord') == 'Oakridge Commercial Property', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'Maple Fabrics, Inc', _party(t, 'Tenant')
+    # filed-exhibit title "X LEASE TO Y"
+    t = flat('======== EXHIBIT 10.1 ELMWOOD CENTER, LLC LEASE TO THE MAPLE COMPANIES LTD. OF '
+             'APPROXIMATELY 2400 SQUARE FEET OF SPACE')
+    assert _party(t, 'Landlord') == 'ELMWOOD CENTER, LLC', _party(t, 'Landlord')
+    # fill-in blanks, and a firm whose name contains a street word
+    t = flat('THIS LEASE, is executed this __10__day of July, 2014, by and between _Birch Road Industrial '
+             'Associates, 2880 Birch Road, Suite D, Elmwood, PA. 00000, hereinafter called Lessor, and '
+             'Example Corp, hereinafter called Lessee.')
+    assert _party(t, 'Landlord') == 'Birch Road Industrial Associates', _party(t, 'Landlord')
+    # OCR typos "betweeen" / "reerred", a name starting with a digit
+    t = flat('Agreement of Lease, made as of this 8th day of August in the year 2014, betweeen 80 EXAMPLE '
+             'DRIVE ASSOCIATES LLC, a Delaware limited liability company, having an address c/o Example '
+             'Partners, 85 South Service Road, Plainview, New York, party of the first part, hereinafter '
+             'reerred to as OWNER, and EXAMPLE INDUSTRIES, INC., a Delaware corporation, party of the '
+             'second part, hereinafter referred to as Tenant,')
+    assert _party(t, 'Landlord') == '80 EXAMPLE DRIVE ASSOCIATES LLC', _party(t, 'Landlord')
+    assert _party(t, 'Tenant') == 'EXAMPLE INDUSTRIES, INC', _party(t, 'Tenant')
+
+
+def test_round2_shapes_dates_sf_rent_deposit():
+    assert scan('The base Term of this Lease shall begin with the Commencement Date and which shall '
+                'expire December 31, 2011 unless sooner terminated.') == '12/31/2011'
+    assert scan('The term of this lease shall commence on the 25th day of September, 2014 (the '
+                '"Commencement Date") and continue until August 31, 2021. A lease year') == '8/31/2021'
+    assert scan('to commence on the 1st day of SEPTEMBER, 2010, and to end of the 30th day of '
+                'NOVEMBER, 2013, both dates inclusive') == '11/30/2013'
+    assert best_sf(flat('B. LEASED AREA: The 3,883 gross square foot building on approximately 0.80 '
+                        'acres of land')) == 3883
+    t = flat('Owner hereby leases to Tenant and Tenant hereby hires from Owner 10,000 Square Feet, '
+             'Approximately in the building known as 1 Example Avenue')
+    c = []
+    _sf_scan(t, 0, 1, c)
+    assert c and _sf_pick(c)[1] == 10000 and _sf_pick(c)[0] >= 2, c
+    y1 = lambda s, sf=None: (_year1_monthly_rent(flat(s), flat(s), sf) or (None,))[0]
+    assert y1('2.01 Guaranteed Minimum Rent. Tenant agrees to pay, as a Guaranteed Minimum Rent, the sum '
+              'Four thousand one hundred dollars and 50/00 ($4,100.50) in advance on the first day of '
+              'each calendar month of each lease year.') == 4100.50
+    assert y1('Base Rent in the sum of Six Hundred Thousand Dollars ($600,000.00), payable as follows: '
+              'the sum of Eight Thousand Dollars ($8,000.00) per month for Lease months one (1) through '
+              'eighteen (18), and $8,500.00 per month thereafter.') == 8000.00
+    assert y1('the minimum rent for the Leased Premises for the Lease Term, the sum of ($150,000.00), '
+              'payable in installments of $2,500.00 each, such installments to be paid monthly in '
+              'advance.') == 2500.00
+    assert y1('Base Rent schedule is as indicated below: Year 1 March 1, 2010 - December 31, 2010 $2.00 '
+              'per square foot Year 2 January 1, 2011 - December 31, 2011 $3.00 per square foot',
+              sf=3600) == 600.00
+    t = flat('3.05 Security Deposit. Tenant will deposit with Landlord upon Tenant\'s receipt of the '
+             'Vacating Notice, the sum of Six Thousand Dollars ($6,000.00) (the "Security Deposit").')
+    assert _security_deposit(t)[0] == 6000.00, _security_deposit(t)
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
