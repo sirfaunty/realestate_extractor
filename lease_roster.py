@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
+from .extractors.lease_segmenter import _sf_pick, _sf_scan
 from .extractors.rent_derivation import (
     derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num, _text_memo)
 
@@ -458,7 +459,15 @@ _RESTATED_SF = [re.compile(p, re.I) for p in (
 @_text_memo
 def _restated_sf(chain_text: str) -> Optional[float]:
     """The LAST premises restatement in the chain (later instrument = the
-    current premises), or None."""
+    current premises), or None.
+
+    Two readers look: the lease reader's own premises scan (a relocation's
+    "deliver to Tenant possession of that certain space containing N", a
+    modification's "certain real property containing N", "shall thereafter
+    contain" ...) and the roster's amendment wordings below. The one latest
+    in the chain wins. Reading the text here, not only the stored term, means
+    the roster shows the current premises even when the property's last
+    analysis predates the reader that knows the wording."""
     flat = re.sub(r'\s+', ' ', chain_text or '')
     best = None
     for rx in _RESTATED_SF:
@@ -466,6 +475,12 @@ def _restated_sf(chain_text: str) -> Optional[float]:
             v = _num(m.group(m.lastindex))
             if v and 50 < v < 500_000 and (best is None or m.start() > best[0]):
                 best = (m.start(), v)
+    cands = []
+    _sf_scan(flat, 0, 1, cands)
+    if cands:
+        pick = _sf_pick(cands)        # (score, value, page, restated, position)
+        if pick[3] and (best is None or pick[4] > best[0]):
+            best = (pick[4], float(pick[1]))
     return best[1] if best else None
 
 

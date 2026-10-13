@@ -1140,7 +1140,11 @@ _SF_LABEL_RX = re.compile(r'(?:(?:leasable|rentable|floor)\s+area(?:\s+of\s+(?:t
 # approximately N square feet located at ...")
 _SF_RESTATE_RX = re.compile(
     r'new\s+premises|thereafter\s+contain|combined\s+premises|enlarg\w*\s+the\s+total|'
-    r'square\s+f(?:ee|oo)t\s+to\s*$|\bto\s+a\s+total\s+of|containing\s+a\s+total\s+of|'
+    # an expansion's "from N square feet to M square feet" (the FROM matters: a
+    # right of first refusal on "space measuring 900 square feet to 1,100 square
+    # feet" is a range, not the premises)
+    r'\bfrom\s+(?:approximately\s+)?[\d,.]+\s*(?:rentable\s+|leasable\s+)?square\s+f(?:ee|oo)t\s+to\s*$|'
+    r'\bto\s+a\s+total\s+of|containing\s+a\s+total\s+of|'
     r'leased\s+premises\s+shall\s+(?:now|thereafter)|'
     r'agree\s+to\s+relocate\s+the\s+premises|'
     r'deliver\w*\s+to\s+tenant\b[^.]{0,80}?possession\s+of\b[^.]{0,60}?containing\s+(?:approximately\s+)?$|'

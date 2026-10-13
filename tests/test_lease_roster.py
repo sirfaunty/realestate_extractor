@@ -190,6 +190,19 @@ def test_no_restatement_means_none():
     assert _restated_sf(t) is None
 
 
+def test_relocation_delivery_and_later_recital_restate_the_premises():
+    # a relocation amendment hands over a smaller suite; the roster must read it
+    # off the text the way the lease reader does (the stored term may predate it)
+    t = """LEASE. Landlord leases to Tenant approximately 2,000 square feet known as
+    Suite 4 of the Pinecrest Commons. ... Tenant shall pay $1.00 per 2,000 square feet ...
+    RELOCATION AMENDMENT. Landlord shall deliver to Tenant (including keys to all
+    doors) possession of that certain space containing approximately 1,350 square
+    feet having a street address of 88 Pinecrest Way, Suite #12 (the "New Premises").
+    ... SECOND MODIFICATION ... (collectively the "Lease"), for certain real property
+    containing approximately 1,350 square feet located at 88 Pinecrest Way, Suite #12."""
+    assert _restated_sf(t) == 1350
+
+
 
 # --- expiration: uploaded rent roll vs paper (build_roster, temp DB) -----
 

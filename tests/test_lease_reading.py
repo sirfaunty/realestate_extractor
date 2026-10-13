@@ -635,6 +635,21 @@ def test_round2_shapes_dates_sf_rent_deposit():
     assert _security_deposit(t)[0] == 6000.00, _security_deposit(t)
 
 
+def test_first_refusal_range_is_not_a_restatement():
+    # "from N square feet to M square feet" restates an expanded premises; a right
+    # of first refusal on "space measuring 900 square feet to 1,100 square feet"
+    # is a range of hypothetical space and must not outrank the data sheet
+    t = flat('DATA SHEET (1) PREMISES: The area outlined in red on Exhibit A. For the purposes of this '
+             'Lease, the Premises shall be deemed to contain approximately 1,640 square feet. ... '
+             'AMENDMENT ... 4. Tenant shall have a right of first refusal should any space become '
+             'available in the Center measuring 900 square feet to 1,100 square feet in its entirety, '
+             'so long as this right of refusal is exercised within ten days.')
+    assert best_sf(t) == 1640, best_sf(t)
+    t = flat('Landlord and Tenant desire to expand the Premises, thereby enlarging the premises from '
+             '1,640 square feet to 2,540 square feet (the "Expanded Premises").')
+    assert best_sf(t) == 2540, best_sf(t)
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
