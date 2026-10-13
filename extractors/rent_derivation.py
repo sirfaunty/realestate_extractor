@@ -306,7 +306,9 @@ _ORD = {'initial': 0, 'original': 0, 'first': 1, '1st': 1, 'second': 2, '2nd': 2
 _TERM_LABEL = re.compile(r'(?i)\b(initial|original|first|1st|second|2nd|third|3rd|fourth|4th|'
                          r'fifth|5th)\s+(?:(extended|extension|renewal|option)\s+)?term\s*[:\-–—]')
 # a spelled-out amount between an annual and its monthly figure
-_WORD_AMOUNT = re.compile(r'(?i)\b(?:thousand|hundred)\b[^$]{0,200}\bdollars\b')
+# ... "Thirty-four thousand ... Dollars ($34,839.11)" or "Three Thousand Eight
+# Hundred and 00/100 ($3,800.00)"
+_WORD_AMOUNT = re.compile(r'(?i)\b(?:thousand|hundred)\b[^$]{0,200}?(?:\bdollars\b|\d{2}/100)')
 
 
 def _term_index(m) -> Optional[int]:
@@ -450,9 +452,14 @@ def _monthly_from(seg: str, header: str, nearest_last: bool = False) -> Optional
         return None
     s, e, v = big[-1] if nearest_last else big[0]
     after = seg[e:e + 40].lower()
-    if re.search(r'per\s+month|/\s*mo|monthly', after):
+    # the unit NEAREST the figure wins: "$45,600 per year payable in equal
+    # monthly installments of ..." is an annual figure (a pilot amendment
+    # read as $45,600 a month)
+    mo = re.search(r'per\s+month|/\s*mo|monthly', after)
+    yr = re.search(r'per\s+(?:year|annum)|annual', after)
+    if mo and (not yr or mo.start() < yr.start()):
         return v
-    if re.search(r'per\s+(?:year|annum)|annual', after):
+    if yr:
         return round(v / 12, 2)
     h = header.lower()
     if 'month' in h:
@@ -532,7 +539,12 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
             continue
         nxt = ranges[i + 1].start() if i + 1 < len(ranges) else len(flat)
         prv = ranges[i - 1].end() if i else 0
-        seg_after = flat[m.end():min(nxt, m.end() + 160)]
+        # rent written in words sits between the annual and monthly figures
+        # ("$45,600 per year payable in equal monthly installments of Three
+        # Thousand Eight Hundred and 00/100 ($3,800.00)"): a longer window
+        # lets the pair verify itself
+        reach = 320 if _WORD_AMOUNT.search(flat[m.end():m.end() + 320]) else 160
+        seg_after = flat[m.end():min(nxt, m.end() + reach)]
         seg_before = flat[max(prv, m.start() - 200):m.start()]
         am_a = _amounts(seg_after, keep_zero=True)
         am_b = _amounts(seg_before, keep_zero=True)

@@ -530,6 +530,20 @@ def test_breakpoint_tables_and_repayment_schedules_are_not_rent_rows():
     assert [r.monthly for r in parse_rent_schedule(t)] == [4100.0, 4200.0]
 
 
+def test_annual_figure_with_monthly_installments_in_words():
+    t = """2. FIXED ANNUAL MINIMUM RENT: For the period commencing on April 1, 2022 through
+    March 31, 2027, the Fixed Annual Minimum Rent as provided for in the Lease shall be equal
+    to $45,600 per year payable in equal monthly installments of Three Thousand Eight Hundred
+    and 00/100 ($3,800.00)."""
+    rows = parse_dated_rows(t)
+    assert [(str(r.start), str(r.end), r.monthly) for r in rows] == [('2022-04-01', '2027-03-31', 3800.0)], rows
+    # the same sentence without the spelled-out pair: the unit nearest the figure wins
+    t2 = """FIXED ANNUAL MINIMUM RENT: For the period commencing on April 1, 2022 through
+    March 31, 2027, the Fixed Annual Minimum Rent shall be equal to $45,600 per year payable in
+    equal monthly installments."""
+    assert [r.monthly for r in parse_dated_rows(t2)] == [3800.0], parse_dated_rows(t2)
+
+
 def test_seasonal_lease_lump_sum_is_not_a_monthly_rent():
     t = """3. Rent. a. Storage Rent. Total rent for the Storage Season is $6,000.00 ("Storage Rent")
     due upon execution. b. Space Rent. Total rent ("Rent") for the Term is $22,500.00, due and
