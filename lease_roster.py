@@ -333,7 +333,8 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             commencement=row.commencement,
             expiration=row.expiration_lease,      # paper only — never the rent roll's
             schedule_text=chain_text,
-            commencement_confirmed=row.commencement_source in ('confirmed', 'rent_roll'))
+            commencement_confirmed=row.commencement_source in ('confirmed', 'rent_roll'),
+            square_feet=row.square_feet)
         row.monthly_rent, row.rent_method = r.monthly, r.method
         row.rent_confidence, row.rent_flags, row.rent_detail = r.confidence, list(r.flags), r.detail
         # an amendment changed the premises (expansion / relocation): a rent
@@ -640,6 +641,8 @@ def _needs(row: RosterRow) -> str:
         return 'lease past its expiration on paper — add the renewal / holdover terms'
     if 'schedule_ends_before_date' in f:
         return 'rent schedule ends before today — a later amendment is missing'
+    if 'lump_sum_term' in f:
+        return f'seasonal lease: {row.rent_detail} — not a monthly rent'
     if 'no_rent_found' in f:
         return 'no rent schedule found — add the rent exhibit or amendment'
     if not row.commencement or 'no_commencement' in f or row.commencement_source == 'lease':

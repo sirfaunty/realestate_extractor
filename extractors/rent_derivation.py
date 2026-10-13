@@ -54,6 +54,8 @@ class ScheduleRow:
     table: int = 0                    # which table in the text (relative rows)
     pos: int = 0                      # position in the text (later = newer instrument)
     anchor: Optional[date] = None     # the table's own stated start date, if any
+    verified: bool = True             # False: a lone amount, no pair / $/SF check
+    years: Optional[int] = None       # a named term-0 row's "1-5" -> 5 (initial term length)
 
 
 @dataclass
@@ -139,7 +141,7 @@ def lease_years_elapsed(commencement: date, as_of: date) -> int:
 
 # ─── schedule parsing ─────────────────────────────────────────────
 
-def parse_rent_schedule(text: str) -> list[ScheduleRow]:
+def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleRow]:
     """Rent-schedule rows = consecutive self-verifying annual/monthly pairs.
 
     The first pair must sit near the word 'rent' (and not in a sublease
@@ -250,6 +252,8 @@ def parse_rent_schedule(text: str) -> list[ScheduleRow]:
     # count their years from THAT, not from the original commencement
     if not out:
         out = _single_amount_rows(flat)
+    if not out:
+        out = _named_term_rows(flat, sf)
     for t in {r.table for r in out}:
         trs = [r for r in out if r.table == t]
         a = _table_anchor(flat, trs[0].pos, trs[-1].pos)
@@ -267,7 +271,8 @@ _SINGLE_HDR = re.compile(
     r'(?i)\b(?:lease\s+)?(years?|months?)\b[^$]{0,40}?\b(monthly|annual)\s+'
     r'(?:base\s+|minimum\s+|fixed\s+)?rent\b'
     r'|\b(monthly|annual)\s+(?:base\s+|minimum\s+|fixed\s+)?rent\b[^$]{0,40}?\b(?:lease\s+)?(years?|months?)\b')
-_SINGLE_ROW = re.compile(r'(?i)(?:(?:lease\s+)?(?:years?|months?)\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*\$\s*([\d,]+\.\d{2})')
+# cents are optional: a summary block writes "Months Monthly Rent 1-12 $2,292  13-24 $2,361"
+_SINGLE_ROW = re.compile(r'(?i)(?:(?:lease\s+)?(?:years?|months?)\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*\$\s*([\d,]+(?:\.\d{2})?)(?![\d.])')
 
 
 def _single_amount_rows(flat: str) -> list[ScheduleRow]:
@@ -324,7 +329,7 @@ def _term_lengths(flat: str) -> tuple[Optional[int], Optional[int]]:
     ini = re.search(r'(?i)initial\s+term[^.]{0,160}?\b(?:for|of)\s+(?:a\s+(?:period\s+|term\s+)?of\s+)?'
                     r'(?:[a-z\- ]{0,30}\(\s*)?(\d{1,3})\s*\)?\s*(?:full\s+)?(?:lease\s+|calendar\s+)?'
                     r'(years?|months?)', flat)
-    ext = re.search(r'(?i)(?:additional|extended|extension|renewal|option)\s+terms?\s+of\s+'
+    ext = re.search(r'(?i)(?:additional|extended|extension|renewal|option)\s+(?:terms?|periods?)\s+of\s+'
                     r'(?:[a-z\- ]{0,30}\(\s*)?(\d{1,2})\s*\)?\s*(?:full\s+)?(?:lease\s+)?(years?|months?)',
                     flat)
     return (months(ini) if ini else None), (months(ext) if ext else None)
@@ -589,6 +594,104 @@ def _defined_term_rows(flat: str) -> list[ScheduleRow]:
     return out
 
 
+_NAMED_TERM = re.compile(
+    r'(?i)\b(original|initial|first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\s+'
+    r'(?:(lease|renewal|extended|extension|option)\s+)?term\b[\s:\-–—|_]*')
+
+
+def _named_term_rows(flat: str, sf: Optional[float] = None) -> list[ScheduleRow]:
+    """A named-term table with ONE amount per row, often with a $/SF column:
+    'LEASE TERM | YEARS | PER SQ FT | MONTHLY  Original Lease Term 1-5 $6.00
+    $4,500.00  First Renewal Term 6-10 $6.50 $4,875.00 ...' (national-tenant
+    forms). The label, not the position, gives the term: a scan can shuffle
+    the rows. With the premises SF known, $/SF x SF / 12 verifies the amount
+    -- and when the two disagree the $/SF figure wins, because the shuffled
+    column is the one that lies. A row with neither check is kept but marked
+    unverified (never shown unreviewed)."""
+    ms = list(_NAMED_TERM.finditer(flat))
+    rows = []
+    for i, m in enumerate(ms):
+        k = _ORD[m.group(1).lower()]
+        kind = (m.group(2) or '').lower()
+        if (k == 0 and kind in ('renewal', 'extended', 'extension', 'option')) \
+                or (k > 0 and kind in ('', 'lease')):
+            continue                            # "Original Extended Term", "First Term"
+        nxt = ms[i + 1].start() if i + 1 < len(ms) else len(flat)
+        seg = flat[m.end():min(nxt, m.end() + 220)]
+        if '$' not in seg:
+            continue
+        low = seg.lower()
+        before = flat[max(0, m.start() - 400):m.start()].lower()
+        if ('rent' not in before and 'rent' not in low) or _BAD_CTX.search(low) \
+                or re.search(r'sublease|subtenant', before):
+            continue
+        am = [v for _, _, v in _amounts(seg)]
+        psf = [v for v in am if v < 200]
+        big = [v for v in am if 200 <= v <= MAX_MONTHLY]
+        monthly, verified = None, False
+        if sf and psf:
+            calc = round(psf[0] * sf / 12, 2)
+            hit = next((b for b in big if abs(b - calc) <= max(2.0, 0.01 * b)), None)
+            monthly, verified = (hit if hit is not None else calc), True
+        elif len(big) == 1:
+            monthly = big[0]
+        if not monthly or monthly < 50:
+            continue
+        r = ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2), label=f'term {k}',
+                        table=1, pos=m.start(), verified=verified)
+        yr = re.search(r'(?<![\d/$.,])(\d{1,2})\s*-\s*(\d{1,2})\b', seg[:40])
+        if yr and k == 0 and int(yr.group(1)) == 1:
+            r.years = int(yr.group(2))
+        rows.append(r)
+    ks = [r.label for r in rows]
+    if len(set(ks)) < 2 or len(ks) != len(set(ks)):
+        return []
+    return rows
+
+
+# a renewal-option letter in the chain: "We are exercising our renewal
+# option under this Lease for a period of five (5) years to expire on
+# June 30, 2027" -> (end date, months). One letter per exercised option.
+_EXERCISED = re.compile(
+    r'(?i)exercis\w+\s+(?:our|its|the|tenant[\'’]s)?\s*(?:\w+\s+){0,2}?(?:renewal|extension|option)\s*'
+    r'(?:option|right|term)?[^.]{0,80}?(?:period|term)\s+of\s+(?:[a-z\- ]{0,20}\(\s*)?(\d{1,2})\s*\)?\s*(years?|months?)'
+    r'[^.]{0,80}?(?:expir\w+|end\w*|through|until)\s+(?:on\s+)?(' + _D + ')')
+
+
+def _exercised_options(flat: str) -> list[tuple[date, int]]:
+    out = {}
+    for m in _EXERCISED.finditer(flat):
+        e = parse_date(m.group(3))
+        if not e:
+            continue
+        n = int(m.group(1))
+        out[e] = n * 12 if m.group(2).lower().startswith('year') else n
+    return sorted(out.items())
+
+
+# seasonal / short-term leases state ONE figure for the whole term:
+# 'Total rent ("Rent") for the Term is $22,500.00, due and payable ...'
+# -- not a monthly rent; the roster says so instead of inventing one
+_LUMP_SUM = re.compile(r'(?i)total\s+rent\b[^.$]{0,60}?\bfor\s+the\s+term\b[^.$]{0,40}?\bis\s+' + _MONEY)
+_TERM_SPAN = re.compile(r'(?i)\bterm\b[^.]{0,80}?shall\s+commence\s+on\s+(?:[^.$]{0,160}?\(a\)\s+)?(' + _D +
+                        r')[^.]{0,220}?expire\s+on\s+(' + _D + ')')
+
+
+def _lump_sum_term(flat: str) -> Optional[tuple[float, Optional[date], Optional[date]]]:
+    sums = [(m.start(), _num(m.group(1))) for m in _LUMP_SUM.finditer(flat)
+            if _num(m.group(1)) and 'storage' not in m.group(0).lower()]
+    if not sums:
+        return None
+    spans = [(m.start(), parse_date(m.group(1)), parse_date(m.group(2))) for m in _TERM_SPAN.finditer(flat)]
+    best = None
+    for pos, amt in sums:
+        near = [(abs(p - pos), s, e) for p, s, e in spans if s and e and abs(p - pos) < 8000]
+        s, e = (min(near)[1], min(near)[2]) if near else (None, None)
+        if best is None or (e or date.min) > (best[2] or date.min):
+            best = (amt, s, e)
+    return best
+
+
 def _offsets(r: ScheduleRow) -> tuple[int, int]:
     """(start, end) of a relative row in months from its table's anchor."""
     kind, val = r.label.split(' ', 1)
@@ -609,12 +712,26 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
     used = set()
     tables = sorted({r.table for r in rows})
     ini, ext = _term_lengths(flat) if flat else (None, None)
+    if not ini:
+        ini = next((12 * r.years for r in rows if r.years), None)
     for t in tables:
         trs = [r for r in rows if r.table == t]
         if all(r.label.startswith('term ') for r in trs):
             # named terms are lease-level: Initial Term from the
-            # commencement, each Extended Term right after the previous one
-            if not commencement or not ini:
+            # commencement, each Extended Term right after the previous one.
+            # No commencement on paper (it was set by delivery): the renewal
+            # letters in the chain date the terms instead -- the latest
+            # letter ends exercised term #<letters>, so the lease began
+            # ini + (k-1)*ext + <that period> before its end.
+            comm, how = commencement, 'commencement'
+            if (not comm or not ini) and ini and ext and flat:
+                opts = _exercised_options(flat)
+                if opts:
+                    k_last = len(opts)
+                    end, period = opts[-1]
+                    comm = add_months(end + timedelta(days=1), -(ini + (k_last - 1) * ext + period))
+                    how = 'option letter'
+            if not comm or not ini:
                 continue
             for r in trs:
                 k = int(r.label.split()[1])
@@ -622,10 +739,10 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
                     continue
                 s = 0 if k == 0 else ini + (k - 1) * ext
                 e = ini if k == 0 else ini + k * ext
-                r.start = add_months(commencement, s)
-                r.end = add_months(commencement, e) - timedelta(days=1)
-                r.label += ' [commencement]'
-            used.add('commencement')
+                r.start = add_months(comm, s)
+                r.end = add_months(comm, e) - timedelta(days=1)
+                r.label += f' [{how}]'
+            used.add(how)
             continue
         a = trs[0].anchor or (commencement if t == tables[0] else None)
         how = 'stated' if trs[0].anchor else 'commencement'
@@ -649,7 +766,8 @@ def derive_current_rent(*, as_of: date,
                         year1_monthly=None, escalation_pct=None,
                         commencement=None, expiration=None,
                         schedule_text: str = '',
-                        commencement_confirmed: bool = False) -> RentResult:
+                        commencement_confirmed: bool = False,
+                        square_feet=None) -> RentResult:
     """Monthly base rent in effect on `as_of`, with method + confidence.
 
     commencement_confirmed: the commencement came from a user confirmation
@@ -676,7 +794,7 @@ def derive_current_rent(*, as_of: date,
     #    relocation or rent-reduction amendment counted from an event) may
     #    supersede it -> never high (flag later_schedule_unplaced).
     flat = re.sub(r'\s+', ' ', schedule_text or '')
-    rows = parse_rent_schedule(schedule_text) if schedule_text else []
+    rows = parse_rent_schedule(schedule_text, sf=_num(square_feet)) if schedule_text else []
     # A dated row that already ENDS on the expiration means that dated table
     # governs the term end — back-dating another, undated table from the same
     # date is circular (it moved a correct row to a wrong one, 2026-10-05).
@@ -715,8 +833,11 @@ def derive_current_rent(*, as_of: date,
             if par:
                 monthly = round(monthly + sum(x.monthly for x in par), 2)
                 flags.append('multi_space_sum')
-            if not r.label.startswith('term 0'):
+            if not r.label.startswith('term 0') and not any(
+                    e >= as_of >= add_months(e, -mo) for e, mo in _exercised_options(flat)):
                 flags.append('extension_term_assumed')   # an option may not have been exercised
+        if not r.verified:
+            flags.append('unverified_amount')            # a lone figure: no pair, no $/SF check
         # high only for explicitly labelled rows (Months / Lease Year) dated
         # from a stated start or the commencement; sequential guesses and
         # expiration back-dating are medium
@@ -736,6 +857,14 @@ def derive_current_rent(*, as_of: date,
                           + (f' + {len(par)} parallel space(s)' if 'multi_space_sum' in flags else ''))
     if dated and max(r.end for r in dated) < as_of:
         flags.append('schedule_ends_before_date')   # a later amendment is missing
+
+    if not rows and not dated and not y1:
+        ls = _lump_sum_term(flat)
+        if ls:
+            amt, s, e = ls
+            span = f' for {s}..{e}' if s and e else ' for the term'
+            return RentResult(None, 'lump_sum', 'low', flags + ['lump_sum_term'],
+                              f'${amt:,.2f} total{span}')
 
     y1_stated = y1 is not None
     if rows and not y1:

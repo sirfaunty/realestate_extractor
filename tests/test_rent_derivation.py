@@ -469,6 +469,64 @@ def test_flat_year1_is_low():
     assert (r.method, r.confidence) == ('flat', 'low')
 
 
+# ─── named-term tables, option letters, lump sums ───────────────────
+
+NAMED_TERM_LEASE = """9. Base Rent ("Base Rent"). LEASE TERM | YEARS | PER SQ FT | MONTHLY
+Original Lease Term | 1-5 $6.00 | $4,500.00 Second Renewal Term $5,250.00
+Third Renewal Term | | First Renewal Term | 6-10 $6.50 | $5,700.00
+10. Additional Rent. Tenant shall have the right to extend the term of this Lease for
+three (3) additional periods of five (5) years each (each period referred to as
+"Renewal Term")."""
+LETTER_1 = """Please refer to the Lease dated October 14, 2011. We are exercising our renewal
+option under this Lease for a period of five (5) years to expire on June 30, 2022. All other
+terms and conditions of the Lease shall remain in full force and effect."""
+LETTER_2 = """We are exercising our renewal option under this Lease for a period of five (5)
+years to expire on June 30, 2027. All other terms and conditions of the Lease shall remain."""
+
+
+def test_named_term_table_psf_verifies_and_option_letters_place_terms():
+    # scanned national-tenant form: one amount per named term, a $/SF column,
+    # rows shuffled by the scan; no commencement on paper (set by delivery)
+    chain = '\n\n'.join([NAMED_TERM_LEASE, LETTER_1, LETTER_2])
+    rows = parse_rent_schedule(chain, sf=9000)
+    by = {r.label: r for r in rows}
+    assert by['term 0'].monthly == 4500.00 and by['term 0'].verified and by['term 0'].years == 5
+    # the shuffled column put the third term's figure on the first term's row: $/SF wins
+    assert by['term 1'].monthly == 4875.00 and by['term 1'].verified
+    assert by['term 2'].monthly == 5250.00 and not by['term 2'].verified
+    r = rent(chain, square_feet=9000)
+    assert r.monthly == 5250.00 and r.confidence == 'medium', r
+    assert r.flags == ['unverified_amount'] and 'term 2 [option letter]' in r.detail, r
+    # the same with the rent roll's commencement: dated from it, still not shown
+    r = rent(chain, square_feet=9000, commencement=date(2012, 7, 1), commencement_confirmed=True)
+    assert r.monthly == 5250.00 and 'term 2 [commencement]' in r.detail, r
+    # a date inside an exercised renewal: no "option may not be exercised" doubt
+    r = rent(chain, square_feet=9000, as_of=date(2020, 1, 1))
+    assert r.monthly == 4875.00 and r.flags == [], r
+    # without the SF nothing verifies; the lone figures are still read, flagged
+    r = rent(chain)
+    assert r.monthly == 5250.00 and 'unverified_amount' in r.flags, r
+
+
+def test_month_range_rows_without_cents():
+    t = """Rent: Months Monthly Rent 1-12 $2,292 13-24 $2,361 25-36 $2,432
+    Estimated 2023 Operating Costs: $963 per month"""
+    rows = parse_rent_schedule(t)
+    assert [(r.label, r.monthly) for r in rows] == [('months 1-12', 2292.0), ('months 13-24', 2361.0),
+                                                     ('months 25-36', 2432.0)], rows
+
+
+def test_seasonal_lease_lump_sum_is_not_a_monthly_rent():
+    t = """3. Rent. a. Storage Rent. Total rent for the Storage Season is $6,000.00 ("Storage Rent")
+    due upon execution. b. Space Rent. Total rent ("Rent") for the Term is $22,500.00, due and
+    payable to Landlord in two installments. 4. Term. The term of this Lease ("Term") shall
+    commence on June 15, 2026 ("Commencement Date") and shall expire on November 23, 2026
+    ("Expiration Date")."""
+    r = rent(t)
+    assert r.monthly is None and r.method == 'lump_sum' and 'lump_sum_term' in r.flags, r
+    assert '$22,500.00' in r.detail and '2026-06-15..2026-11-23' in r.detail, r.detail
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

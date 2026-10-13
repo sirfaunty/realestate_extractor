@@ -361,7 +361,8 @@ def _extract_with_pymupdf(filepath: str, doc: DocumentContent) -> DocumentConten
 
 
 def extract_text_ocr(filepath: str, preprocess: bool = True,
-                     language: str = 'eng') -> DocumentContent:
+                     language: str = 'eng',
+                     pages: Optional[List[int]] = None) -> DocumentContent:
     """
     Extract text from a scanned PDF using Tesseract OCR.
 
@@ -369,6 +370,9 @@ def extract_text_ocr(filepath: str, preprocess: bool = True,
     1. Convert PDF pages to images (pdf2image)
     2. Optionally preprocess images (OpenCV)
     3. Run OCR (pytesseract)
+
+    `pages` (1-based) limits the work to those pages — the digital path
+    uses it to backfill image-only pages inside a text PDF.
     """
     from pdf2image import convert_from_path
     import pytesseract
@@ -417,9 +421,17 @@ def extract_text_ocr(filepath: str, preprocess: bool = True,
 
     confidences = []
     BATCH = 10
-    logger.info(f"Converting PDF to images: {filepath}")
-    for start in range(1, total_pages + 1, BATCH):
-        end = min(start + BATCH - 1, total_pages)
+    wanted = sorted({p for p in pages if 1 <= p <= total_pages}) if pages is not None \
+        else list(range(1, total_pages + 1))
+    runs = []                       # contiguous runs of wanted pages, <= BATCH long
+    for p in wanted:
+        if runs and p == runs[-1][-1] + 1 and len(runs[-1]) < BATCH:
+            runs[-1].append(p)
+        else:
+            runs.append([p])
+    logger.info(f"Converting PDF to images: {filepath} ({len(wanted)} of {total_pages} pages)")
+    for run in runs:
+        start, end = run[0], run[-1]
         images = convert_from_path(filepath, dpi=250,
                                    first_page=start, last_page=end)
         for k, image in enumerate(images):
@@ -481,6 +493,39 @@ def _detect_tables_from_ocr_text(text: str) -> List[List[List[str]]]:
     return tables
 
 
+BACKFILL_MIN_CHARS = 40     # less than this on a page = no usable text layer
+
+
+def backfill_pages(doc: DocumentContent, preprocess: bool = True) -> DocumentContent:
+    """A "digital" PDF can carry image-only pages: a signed lease whose cover
+    was re-typed while the other 45 pages are scans passed the scanned-PDF
+    check on its one text page and went unread (live upload, 2026-10-12).
+    OCR every page without a usable text layer and merge the results in page
+    order. Pages the digital pass stopped at (consecutive-empty early stop)
+    are backfilled the same way."""
+    have = {p.page_number for p in doc.pages
+            if len((p.text or '').strip()) >= BACKFILL_MIN_CHARS}
+    missing = [n for n in range(1, (doc.page_count or 0) + 1) if n not in have]
+    if not missing:
+        return doc
+    missing = missing[:MAX_PAGES]
+    logger.info(f"Backfilling {len(missing)} image-only page(s) by OCR: "
+                f"{os.path.basename(doc.filepath)}")
+    try:
+        ocr = extract_text_ocr(doc.filepath, preprocess=preprocess, pages=missing)
+    except Exception as e:                       # noqa: BLE001 — keep the text we have
+        logger.warning(f"Backfill OCR failed ({os.path.basename(doc.filepath)}): {e}")
+        return doc
+    merged = {p.page_number: p for p in doc.pages}
+    for p in ocr.pages:
+        if p.page_number not in merged or len((p.text or '').strip()) >= BACKFILL_MIN_CHARS:
+            merged[p.page_number] = p
+    doc.pages = [merged[n] for n in sorted(merged)]
+    got = sum(1 for p in ocr.pages if len((p.text or '').strip()) >= BACKFILL_MIN_CHARS)
+    logger.info(f"Backfill recovered text on {got} of {len(missing)} page(s)")
+    return doc
+
+
 def ingest_pdf(filepath: str, force_ocr: bool = False,
                preprocess: bool = True) -> DocumentContent:
     """
@@ -516,6 +561,7 @@ def ingest_pdf(filepath: str, force_ocr: bool = False,
     else:
         logger.info("Detected digital PDF — using text extraction pipeline")
         doc = extract_text_digital(filepath)
+        doc = backfill_pages(doc, preprocess=preprocess)
 
     # Log summary
     total_chars = sum(len(p.text) for p in doc.pages)
