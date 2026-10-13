@@ -1048,7 +1048,7 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
                 _sf_scan(t or '', 0, pg, extra)
             cands += [c for c in extra if c[0] >= 2]
         if cands:
-            best = max(cands, key=lambda c: c[0])
+            best = _sf_pick(cands)
             # every mention looked like boilerplate (CAM example, radius,
             # building total) -> blank, not the least-bad guess
             if best[0] >= 0:
@@ -1125,10 +1125,19 @@ _SF_LABEL_RX = re.compile(r'(?:(?:leasable|rentable|floor)\s+area(?:\s+of\s+(?:t
 # "the total rentable square feet of the New Premises is approximately N",
 # "shall thereafter contain approximately N", "(from 3,071 square feet to N",
 # "a total of approximately N square feet (the Premises)"
+# ... and a relocation that DELIVERS a new space ("Landlord shall deliver to
+# Tenant possession of that certain space containing approximately N square
+# feet ... Suite #90 (the Premises)"), or a later modification's recital of
+# the premises as they now are ("for certain real property containing
+# approximately N square feet located at ...")
 _SF_RESTATE_RX = re.compile(
     r'new\s+premises|thereafter\s+contain|combined\s+premises|enlarg\w*\s+the\s+total|'
     r'square\s+f(?:ee|oo)t\s+to\s*$|\bto\s+a\s+total\s+of|containing\s+a\s+total\s+of|'
-    r'leased\s+premises\s+shall\s+(?:now|thereafter)', re.I)
+    r'leased\s+premises\s+shall\s+(?:now|thereafter)|'
+    r'agree\s+to\s+relocate\s+the\s+premises|'
+    r'deliver\w*\s+to\s+tenant\b[^.]{0,80}?possession\s+of\b[^.]{0,60}?containing\s+(?:approximately\s+)?$|'
+    r'certain\s+(?:real\s+property|space|premises)\s+containing\s+(?:approximately\s+)?$|'
+    r'certain\s+premises\s+consisting\s+of\s+(?:approximately\s+)?$', re.I)
 # a PART of the premises or a cap, never the premises: "increase by 420 square
 # feet", "adding thereto approximately N", "Additional Premises", "In no event
 # ... more than N square feet"
@@ -1137,6 +1146,10 @@ _SF_PART_RX = re.compile(
     r'additional\s+premises|expansion\s+(?:area|space)\s+(?:consisting|containing)|'
     r'surrender\w*\s+premises|in\s+no\s+event|not\s+(?:to\s+)?exceed|'
     r'(?:more|less|greater|fewer)\s+than\s+(?:[a-z\- ]{0,60}\()?\s*$|\bfrom\s*$', re.I)
+# an expansion recital names the ADDED space, and its verb sits further back
+# than the 60 chars the part check reads: "Tenant desires to expand the
+# Existing Premises to include that certain space consisting of approximately N"
+_SF_ADDON_RX = re.compile(r'\b(?:expand|add)\w*\b[^.]{0,80}?\bto\s+include\b[^.]{0,80}$', re.I)
 # a landlord's right to substitute / relocate the premises is boilerplate
 # about a hypothetical space, not the tenant's premises
 _SF_HYPOTHETICAL_RX = re.compile(
@@ -1189,9 +1202,11 @@ def _sf_scan(text, base, pg, cands, restate_only=False):
                               r'center|development|complex)$', lab[-1].strip())) or \
                 re.search(r'based\s+(?:up)?on\s+(?:a|the)\s+building', ctx):
             score -= 6
-        if re.search(r'radius|within|miles|parking|ratio|per\s+\d|building is|'
+        if re.search(r'radius|within|miles|parking|ratio|per\s+\d|building is|overall|'
                      r'of the building|area of the building|shopping center contains|'
-                     r'gross leasable|\bgla\b|site plan|example|illustrat|relates only|'
+                     # 'shown on the site plan as Exhibit A containing approximately N' IS the
+                     # premises; a bare site-plan reference describes the center
+                     r'gross leasable|\bgla\b|site plan(?![^.]{0,80}\bcontaining\b)|example|illustrat|relates only|'
                      r'invoice|\bsaid\s*$|numerator|denominator|fraction|pro\s*rata',
                      ctx):
             score -= 4
@@ -1205,9 +1220,26 @@ def _sf_scan(text, base, pg, cands, restate_only=False):
             restated = True
         if restated:
             score += 6     # the premises as restated by a later instrument
-        if _SF_PART_RX.search(ctx_raw[-60:]):
+        if _SF_PART_RX.search(ctx_raw[-60:]) or _SF_ADDON_RX.search(ctx_raw[-200:]):
             score -= 6     # an increment, add-on, cap or prior size — not the premises
-        cands.append((score, v, pg))
+        # (score, value, page, restated, position): equal scores fall to the
+        # restatement that comes LATEST in the file -- a second relocation or
+        # the newest modification's recital governs over the first
+        cands.append((score, v, pg, restated, m.start()))
+
+
+def _sf_pick(cands):
+    """Best premises-size candidate. Equal scores: among RESTATEMENTS the one
+    latest in the file governs (a second relocation, the newest
+    modification's recital); among ordinary mentions the first stays (the
+    operative clause precedes the building total that repeats the number)."""
+    def pg(c):
+        try:
+            return int(str(c[2]).strip())
+        except (TypeError, ValueError):
+            return 0
+    return max(cands, key=lambda c: (c[0], bool(c[3]),
+                                     (pg(c), c[4]) if c[3] else (-pg(c), -c[4])))
 
 
 # New York / Texas forms call the landlord "Owner"
@@ -1663,7 +1695,9 @@ def _deterministic_lease_fields(pages, tgt, have, sf=None):
         cands = []
         for pg, t in pages[:12]:
             _sf_scan(t or '', 0, pg, cands)
-        best = max(cands, key=lambda c: c[0]) if cands else None
+        for pg, t in pages[12:]:
+            _sf_scan(t or '', 2, pg, cands, restate_only=True)   # a relocation deep in the package
+        best = _sf_pick(cands) if cands else None
         if best and best[0] >= 2:
             sf = best[1]
             if 'square_footage' not in have:

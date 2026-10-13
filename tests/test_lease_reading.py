@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.extractors.lease_segmenter import (  # noqa: E402
-    RE_EXPIRE_STMT, _TRADE_NAME_RX, _party, _scan_expiration, _security_deposit, _sf_scan, _to_mdy,
+    RE_EXPIRE_STMT, _TRADE_NAME_RX, _party, _scan_expiration, _security_deposit, _sf_pick, _sf_scan, _to_mdy,
     _year1_monthly_rent)
 
 
@@ -28,7 +28,7 @@ def flat(s):
 def best_sf(text, base=0):
     c = []
     _sf_scan(text, base, 1, c)
-    return max(c, key=lambda x: x[0])[1] if c else None
+    return _sf_pick(c)[1] if c else None
 
 
 def stated(text):
@@ -521,6 +521,60 @@ def test_building_definition_is_not_the_premises():
              'square feet. F. “Premises”: Suite 100 containing approximately 9,500 square feet '
              'of rentable area. G. “Rentable area in the Building” shall be 40,000 square feet.')
     assert best_sf(t) == 9500, best_sf(t)
+
+
+def test_relocation_delivers_the_new_premises():
+    # the lease: 1,760 SF; a later modification relocates the tenant to a
+    # smaller suite it DELIVERS, and the next modification recites that space
+    t = flat('Landlord leases to Tenant and Tenant rents from Landlord 1,760 square feet of floor '
+             'space having a street address of 100 Example Drive, Suite 40. ... 5. Relocation: Landlord '
+             'shall have the sole and exclusive right, upon sixty (60) days notice, to relocate the '
+             'Premises to other premises similar in size to the existing Premises. ... Lease '
+             'Modification Agreement No. 2. WHEREAS, Landlord and Tenant hereby agree to relocate the '
+             'Premises. 1. Relocation and Delivery of the Premises: Landlord shall deliver to Tenant '
+             '(including keys to all doors) possession of that certain space containing approximately '
+             '1,120 square feet having a street address of 100 Example Drive, Suite #90 (hereinafter '
+             'called the "Premises") on or before September 1, 2012.')
+    assert best_sf(t) == 1120, best_sf(t)
+    t = flat('Lease Modification Agreement No. 3. WHEREAS, Landlord and Tenant entered into that certain '
+             'Lease fully executed on September 17, 2004, which has been modified from time to time '
+             '(the "Lease"), for certain real property containing approximately 1,120 square feet '
+             'located at 100 Example Drive, Suite #90 (the "Premises").')
+    assert best_sf(t) == 1120, best_sf(t)
+    # two modifications both restate the premises: the later one in the file wins
+    t = flat('Lease Modification Agreement No. 1 ... that certain Lease (the "Lease") for certain real '
+             'property containing approximately 1,760 square feet located at 100 Example Drive, Suite 40. '
+             '... Lease Modification Agreement No. 2 ... Landlord shall deliver to Tenant possession of '
+             'that certain space containing approximately 1,120 square feet having a street address of '
+             '100 Example Drive, Suite #90 (hereinafter called the "Premises").')
+    assert best_sf(t) == 1120, best_sf(t)
+    # ordinary mentions: the operative clause stays ahead of the building total
+    # that repeats later; "of the overall N" is the building
+    t = flat('1. PREMISES. The Premises consists of approximately 5,471 square feet of space of the '
+             'overall 10,553 square foot of building (51.8% of the Building). In the event the rentable '
+             'area of the Building is increased above its present rentable area of 10,553 square feet, '
+             'the Premises share shall be adjusted.')
+    assert best_sf(t) == 5471, best_sf(t)
+
+
+def test_premises_shown_on_site_plan_and_recital_consisting_of():
+    # the operative clause points at the site plan AND states the area
+    t = flat('Landlord leases to Tenant the space within the Example Shopping Center (the "Shopping '
+             'Center") shown by cross-hatching on the Shopping Center site plan, attached to this Lease '
+             'as Exhibit A containing approximately 2,804 square feet, referred to as Bay 7C, (the '
+             '"Leased Premises"). The Shopping Center is situated in the City of Example.')
+    assert best_sf(t) == 2804, best_sf(t)
+    # a later amendment's recital of the premises as they stand
+    t = flat('WHEREAS, Landlord and Tenant entered into a Lease Agreement dated November 17, 2010 and a '
+             'Second Amendment dated April 22, 2014 (collectively the "Lease") for certain premises '
+             'consisting of approximately 2,804 square feet of space in the Example Shopping Center.')
+    assert best_sf(t) == 2804, best_sf(t)
+    # an expansion recital names the ADDED space, not the premises
+    t = flat('A. Landlord and Tenant entered into an Office Lease whereby Landlord leased to Tenant a '
+             'total of 9,850 rentable square feet of space on the fourth floor (the "Existing Premises"). '
+             'B. Tenant desires to expand the Existing Premises to include that certain space consisting '
+             'of approximately 1,410 rentable square feet of space located on the fourth floor.')
+    assert best_sf(t) == 9850, best_sf(t)
 
 
 if __name__ == '__main__':
