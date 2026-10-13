@@ -516,6 +516,20 @@ def test_month_range_rows_without_cents():
                                                      ('months 25-36', 2432.0)], rows
 
 
+def test_breakpoint_tables_and_repayment_schedules_are_not_rent_rows():
+    # percentage-rent breakpoints and a deferred-rent repayment period carry
+    # date ranges and dollars but are not rent; the real table still reads
+    t = """ARTICLE 3, MINIMUM RENT: TENANT shall pay fixed annual Minimum Rent as follows:
+    PERIOD MONTHLY RENT ANNUAL RENT Year 1 $4,100.00 $49,200.00 Year 2 $4,200.00 $50,400.00
+    Percentage rent of four percent (4%) on all gross sales in excess of the Natural Breakpoint:
+    Lease Year Natural Breakpoint 07/01/17-01/31/20 $1,485,900.00 02/01/20-01/31/21 $1,542,000.00
+    b) The total amount of fixed Minimum Rent that has been deferred is $8,000.00 ("Deferred Rent"),
+    and shall be paid to Landlord pursuant to the Promissory Note during the eighteen (18) month
+    period from January 1, 2011 through June 1, 2012 (the "Repayment Period")."""
+    assert parse_dated_rows(t) == [], parse_dated_rows(t)
+    assert [r.monthly for r in parse_rent_schedule(t)] == [4100.0, 4200.0]
+
+
 def test_seasonal_lease_lump_sum_is_not_a_monthly_rent():
     t = """3. Rent. a. Storage Rent. Total rent for the Storage Season is $6,000.00 ("Storage Rent")
     due upon execution. b. Space Rent. Total rent ("Rent") for the Term is $22,500.00, due and

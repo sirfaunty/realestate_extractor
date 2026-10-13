@@ -408,8 +408,13 @@ def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = ()) -> 
                for x in rows)
 
 
+# ... and never a percentage-rent breakpoint table ("Lease Year / Natural
+# Breakpoint 07/01/17-01/31/20 $1,485,900.00" read as $123,825 a month) or a
+# deferred-rent repayment schedule ("$8,000.00 ... during the eighteen (18)
+# month period from January 1, 2011 through June 1, 2012 (the Repayment Period)")
 _BAD_CTX = re.compile(r'\b(?:security\s+deposit|deposit|operating\s+costs?|cam|'
-                      r'common\s+area|estimated?|sublease|subtenant|sublandlord|deferred)\b')
+                      r'common\s+area|estimated?|sublease|subtenant|sublandlord|deferred|'
+                      r'breakpoint|gross\s+sales|percentage\s+rent|promissory|repayment)\b')
 
 
 def _amounts(seg: str, keep_zero: bool = False):
