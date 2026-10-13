@@ -165,6 +165,29 @@ def test_cover_lessor_lessee_labels_and_role_after_name():
              'RIVER ROW STATION RETAIL LEASE AGREEMENT Retail/Office Building')
     assert _party(t, 'Tenant') == 'Prairie Example Bank', _party(t, 'Tenant')
     assert _party(t, 'Landlord') == 'River Row Station, LLC', _party(t, 'Landlord')
+    # mixed case; both roles are required — a provision title is not a cover
+    t = flat('Elm Example Corporation Tenant and River Row Station, LLC Landlord RIVER ROW STATION '
+             'OFFICE LEASE AGREEMENT . Retail/Office Building')
+    assert _party(t, 'Tenant') == 'Elm Example Corporation', _party(t, 'Tenant')
+    assert _party(flat('ALTERATIONS BY TENANT AND SIGNS Section 1. Tenant, at its own expense, shall '
+                       'purchase, install and maintain its trade fixtures.'), 'Tenant') is None
+    # side-heading lists are not labels
+    t = flat('from Landlord to Tenant. ALTERATIONS, ADDITIONS, IMPROVEMENTS BY TENANT: ALTERATIONS BY '
+             "LANDLORD: REPAIRS BY TENANT: MECHANIC'S LIENS: 10. Tenant agrees not to permit")
+    assert _party(t, 'Tenant') is None, _party(t, 'Tenant')
+    assert _party(t, 'Landlord') is None, _party(t, 'Landlord')
+
+
+def test_term_arithmetic_corrects_a_misprinted_end_date():
+    assert scan('THE LEASE TERM TO BE TEN YEARS SIX MONTHS COMMENCING OCTOBER 1, 1993 AND ENDING '
+                'MARCH 31, 2084. ANNUAL MINIMUM RENT SCHEDULE') == '3/31/2004'
+    assert scan('a term of 10 years commencing on the 1st day of October, 1991 and ending on the '
+                '30th day of September, 2091.') == '9/30/2001'
+    # agreement, or a small (option-length) disagreement: the typed date stands
+    assert scan('The term shall be five (5) years commencing February 1, 2018 and ending '
+                'January 31, 2023.') == '1/31/2023'
+    assert scan('Tenant has one option of five years; the extended term commencing April 1, 2002 '
+                'and ending March 31, 2012.') == '3/31/2012'
 
 
 def test_amendment_roles_in_parentheses_without_quotes():

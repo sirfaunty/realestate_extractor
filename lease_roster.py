@@ -218,6 +218,23 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                 tenant=f'(unassigned) {d["filename"]}', doc_ids=[d['id']],
                 filenames=[d['filename']], grouped_by='unassigned')
 
+    # 2b. a file with no usable name in its filename but a legal name in its
+    #     text (an assignment, an amendment scanned under a code) joins the
+    #     tenancy whose documents carry that same legal name — only when
+    #     exactly one does; otherwise it stays its own row
+    for k in [k for k in groups if k.startswith('id:')]:
+        row = groups[k]
+        nt = _alpha(' '.join(row.aliases))
+        cands = [k2 for k2, r2 in groups.items() if k2.startswith('fn:') and (
+            any(_key(a) == k[3:] for a in r2.aliases)
+            or (r2.label and all(w in nt for w in r2.label.split())))]
+        if len(cands) == 1:
+            tgt = groups[cands[0]]
+            tgt.doc_ids.extend(row.doc_ids)
+            tgt.filenames.extend(row.filenames)
+            tgt.aliases.extend(a for a in row.aliases if a not in tgt.aliases)
+            del groups[k]
+
     rent_roll = _rent_roll(conn, property_id, groups, unassigned_only) if use_rent_roll else {}
 
     for k, row in groups.items():

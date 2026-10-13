@@ -588,6 +588,51 @@ RE_EXPIRE_STMT = re.compile(
 RE_DATE_ROW = re.compile(r'(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}/\d{1,2}/\d{4})\s+\$')
 
 
+_SMALL_NUM = {w: i for i, w in enumerate(
+    'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen '
+    'fifteen sixteen seventeen eighteen nineteen twenty'.split())}
+_SMALL_NUM.update({'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'ninety-nine': 99})
+_TERM_LEN = re.compile(
+    r'(?i)\b(\d{1,2}|[a-z]+(?:-[a-z]+)?)\s*(?:\(\s*\d{1,2}\s*\)\s*)?years?'
+    r'(?:\s*(?:and\s+)?(\d{1,2}|[a-z]+)\s*(?:\(\s*\d{1,2}\s*\)\s*)?months?)?')
+_TERM_START = re.compile(
+    rf'(?i)(?:commenc\w*|beginning|starting|from)\s+(?:on\s+)?(?:the\s+)?'
+    rf'({_MONTH_DATE}|{_DAY_OF}|\d{{1,2}}/\d{{1,2}}/\d{{4}})')
+
+
+def _num(tok):
+    tok = tok.lower()
+    return int(tok) if tok.isdigit() else _SMALL_NUM.get(tok)
+
+
+def _term_arithmetic(window, stated, parse):
+    """When one sentence gives a term length, its start and its end, and the
+    typed end disagrees with start + length by more than 15 years, the typed
+    end is a misprint ("ENDING MARCH 31, 2084" on a 1993 ten-and-a-half-year
+    term): return the computed end. Smaller gaps are left alone — an option
+    length in the same sentence is a normal 5-10 year disagreement."""
+    import datetime as _dt
+    mt = _TERM_LEN.search(window)
+    ms = _TERM_START.search(window)
+    if not (mt and ms):
+        return None
+    years = _num(mt.group(1))
+    months = _num(mt.group(2)) if mt.group(2) else 0
+    start = parse(ms.group(1))
+    if years is None or months is None or not start or years > 99:
+        return None
+    total = start.month - 1 + years * 12 + months
+    y, m = start.year + total // 12, total % 12 + 1
+    try:
+        end = _dt.date(y, m, start.day) - _dt.timedelta(days=1)
+    except ValueError:
+        end = _dt.date(y, m, 1) + _dt.timedelta(days=31)
+        end = end.replace(day=1) - _dt.timedelta(days=1)
+    if abs((stated - end).days) > 15 * 365:
+        return end
+    return None
+
+
 def _scan_expiration(instruments):
     """Deterministic expiration recovery when the LLM pass finds nothing:
 
@@ -625,7 +670,15 @@ def _scan_expiration(instruments):
                     # clause is normal next to the real term)
                     sent = text[max(0, text.rfind('.', 0, mm.start()) + 1):mm.start()]
                     if dt and not re.search(r'option\s+(?:period|term)', sent, re.I):
-                        stated.append((dt, f'stated p{pg}', pg))
+                        src = f'stated p{pg}'
+                        # the sentence's own arithmetic beats a typed date:
+                        # "TEN YEARS SIX MONTHS COMMENCING OCTOBER 1, 1991 AND
+                        # ENDING MARCH 31, 2084" is 3/31/2004 (a pilot
+                        # amendment; the roster showed an expiration 80 years out)
+                        fixed = _term_arithmetic(sent + mm.group(0), dt, parse)
+                        if fixed:
+                            dt, src = fixed, f'term arithmetic p{pg}'
+                        stated.append((dt, src, pg))
             for rx in (RE_DATE_RANGE, RE_DATE_ROW):
                 for mm in rx.finditer(text):
                     dt = parse(mm.group(2))
@@ -1217,7 +1270,8 @@ def _party(flat, role):
         rf'(?i:as)\s+(?:the\s+)?(?:["“](?i:{r_role})["”]|(?i:{r_role})\b(?=\s*(?:[,.;:)]|(?i:and)\b|$)|\s+(?i:dated)\b))',
         # summary label-first: "1.2 Landlord: The Realty Associates Fund VIII,
         # L.P., a Delaware ..."; "1.1 LANDLORD: CIM/H&H RETAIL, L.P., a ..."
-        rf'(?<![A-Za-z’\'])["“]?\s*(?i:{r_role[3:-1]})\s*["”]?\s*:\s*'
+        # not a side-heading list ("IMPROVEMENTS BY TENANT: ALTERATIONS BY LANDLORD:")
+        rf'(?<![A-Za-z’\'])(?<!BY )(?<!By )(?<!by )["“]?\s*(?i:{r_role[3:-1]})\s*["”]?\s*:\s*'
         r'([A-Z][^:;]{2,120}?)(?=,?\s+(?:an?|A|AN)\s+[A-Za-z]+\s+(?i:limited|corporation|general|'
         r'company|LLC|liability|partnership)|\s+\d{1,2}\.\d{1,2}\s|\s+[A-Z]\.\s|'
         r'\s+(?i:address)\s*:|\s+\(\w\)\s|\s+(?i:c/o)\s|'
@@ -1250,9 +1304,15 @@ def _party(flat, role):
         # cover sheet naming the parties with the role AFTER each, at the very
         # top: "Prairie Example Bank, a national banking association ...
         # TENANT and River Row Station, LLC LANDLORD ... LEASE AGREEMENT"
-        (r'^\W*([A-Z][^\n]{2,160}?),?\s+TENANT\s+(?i:and)\s+'
+        # Both roles must be present: a provision titled "ALTERATIONS BY
+        # TENANT AND SIGNS" starts a segment too.
+        # Neither name may cross a sentence end or contain a role word, so
+        # "... AND SIGNS Section 1. Tenant ... Landlord" is not a cover.
+        (r'^\W*([A-Z](?:(?!\b(?i:tenant|landlord)\b)[^\n.;:]){2,160}?),?\s+(?i:Tenant)\s+(?i:and)\s+'
+         r'[A-Z](?:(?!\b(?i:tenant|landlord)\b)[^\n.;:]){2,160}?,?\s+(?i:Landlord)\b'
          if role == 'Tenant' else
-         r'\sTENANT\s+(?i:and)\s+([A-Z][^\n]{2,160}?),?\s+LANDLORD\b'),
+         r'^\W*[A-Z](?:(?!\b(?i:tenant|landlord)\b)[^\n.;:]){2,160}?,?\s+(?i:Tenant)\s+(?i:and)\s+'
+         r'([A-Z](?:(?!\b(?i:tenant|landlord)\b)[^\n.;:]){2,160}?),?\s+(?i:Landlord)\b'),
     )
     if role == 'Landlord':
         # cover page: "LEASE BETWEEN X, LLC A Nevada LLC Landlord And Y Tenant"
@@ -1335,11 +1395,14 @@ def _clean_party(name):
     name = re.sub(r'\s+', ' ', name).strip(' ,.;:’\'-')
     if not _looks_like_party(name):
         return None
-    if re.match(r'(?i)^(?:an?|the)\s+(?:\w+\s+){0,3}(?:corporation|company|limited|llc|l\.l\.c\.?|'
-                r'partnership|association|trust|individual)\.?$', name):
-        return None                     # "A Delaware Corporation", "an individual"
+    if re.match(r'(?i)^(?:an?|the)\s+(?:\w+\s+){0,2}(?:corporation|company|limited\s+(?:liability\s+'
+                r'company|partnership)|partnership|association|trust|individual)\.?$', name):
+        return None                     # "A Delaware Corporation", "an individual" — but
+                                        # "A Bright Idea LLC" is a name
     if re.match(r'(?i)^(?:the\s+)?(?:tenant|landlord|lessee|lessor|owner|licensee|licensor)$', name):
         return None                     # the role word itself
+    if re.search(r'(?i)\s(?:by|of|to|and|for|the|an?|or|in|at)$', name):
+        return None                     # a heading fragment ("ALTERATIONS BY"; not "P.A.")
     suffixes = {'llc', 'inc', 'co', 'corp', 'ltd', 'lp', 'llp', 'pa', 'pc',
                 'company', 'corporation', 'partnership', 'limited', 'the'}
     words = [w for w in re.findall(r"[A-Za-z0-9&'’]+", name)
