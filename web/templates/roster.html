@@ -40,7 +40,7 @@
 </div>
 
 {% macro roster_table(items, allow_confirm) %}
-<table class="data-table">
+<table class="data-table sticky-head">
     <thead>
         <tr>
             <th>Tenant</th>
@@ -74,13 +74,13 @@
                 {% endif %}
                 {% if allow_confirm and r.commencement_source != 'confirmed' and can_edit('property.units') %}
                 <form method="post" action="{{ url_for('roster_confirm', property_id=prop.id) }}"
-                      style="display:flex; gap:6px; margin-top:6px;">
+                      style="display:flex; gap:4px; margin-top:4px; align-items:center;">
                     <input type="hidden" name="tenancy_key" value="{{ r.key }}">
                     <input type="hidden" name="tenant_label" value="{{ r.tenant }}">
                     <input type="date" name="commencement" required
                            value="{{ (r.commencement or r.commencement_guess).isoformat() if (r.commencement or r.commencement_guess) else '' }}"
-                           style="font-size:12px; padding:2px 6px;">
-                    <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
+                           style="font-size:11px; padding:1px 4px;">
+                    <button type="submit" class="btn btn-xs btn-primary">Confirm</button>
                 </form>
                 {% endif %}
             </td>

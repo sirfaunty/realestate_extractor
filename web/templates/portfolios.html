@@ -2,25 +2,14 @@
 {% block title %}Portfolios — capactive{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Portfolios</h2>
-    <p>Organize properties into portfolio groupings</p>
-</div>
-
-<!-- Create Portfolio -->
-<div class="card">
-    <div class="card-header">New Portfolio</div>
-    <form method="POST" action="{{ url_for('create_portfolio') }}" style="display: flex; gap: 12px; align-items: end;">
-        <div class="form-group" style="margin-bottom: 0; flex: 1;">
-            <label for="name">Name</label>
-            <input type="text" id="name" name="name" placeholder="e.g. Midwest Industrial Fund I" required>
-        </div>
-        <div class="form-group" style="margin-bottom: 0; flex: 2;">
-            <label for="description">Description</label>
-            <input type="text" id="description" name="description" placeholder="Optional description">
-        </div>
-        <button type="submit" class="btn btn-primary">Create</button>
-    </form>
+<div class="page-header page-header-row">
+    <div>
+        <h2>Portfolios</h2>
+        <p>Organize properties into portfolio groupings</p>
+    </div>
+    <div class="page-header-actions">
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('dlg-new-portfolio').showModal()">New Portfolio</button>
+    </div>
 </div>
 
 <!-- Portfolio List -->
@@ -49,7 +38,7 @@
 <div class="card">
     <div class="empty-state">
         <div class="icon">&#127970;</div>
-        <p>No portfolios yet. Create one above to start organizing your properties.</p>
+        <p>No portfolios yet. Use <strong>New Portfolio</strong> above to start organizing your properties.</p>
     </div>
 </div>
 {% endif %}
@@ -82,4 +71,24 @@
     </table>
 </div>
 {% endif %}
+
+<dialog class="form-dialog" style="width: min(480px, calc(100vw - 32px));" id="dlg-new-portfolio" onclick="if (event.target === this) this.close()">
+<div class="form-dialog-body">
+    <div class="form-dialog-head">
+        <h3>New Portfolio</h3>
+        <button type="button" class="form-dialog-close" aria-label="Close" onclick="this.closest('dialog').close()">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('create_portfolio') }}">
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" placeholder="e.g. Midwest Industrial Fund I" required autofocus>
+        </div>
+        <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" placeholder="Optional description">
+        </div>
+        <button type="submit" class="btn btn-primary">Create</button>
+    </form>
+</div>
+</dialog>
 {% endblock %}

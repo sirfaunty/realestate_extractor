@@ -2,9 +2,15 @@
 {% block title %}Properties — capactive{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Properties</h2>
-    <p>All property assets across your portfolios</p>
+<div class="page-header page-header-row">
+    <div>
+        <h2>Properties</h2>
+        <p>All property assets across your portfolios</p>
+    </div>
+    <div class="page-header-actions">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('dlg-bulk-add').showModal()">Bulk Add</button>
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('dlg-add-property').showModal()">Add Property</button>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -31,14 +37,62 @@
     </span>
 </div>
 
-<!-- Create Property -->
+<!-- Properties Table -->
+{% if properties %}
 <div class="card">
-    <div class="card-header">Add Property</div>
+    <table class="data-table sticky-head">
+        <thead>
+            <tr>
+                <th>Property</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Portfolio</th>
+                <th style="text-align: right;">Buildings</th>
+                <th style="text-align: right;">Units</th>
+                <th style="text-align: right;">Documents</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in properties %}
+            <tr>
+                <td><a href="{{ url_for('property_detail', property_id=p.id) }}" style="font-weight: 600;">{{ p.name }}</a></td>
+                <td><span class="badge badge-{{ p.property_type }}">{{ p.property_type.replace('_', ' ') }}</span></td>
+                <td style="font-size: 13px;">{{ p.city }}{{ ', ' + p.state if p.state else '' }}</td>
+                <td style="font-size: 13px; color: var(--text-muted);">{{ p.portfolio_name or '—' }}</td>
+                <td style="text-align: right;">{{ p.building_count }}</td>
+                <td style="text-align: right;">{{ p.unit_count }}</td>
+                <td style="text-align: right;">{{ p.document_count }}</td>
+                <td>
+                    <span class="badge badge-{% if p.status == 'active' %}success{% elif p.status == 'disposed' %}error{% else %}processing{% endif %}">
+                        {{ p.status.replace('_', ' ') }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">&#127970;</div>
+        <p>No properties yet. Use <strong>Add Property</strong> above to start building your portfolio.</p>
+    </div>
+</div>
+{% endif %}
+
+<dialog class="form-dialog" id="dlg-add-property" onclick="if (event.target === this) this.close()">
+<div class="form-dialog-body">
+    <div class="form-dialog-head">
+        <h3>Add Property</h3>
+        <button type="button" class="form-dialog-close" aria-label="Close" onclick="this.closest('dialog').close()">&times;</button>
+    </div>
     <form method="POST" action="{{ url_for('create_property') }}">
         <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;">
             <div class="form-group">
                 <label for="name">Property Name</label>
-                <input type="text" id="name" name="name" placeholder="e.g. Parkview Apartments" required>
+                <input type="text" id="name" name="name" autofocus placeholder="e.g. Parkview Apartments" required>
             </div>
             <div class="form-group">
                 <label for="property_type">Type</label>
@@ -101,10 +155,13 @@
         <button type="submit" class="btn btn-primary">Add Property</button>
     </form>
 </div>
-
-<!-- Bulk Create Properties -->
-<div class="card" style="margin-top: 16px;">
-    <div class="card-header">Bulk Add Properties</div>
+</dialog>
+<dialog class="form-dialog" id="dlg-bulk-add" onclick="if (event.target === this) this.close()">
+<div class="form-dialog-body">
+    <div class="form-dialog-head">
+        <h3>Bulk Add Properties</h3>
+        <button type="button" class="form-dialog-close" aria-label="Close" onclick="this.closest('dialog').close()">&times;</button>
+    </div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
         <div>
             <form method="POST" action="{{ url_for('bulk_create_properties') }}">
@@ -129,49 +186,5 @@
         Duplicates are automatically detected via fuzzy name matching and skipped.
     </p>
 </div>
-
-<!-- Properties Table -->
-{% if properties %}
-<div class="card">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Property</th>
-                <th>Type</th>
-                <th>Location</th>
-                <th>Portfolio</th>
-                <th style="text-align: right;">Buildings</th>
-                <th style="text-align: right;">Units</th>
-                <th style="text-align: right;">Documents</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for p in properties %}
-            <tr>
-                <td><a href="{{ url_for('property_detail', property_id=p.id) }}" style="font-weight: 600;">{{ p.name }}</a></td>
-                <td><span class="badge badge-{{ p.property_type }}">{{ p.property_type.replace('_', ' ') }}</span></td>
-                <td style="font-size: 13px;">{{ p.city }}{{ ', ' + p.state if p.state else '' }}</td>
-                <td style="font-size: 13px; color: var(--text-muted);">{{ p.portfolio_name or '—' }}</td>
-                <td style="text-align: right;">{{ p.building_count }}</td>
-                <td style="text-align: right;">{{ p.unit_count }}</td>
-                <td style="text-align: right;">{{ p.document_count }}</td>
-                <td>
-                    <span class="badge badge-{% if p.status == 'active' %}success{% elif p.status == 'disposed' %}error{% else %}processing{% endif %}">
-                        {{ p.status.replace('_', ' ') }}
-                    </span>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<div class="card">
-    <div class="empty-state">
-        <div class="icon">&#127970;</div>
-        <p>No properties yet. Add one above to start building your portfolio.</p>
-    </div>
-</div>
-{% endif %}
+</dialog>
 {% endblock %}
