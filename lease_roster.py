@@ -722,7 +722,8 @@ def summarize(rows: list[RosterRow], as_of: Optional[date] = None) -> dict:
         'walt_years': round(walt, 1) if walt is not None else None,
         'monthly_rent_confirmed': round(sum(r.monthly_rent for r in rent_rows), 2),
         'rent_confirmed_for': len(rent_rows),
-        'needs_review': [(r.tenant, r.needs) for r in rows if r.needs],
+        # expired leases have their own count; this matches the tenancies figure
+        'needs_review': [(r.tenant, r.needs) for r in rows if r.needs and r.kind != 'expired'],
         'expiring_12mo': sum(1 for r in ten if r.expiration and 0 <= (r.expiration - as_of).days <= 365),
         'expired_on_paper': sum(1 for r in rows if r.kind == 'expired'),
         'other_agreements': sum(1 for r in rows if r.kind == 'other_agreement'),

@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.lease_roster import (  # noqa: E402
     RosterRow, _check_rent_roll, _clean_identity, _common_filename_words, _filename_stem,
-    _kind, _needs, _restated_sf)
+    _kind, _needs, _restated_sf, summarize)
 
 FILES = [
     'OKP Harbor Hardware - OK-HH 1st Lease Amendment 05 20 1992.pdf',
@@ -401,6 +401,17 @@ def test_unassigned_upload_does_not_recount_the_portfolio():
     by_pid = {p['property_id']: p['tenancies'] for p in s['properties']}
     assert by_pid == {1: 2, None: 1}, by_pid
 
+
+def test_need_attention_counts_tenancies_not_expired_leases():
+    # "9 of 17 confirmed" beside "9 need attention" read as flipped when the
+    # expired lease was counted in the second number
+    rows = [RosterRow(tenant='Bean Coffee', monthly_rent=2000.0, rent_confidence='high'),
+            RosterRow(tenant='Pet Barn', needs='confirm the commencement date'),
+            RosterRow(tenant='Old Anchor Inc.', kind='expired', needs='confirm it has ended')]
+    s = summarize(rows, as_of=date(2026, 10, 1))
+    assert s['tenancies'] == 2 and s['rent_confirmed_for'] == 1, s
+    assert s['needs_review'] == [('Pet Barn', 'confirm the commencement date')], s['needs_review']
+    assert s['expired_on_paper'] == 1, s
 
 
 if __name__ == '__main__':
