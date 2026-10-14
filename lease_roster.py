@@ -616,9 +616,11 @@ def _kind(row: RosterRow, text: str, as_of: date) -> str:
     """tenancy | other_agreement (telecom / billboard / easement / license —
     not an occupancy) | expired (paper ends > 90 days ago and no schedule
     covers today — a former tenant, or a renewal not in the file)."""
-    names = ' '.join([row.tenant, row.label] + row.aliases + row.filenames)
+    # uploads keep their file names as given: "Tower_License_Agreement.pdf"
+    files = re.sub(r'[_\s]+', ' ', ' '.join(row.filenames))
+    names = ' '.join([row.tenant, row.label] + row.aliases + [files])
     if _CARRIERS.search(names) or _OTHER_AGREEMENT.search(text[:600]) \
-            or _OTHER_AGREEMENT.search(' '.join(row.filenames)):
+            or _OTHER_AGREEMENT.search(files):
         return 'other_agreement'
     if (row.expiration and (as_of - row.expiration).days > 90
             and row.rent_method != 'schedule'):

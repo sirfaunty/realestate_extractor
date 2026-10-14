@@ -88,6 +88,9 @@ def test_kind_other_agreement_and_expired():
     assert _kind(tel, 'RIGHT OF ENTRY AGREEMENT ...', as_of) == 'other_agreement'
     sign = RosterRow(tenant='Metro Signs', filenames=['Plaza - Billboard License Agreement.pdf'])
     assert _kind(sign, '', as_of) == 'other_agreement'
+    # an upload keeps underscores in its file name
+    tower = RosterRow(tenant='', filenames=['Elm_Court_-_Tower_Scanned_License_Agreement.pdf'])
+    assert _kind(tower, 'LEASE DOCUMENT CHECKLIST ...', as_of) == 'other_agreement'
     gone = RosterRow(tenant='Old Anchor Inc.', expiration=date(2018, 2, 1), rent_method='flat')
     assert _kind(gone, 'LEASE AGREEMENT', as_of) == 'expired'
     # expiration on paper is old, but a schedule covers today -> still a tenancy

@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.extractors.lease_segmenter import (  # noqa: E402
-    RE_EXPIRE_STMT, _TRADE_NAME_RX, _party, _scan_expiration, _security_deposit, _sf_pick, _sf_scan, _to_mdy,
+    RE_EXPIRE_STMT, _TRADE_NAME_RX, _party, _trade_name_match, _scan_expiration, _security_deposit, _sf_pick, _sf_scan, _to_mdy,
     _year1_monthly_rent)
 
 
@@ -101,6 +101,33 @@ def test_basic_provisions_block_labels():
     assert _party(t, 'Tenant') == 'Hilltop Shoes, Inc', _party(t, 'Tenant')
     assert _TRADE_NAME_RX.search(t).group(1).strip() == 'Hilltop Shoes'
     assert _TRADE_NAME_RX.search('Pine Air, LLC d/b/a Pine Air Fitness, a Minnesota').group(1) == 'Pine Air Fitness'
+
+
+def test_upper_case_dba_on_a_cover_and_ocr_mark_before_the_name():
+    # the cover's name runs into a file path; the preamble's, closed by a comma, wins
+    t = flat("LANDLORD: ELM COURT PARTNERS LP TENANT: BIRCH FOODS, INC. D/B/A HILLTOP PIZZA'S "
+             "H:\\LEGAL\\LEASES\\HILL 1041 SECTION 1.01 - PREMISES ... THIS LEASE is made by Elm Court "
+             "Partners LP (\"Landlord\") and BIRCH FOODS, INC., d/b/a HILLTOP PIZZA'S, a(n) corporation "
+             "(\"Tenant\")")
+    assert _trade_name_match(t).group(1) == "HILLTOP PIZZA'S", _trade_name_match(t).group(1)
+    t = flat('TENANT: PINE AIR, LLC, D/B/A PINE AIR FITNESS PMK ARTICLE I. GRANT AND TERM ... and PINE AIR, '
+             'LLC a Minnesota limited liability company ("Tenant"), d/b/a >Pine Air Fitness, with its office')
+    assert _trade_name_match(t).group(1) == 'Pine Air Fitness', _trade_name_match(t).group(1)
+
+
+def test_trade_name_must_follow_the_tenants_own_name():
+    # a co-tenancy clause names the ANCHOR's trade name, not this tenant's
+    t = flat('THIS LEASE between Elm Court Partners LP ("Landlord") and Maple Variety Stores, Inc., a '
+             'Virginia corporation ("Tenant"). ... Co-Tenancy. If at any time the tenant doing business '
+             'as Bigbox Mart, its successors or assigns ceases to operate ...')
+    assert _trade_name_match(t, legal='Maple Variety Stores, Inc') is None
+    # one OCR letter off in the preamble still counts
+    t = flat('and RIRCH FOODS, INC., d/b/a HILLTOP PIZZA, a(n) corporation ("Tenant")')
+    assert _trade_name_match(t, legal='BIRCH FOODS, INC').group(1) == 'HILLTOP PIZZA'
+    # a blank abstract form: the next lettered label is not a trade name
+    t = flat("FIR LANE, L.L.C. [Landlord] AND OAK CUTS, INC. [Tenant] LEASE ABSTRACT A. Tenant's Trade "
+             "Name: B. Center: Address: ... TENANT: Oak Cuts, Inc. d/b/a/Quick Trims 327 Bluff Road")
+    assert _trade_name_match(t, legal='Oak Cuts, Inc').group(1) == 'Quick Trims'
 
 
 def test_cover_quoted_roles_without_parentheses_ocr():

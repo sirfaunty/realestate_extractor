@@ -878,10 +878,10 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
         cleaned = _clean_party(m.group(1).strip(' ,'))
         if cleaned:
             found.append(cleaned)
-    m = _TRADE_NAME_RX.search(body[:20000])
-    if m and not re.match(r'(?i)^(?:section|article|exhibit|schedule|page|witnesseth|tenant|landlord)\b',
-                          m.group(1)):      # a scan put the heading where the name was
-        found.append(m.group(1).strip())
+    m = _trade_name_match(body[:20000])
+    trade = m.group(1).strip().rstrip('.') if m else None
+    if trade:
+        found.append(trade)
     net = ' / '.join(dict.fromkeys(found)) if found else None
     if net and not _looks_like_party(net):
         net = None                      # an address caught before ("Tenant")
@@ -891,6 +891,12 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
         det_tn = ((_lease_head and _party(_lease_head, 'Tenant'))
                   or _party(_flat_head, 'Tenant'))
         if det_tn:
+            # "Legal / Trade", the shape the AI pass writes: the roster shows
+            # it and matches rent rolls (which carry trade names) on it
+            tm = _trade_name_match(body[:20000], legal=det_tn)
+            tn = tm.group(1).strip().rstrip('.') if tm else None
+            if tn and _alpha_key(tn) not in _alpha_key(det_tn) and _looks_like_party(tn):
+                det_tn = f'{det_tn} / {tn}'
             ident_names = (det_tn, None)
         elif net:
             ident_names = (net, None)
@@ -1263,9 +1269,62 @@ def _sf_pick(cands):
 # the rent roll on — rent rolls carry trade names, not legal names).
 # The name ends at punctuation, a number, the next LABEL: or lowercase prose
 # ("Hilltop Shoes 230 8 LEASED PREMISES:" -> "Hilltop Shoes").
-_TRADE_NAME_RX = re.compile(r"(?:\bd[./]?b[./]?a[./]?:?|(?i:doing\s+business\s+as)|(?i:trade\s+name)\s*:)\s*"
+# Upper-case "D/B/A" on cover pages; a stray OCR mark (">") may sit before the
+# name. A name that runs into a file path or a heading ends there.
+_TRADE_NAME_RX = re.compile(r"(?:\bd[./]?b[./]?a[./]?:?|\bD[./]B[./]A\b[./]?:?|(?i:doing\s+business\s+as)|(?i:trade\s+name)\s*:)\s*>?\s*"
                             r"([A-Z][A-Za-z0-9 .&'’-]{2,40}?)"
-                            r"(?=\s*(?:[,();:\[\]]|\.\s|$)|\s\d|\s[A-Z][A-Z'’ ]+:|\s[a-z]{3,}\b)")
+                            r"(?=\s*(?:[,();:\[\]]|\.\s|$)|\s\d|\s[A-Z][A-Z'’ ]+:|\s[a-z]{3,}\b|"
+                            r"\s\S*\\|\s(?:ARTICLE|SECTION|TABLE)\b)")
+
+
+def _alpha_key(s):
+    return re.sub(r'[^a-z0-9]', '', (s or '').lower())
+
+
+_ENTITY_WORDS = {'inc', 'llc', 'corp', 'corporation', 'company', 'ltd', 'the', 'and',
+                 'incorporated', 'limited', 'partnership', 'stores'}
+
+
+def _near_word(a, b):
+    """Same word, or one OCR letter off ("RIRCH" for "BIRCH")."""
+    return a == b or (len(a) == len(b) and sum(x != y for x, y in zip(a, b)) <= 1)
+
+
+def _names_tenant_before(text, start, legal):
+    """The tenant's own legal name sits just before the d/b/a: "Birch Foods,
+    Inc., d/b/a ..." -- not a co-tenancy clause's "the tenant doing business
+    as <anchor store>"."""
+    want = [w for w in re.findall(r'[a-z]{4,}', legal.lower()) if w not in _ENTITY_WORDS]
+    window = text[max(0, start - 160):start]
+    # same sentence only ("Inc., d/b/a" and "INC. D/B/A" don't end one)
+    breaks = list(re.finditer(r'[.;]\s+(?:\.\.\.\s+)?[A-Z][a-z]', window))
+    if breaks:
+        window = window[breaks[-1].end() - 2:]
+    have = re.findall(r'[a-z]{4,}', window.lower())
+    return bool(want) and any(_near_word(w, h) for w in want for h in have)
+
+
+def _trade_name_match(text, legal=None):
+    """The trade-name match to use: the first one closed by punctuation
+    ("d/b/a Hilltop Shoes, a corporation") beats an earlier one on a cover or
+    header, where the name runs into whatever the scan put next.
+    legal: keep only a d/b/a that follows that tenant's own name."""
+    first = None
+    for m in _TRADE_NAME_RX.finditer(text):
+        if re.match(r'(?i)^(?:section|article|exhibit|schedule|page|witnesseth|tenant|landlord)\b',
+                    m.group(1)):
+            continue                    # a scan put the heading where the name was
+        if re.match(r'[A-Z]\.\s', m.group(1)):
+            continue                    # the next lettered label of a blank form ("B. Center:")
+        if legal and not _names_tenant_before(text, m.start(), legal):
+            continue
+        if re.match(r'\.?\s*[,();]', text[m.end():m.end() + 4]):
+            return m
+        # an upper-case "D/B/A" is a cover/header form: only a name closed by
+        # punctuation is trusted there ("D/B/A PINE AIR FITNESS PMK ARTICLE I")
+        if not m.group(0).startswith('D'):
+            first = first or m
+    return first
 
 _ROLE_ALIASES = {'Landlord': '(?:Landlord|Lessor|Owner)', 'Tenant': '(?:Tenant|Lessee)'}
 _OTHER_ROLE = {'Landlord': 'Tenant', 'Tenant': 'Landlord'}
