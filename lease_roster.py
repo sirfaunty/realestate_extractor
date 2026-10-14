@@ -248,6 +248,14 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                 row.tenant = max(reversed(row.aliases), key=lambda a: alias_count.get(a, 0))
             else:
                 row.tenant = row.label.title()
+        # the legal name shares no word with the landlord's own file name
+        # ("Rosa Lopez" filed as "Rosa's Tacos"): show the store name too,
+        # as a d/b/a would ("Legal / Trade")
+        if row.grouped_by == 'filename' and '/' not in row.tenant                 and not set(_tokens(row.tenant)) & set(_tokens(row.label)):
+            names = [n for n in (_file_trade_name(f, row.label, common) for f in row.filenames) if n]
+            trade = max(names, key=names.count) if names else None
+            if trade and not set(_tokens(trade)) & set(_tokens(row.tenant))                     and _alpha(trade) not in _alpha(row.tenant) and _alpha(row.tenant) not in _alpha(trade):
+                row.tenant = f'{row.tenant} / {trade}'
 
     # 3. per tenancy: facts + current rent over the whole lease chain
     out = []
@@ -550,6 +558,37 @@ def _fn_words(filename: str) -> list[str]:
     base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', filename or '')
     return [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', base))
             if len(w) >= 3 and w not in _DOC_WORDS]
+
+
+def _file_trade_name(filename: str, label: str, common: set) -> Optional[str]:
+    """The store name as the file name spells it ("Elm Court - Rosa's Tacos
+    Scanned Lease.pdf" -> "Rosa's Tacos"): from the tenancy label's words out
+    to the property prefix, a " - " separator, a document word, a bracket or
+    a number. None when the label's words aren't in this file name."""
+    want = label.split()
+    # uploads keep their names as given: "Elm_Court_-_Rosas_Tacos_Scanned_Lease.pdf"
+    toks = re.sub(r'_+', ' ', re.sub(r'\.[A-Za-z0-9]{2,5}$', '', filename or '')).split()
+
+    def words(t):
+        return [w for w in re.split(r'[^a-z]+', t.lower()) if w]
+
+    hits = [i for i, t in enumerate(toks) if set(words(t)) & set(want)]
+    if not hits:
+        return None
+
+    def stops(t):
+        ws = words(t)
+        return (not ws and not re.fullmatch(r'[&+]', t)) or t[0] in '(['  \
+            or any(c.isdigit() for c in t) or len(t) == 1 and t.isalpha() \
+            or any(w in common or w in _DOC_WORDS - {'and'} for w in ws)
+
+    a = b = hits[0]                     # the first mention only: "Pine Pets - EC-PP 4th ..."
+    while a > 0 and not stops(toks[a - 1]):
+        a -= 1
+    while b + 1 < len(toks) and not stops(toks[b + 1]):
+        b += 1
+    name = ' '.join(toks[a:b + 1]).strip(' -&+')
+    return name if len(_alpha(name)) >= 3 else None
 
 
 def _common_filename_words(filenames: list[str]) -> set:

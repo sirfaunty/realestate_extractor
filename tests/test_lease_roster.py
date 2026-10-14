@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.lease_roster import (  # noqa: E402
     RosterRow, _check_rent_roll, _clean_identity, _common_filename_words, _filename_stem,
-    _kind, _needs, _restated_sf, summarize)
+    _file_trade_name, _kind, _needs, _restated_sf, summarize)
 
 FILES = [
     'OKP Harbor Hardware - OK-HH 1st Lease Amendment 05 20 1992.pdf',
@@ -428,6 +428,40 @@ def test_confirmed_commencement_finishes_a_full_months_term():
     assert rows['bean coffee'].expiration == date(2027, 4, 30), rows['bean coffee'].expiration
     assert rows['bean coffee'].expiration_source == 'computed'
     assert rows['pet barn'].expiration is None and rows['pet barn'].kind == 'tenancy'
+
+
+def test_store_name_from_the_file_name():
+    common = {'elm', 'court', 'ecp'}
+    assert _file_trade_name("Elm Court - Rosa's Tacos Scanned Lease.pdf", 'rosa tacos', common) == "Rosa's Tacos"
+    assert _file_trade_name('Elm Court Plaza I Z-Golf Scanned Lease.pdf', 'golf', common | {'plaza'}) == 'Z-Golf'
+    assert _file_trade_name('Elm Court - QR Nails Scanned Lease.pdf', 'nails', common) == 'QR Nails'
+    assert _file_trade_name('ECP Pine Pets - ECP-Pine Pets 4th Lease Amendment.pdf', 'pine pets', common) == 'Pine Pets'
+    assert _file_trade_name('Elm Court - Birch Goods FKA Oak Health Scanned.pdf', 'birch goods', common) == 'Birch Goods'
+    assert _file_trade_name('Elm Court - Lark Smiles (aka Lark Dental) Lease.pdf', 'lark smiles', common) == 'Lark Smiles'
+    assert _file_trade_name('Elm_Court_-_Rosas_Tacos_Scanned_Lease.pdf', 'rosas tacos', common) == 'Rosas Tacos'
+    assert _file_trade_name('Elm Court - Lamp Shop Lease.pdf', 'rosa tacos', common) is None
+
+
+def test_roster_shows_the_store_name_beside_a_personal_legal_name():
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn, who in ((1, "Elm Court - Rosa's Tacos Scanned Lease.pdf", 'MARIA LOPEZ MARIN'),
+                       (2, 'Elm Court - Bean Coffee Lease.pdf', 'Bean Coffee, Inc.'),
+                       (3, 'Elm Court - Pet Barn Lease.pdf', 'Pet Barn Holdings')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id, "
+                  "analysis_status) VALUES (?, ?, 'x', 'lease', 1, 'analyzed')", (i, fn))
+        c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) "
+                  "VALUES (?, 'tenant_identity', ?)", (i, who))
+    c.commit()
+    names = {r.tenant for r in build_roster(c, 1, as_of=date(2026, 10, 1))}
+    db.close()
+    # the store name is added only where the legal name shares no word with it
+    assert names == {'Bean Coffee, Inc.', 'Pet Barn Holdings', "MARIA LOPEZ MARIN / Rosa's Tacos"}, names
 
 
 def test_need_attention_counts_tenancies_not_expired_leases():
