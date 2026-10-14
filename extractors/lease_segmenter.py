@@ -55,6 +55,12 @@ INSTRUMENT_PATTERNS = [
     (r'^AMENDMENT\s+(?:TO|OF)\s+LEASE', 'amendment'),
     (r'^AMENDMENT\s*$', 'amendment'),
     (r'^LEASE\s+AMENDMENT', 'amendment'),
+    (r'^(?:' + '|'.join(ORDINALS) + r')\s+LEASE\s+AMENDMENT', 'amendment'),   # "FOURTH LEASE AMENDMENT AND RELOCATION AGREEMENT"
+    # "EXPANSION DATE AGREEMENT" / "COMMENCEMENT DATE AGREEMENT": a short
+    # instrument fixing the dates an amendment left open ("the Extended Term
+    # shall ... expire on June 30, 2030"); otherwise it folds into the
+    # exhibit before it, whose stated dates are not read
+    (r'^(?:RENT\s+)?(?:COMMENCEMENT|EXPANSION|DELIVERY)\s+DATE\s+AGREEMENT', 'amendment'),
     (r'^ASSIGNMENT\s+(?:AND\s+ASSUMPTION\s+)?OF\s+LEASE', 'assignment'),
     (r'^LEASE\s+TERMINATION', 'termination'),
     (r'^TERMINATION\s+(?:OF|AGREEMENT)', 'termination'),
@@ -735,7 +741,7 @@ def _scan_expiration(instruments):
             return None
 
     stated, ranges = [], []
-    for inst in instruments:
+    for ix, inst in enumerate(instruments):
         if inst['kind'] not in LEASE_BODY_KINDS + ('exhibit',):
             continue
         for pg, text in inst['pages']:
@@ -757,17 +763,17 @@ def _scan_expiration(instruments):
                         fixed = _term_arithmetic(sent + mm.group(0), dt, parse)
                         if fixed:
                             dt, src = fixed, f'term arithmetic p{pg}'
-                        stated.append((dt, src, pg))
+                        stated.append((dt, src, pg, ix))
             for rx in (RE_DATE_RANGE, RE_DATE_ROW):
                 for mm in rx.finditer(text):
                     dt = parse(mm.group(2))
                     # a schedule row labelled "(2nd Option)" or "Option Period:
                     # 7/1/2013 - 6/30/2018" is not the term
-                    if dt and not re.search(r'^\W{0,4}\(?\s*\w{0,4}\s*option',
+                    if dt and not re.search(r'^\W{0,4}\(?\s*\w{0,4}\W{0,2}\s*option',
                                             text[mm.end():mm.end() + 25], re.I) \
                             and not re.search(r'option\s*(?:period|term|years?)?\s*[:\-]?\s*$',
                                               text[max(0, mm.start() - 30):mm.start()], re.I):
-                        ranges.append((dt, f'rent-schedule end p{pg}', pg))
+                        ranges.append((dt, f'rent-schedule end p{pg}', pg, ix))
 
     def fmt(b):
         return f'{b[0].month}/{b[0].day}/{b[0].year}', b[1]
@@ -776,8 +782,11 @@ def _scan_expiration(instruments):
     if stated:
         best = max(stated)
         # a LATER instrument's dated schedule running past the latest stated
-        # date (e.g. a relocation amendment's rent table) governs
-        if best_r and best_r[0] > best[0] and best_r[2] > best[2]:
+        # date (e.g. a relocation amendment's rent table) governs -- not a
+        # later page of the same one: an extension amendment's option rent
+        # table follows its own stated end ("Months 1 - 12 (7/1/2027 to
+        # 6/30/2028) ... revoke the Extension Option")
+        if best_r and best_r[0] > best[0] and best_r[3] > best[3]:
             return fmt(best_r)
         return fmt(best)
     if best_r:

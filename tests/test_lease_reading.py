@@ -697,6 +697,42 @@ def test_term_in_full_months_after_the_commencement():
     assert _full_months_end(datetime.date(2023, 12, 5), 84) == datetime.date(2030, 12, 31)
 
 
+def test_option_rent_table_after_its_own_stated_end_does_not_govern():
+    amend = ('2. Extended Term. The term of the Lease is hereby extended for an additional '
+             'period of twenty-six months starting on May 1, 2025 and ending on June 30, 2027 '
+             '(the "Extended Term"). 3. Minimum Rent: Months 3 - 14 $40,000.00 $3,333.33 '
+             '(7/1/2025 to 6/30/2026) Months 15 - 26 $41,200.00 $3,433.33 (7/1/2026 to 6/30/2027)')
+    option = ('b. Extension Option. Tenant shall pay during the Extended Term as follows: '
+              'Months 1 - 12 $42,436.00 $3,536.33 (7/1/2027 to 6/30/2028) c. Landlord may '
+              'revoke the Extension Option granted herein.')
+    got = _scan_expiration([{'kind': 'lease', 'pages': [(1, 'Lease text.')], 'page_start': 1},
+                            {'kind': 'amendment', 'pages': [(9, amend), (10, option)], 'page_start': 9}])
+    assert got[0] == '6/30/2027', got
+
+
+def test_ocr_mark_on_an_option_row_still_excludes_it():
+    text = ('Period Annual Rent Monthly 3/01/2010 - 2/28/2015 $84,000.00 $7,000.00 '
+            '3/01/2015 - 2/29/2020 $90,000.00 $7,500.00 '
+            '3/01/2020 - 2/28/2025 (1" Option) $95,000.00 $7,916.67 '
+            '3/01/2025 - 2/28/2030 (2 Option) $99,000.00 $8,250.00')
+    assert _scan_expiration([{'kind': 'lease', 'pages': [(1, text)], 'page_start': 1}])[0] == '2/29/2020'
+
+
+def test_expansion_date_agreement_is_its_own_instrument():
+    from realestate_extractor.extractors.lease_segmenter import segment_pages
+    pages = [(1, 'LEASE AGREEMENT\nThis Lease is made between Harbor Plaza LLC and Birch Shoes, Inc.'),
+             (2, 'EXHIBIT A\nSite plan of the expansion premises'),
+             (3, 'EXPANSION DATE AGREEMENT\nThe Extended Term of the Lease shall commence on '
+                 'February 9, 2020 and expire on June 30, 2030.')]
+    kinds = [(i['kind'], i['page_start']) for i in segment_pages(pages)]
+    assert ('amendment', 3) in kinds, kinds
+    assert _scan_expiration(segment_pages(pages))[0] == '6/30/2030'
+    # "FOURTH LEASE AMENDMENT ..." under a signing-service header
+    pages[2] = (3, 'Docusign Envelope ID: 0000\nFOURTH LEASE AMENDMENT AND RELOCATION AGREEMENT\nThe '
+                   'New Premises rent: Year 1 (1/1/2026 to 12/31/2026) Year 2 (1/1/2027 to 12/31/2027)')
+    assert ('amendment', 3) in [(i['kind'], i['page_start']) for i in segment_pages(pages)]
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
