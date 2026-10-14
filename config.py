@@ -140,8 +140,10 @@ PLAN_FEATURES = {
         # deal assumptions as defaults. They are never default-on for a new
         # org — an operator enables them per org (Admin → Modules) once
         # that org has its own deal data. (Found 2026-09-25: a fresh
-        # Professional org rendered a client deal's numbers.)
-        modules_enabled=["deliverables"],
+        # Professional org rendered a client deal's numbers.) Deliverables
+        # too: it reads the instance's engagement warehouse (2026-10-14
+        # isolation audit), so it is operator-enabled like the rest.
+        modules_enabled=[],
     ),
     "professional": FeatureFlags(
         max_users=23,
@@ -156,13 +158,13 @@ PLAN_FEATURES = {
         api_access_enabled=True,
         custom_templates_enabled=True,
         max_pages_per_document=1000,
-        # Market analytics (public/licensed market data) + deliverables.
-        # portfolio_ownership / residential read a per-org verified
-        # warehouse and are enabled by an operator once one is loaded —
-        # same rule as the deal modules.
+        # Market analytics (public/licensed market data). Deliverables,
+        # portfolio_ownership and residential read the instance's engagement
+        # warehouse (shared, not per org) and are enabled by an operator for
+        # the org that warehouse belongs to — same rule as the deal modules.
         modules_enabled=[
             "inventory", "sales_comps", "scorecard", "lease_analysis",
-            "market_intel", "office", "deliverables",
+            "market_intel", "office",
         ],
     ),
     "enterprise": FeatureFlags(
@@ -531,11 +533,13 @@ class ConfigStore:
             (org_id,))
         return [dict(row) for row in cur.fetchall()]
 
-    def revoke_device(self, device_id: str):
-        self.conn.execute(
-            "UPDATE devices SET is_active = 0 WHERE device_id = ?",
-            (device_id,))
+    def revoke_device(self, device_id: str, org_id: str):
+        """Revoke a device — only within the given org."""
+        cur = self.conn.execute(
+            "UPDATE devices SET is_active = 0 WHERE device_id = ? AND org_id = ?",
+            (device_id, org_id))
         self.conn.commit()
+        return cur.rowcount > 0
 
     def authenticate_device(self, token: str,
                             fingerprint: str = None) -> Optional[Dict]:

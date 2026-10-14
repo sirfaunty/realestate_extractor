@@ -20,7 +20,7 @@ import datetime
 import threading
 import traceback
 
-from flask import Blueprint, render_template, request, jsonify, send_file, abort
+from flask import Blueprint, render_template, request, jsonify, send_file, abort, session
 from ..bespoke_engines import engine_root, registry_path
 
 logger = logging.getLogger(__name__)
@@ -182,12 +182,17 @@ def api_generate():
     if not _valid_slug(slug):
         return jsonify({'error': 'Select a property first.'}), 400
     force = str(data.get('force') or '').lower() in ('1', 'true', 'yes', 'on')
+    # one build at a time on this instance; hand back the running job only
+    # to the org that started it
+    org_id = session.get('org_id', 'dev')
     for jid, j in _JOBS.items():
         if j.get('status') == 'running':
-            return jsonify({'job_id': jid, 'already_running': True}), 202
-    job_id = uuid.uuid4().hex[:8]
+            if j.get('org_id') == org_id:
+                return jsonify({'job_id': jid, 'already_running': True}), 202
+            return jsonify({'error': 'Another build is running; try again in a few minutes.'}), 409
+    job_id = uuid.uuid4().hex
     _JOBS[job_id] = {
-        'id': job_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting…',
+        'id': job_id, 'org_id': org_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting…',
         'error': None, 'slug': slug, 'force': force,
         'started': datetime.datetime.now().isoformat(timespec='seconds'),
     }
@@ -198,9 +203,9 @@ def api_generate():
 @disposition_diligence_bp.route('/api/status/<job_id>')
 def api_status(job_id):
     job = _JOBS.get(job_id)
-    if not job:
+    if not job or job.get('org_id') != session.get('org_id', 'dev'):
         return jsonify({'error': 'Unknown job'}), 404
-    return jsonify({k: v for k, v in job.items() if k != 'traceback'})
+    return jsonify({k: v for k, v in job.items() if k not in ('traceback', 'org_id')})
 
 
 @disposition_diligence_bp.route('/api/download')

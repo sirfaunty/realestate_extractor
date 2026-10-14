@@ -57,7 +57,7 @@ a { color:var(--accent); text-decoration:none; }
 <h1>Deliverables</h1>
 <div class='sub'>Generated from the verified portfolio warehouse
 (page-cited provisions) + the rent-roll module. Read-only
-sources; documents land in <span class='badge'>data/deliverables/</span>.</div>
+sources; documents land in <span class='badge'>data/deliverables/&lt;org&gt;/</span>.</div>
 
 <div id='status'></div>
 
@@ -157,17 +157,28 @@ async function gen(pid, mode, btn) {
 """
 
 
+def _org_out_dir():
+    """Each org's generated documents live in their own folder, so one
+    org can never list or download another's."""
+    from flask import session
+    org = re.sub(r'[^A-Za-z0-9_-]', '_', session.get('org_id') or 'dev')
+    d = os.path.join(OUTPUT_DIR, org)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 @deliv_bp.route('/')
 def index():
     props = lease_properties()
     files = []
-    if os.path.isdir(OUTPUT_DIR):
-        for fn in sorted(os.listdir(OUTPUT_DIR),
-                         key=lambda f: os.path.getmtime(os.path.join(OUTPUT_DIR, f)),
+    out_dir = _org_out_dir()
+    if os.path.isdir(out_dir):
+        for fn in sorted(os.listdir(out_dir),
+                         key=lambda f: os.path.getmtime(os.path.join(out_dir, f)),
                          reverse=True):
             if not fn.lower().endswith('.docx'):
                 continue
-            fp = os.path.join(OUTPUT_DIR, fn)
+            fp = os.path.join(out_dir, fn)
             st = os.stat(fp)
             files.append({'name': fn,
                           'size': f'{st.st_size // 1024:,} KB',
@@ -244,7 +255,7 @@ def generate():
             name = data['property'].get('property_name') or pid
             fname = refi_filename(name)
             _finish_job(jobs, job_id, filename=fname)
-            out = os.path.join(OUTPUT_DIR, fname)
+            out = os.path.join(_org_out_dir(), fname)
             data['prepared_for'] = _org_name()
             rep = build_refi_package(data, out)
             logger.info(f'refi package generated: {out}')
@@ -264,7 +275,7 @@ def generate():
         name = data['property'].get('property_name') or pid
         fname = default_filename(name, mode)
         _finish_job(jobs, job_id, filename=fname)
-        out = os.path.join(OUTPUT_DIR, fname)
+        out = os.path.join(_org_out_dir(), fname)
         data['prepared_for'] = _org_name()
         rep = build_compendium(data, out, mode=mode)
         logger.info(f'deliverable generated: {out} '
@@ -283,10 +294,10 @@ def generate():
 
 @deliv_bp.route('/download/<path:fname>')
 def download(fname):
-    # safe: no traversal, only files that exist inside OUTPUT_DIR
+    # safe: no traversal, only files that exist inside this org's folder
     if not re.match(r'^[A-Za-z0-9._-]+\.docx$', fname):
         return 'invalid filename', 400
-    fp = os.path.join(OUTPUT_DIR, fname)
+    fp = os.path.join(_org_out_dir(), fname)
     if not os.path.isfile(fp):
         return 'not found', 404
     return send_file(fp, as_attachment=True)

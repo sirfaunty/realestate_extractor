@@ -39,6 +39,15 @@ MODULE_ROUTES = {
     # 'proforma' has no blueprint prefix of its own — auth-gated in core routes.
 }
 
+# Shared engagement data behind the deal modules: the deal registry (the deal
+# picker) and the warehouse API. Not modules of their own — reachable only
+# by an org with at least one deal module enabled (2026-10-14 isolation
+# audit: they were open to every signed-in user on any plan).
+DEAL_DATA_PREFIXES = ['/warehouse', '/api/registry']
+DEAL_MODULES = ['closing_books', 'tif_analysis', 'distribution', 'debt_analysis',
+                'partnership_dashboard', 'portfolio_cashflow', 'lease_abstraction',
+                'disposition_diligence', 'portfolio_ownership', 'residential']
+
 # Display groupings for the admin UI (order matters).
 MODULE_GROUPS = [
     ('Deal Documents', ['closing_books', 'tif_analysis', 'distribution',
@@ -87,8 +96,8 @@ def get_enabled_modules():
     """Resolve the current org's enabled-module set. Cached per request.
 
     Returns a set of module names, or None meaning 'everything' ("*").
-    Fails open (None) if config can't be resolved — gating must never take
-    the whole app down.
+    If the org can't be resolved, no modules (fails closed: the core app
+    still works, module pages say "not enabled"). Dev mode keeps everything.
     """
     if hasattr(g, '_enabled_modules'):
         return g._enabled_modules
@@ -103,11 +112,18 @@ def get_enabled_modules():
         if features is not None:
             mods = list(features.modules_enabled or [])
             enabled = None if '*' in mods else set(mods)
-    except Exception as e:  # fail open
-        logger.debug(f'module gating: falling open ({e})')
-        enabled = None
+        elif not _dev_mode():
+            enabled = set()
+    except Exception as e:
+        logger.warning(f'module gating: could not resolve modules ({e})')
+        enabled = None if _dev_mode() else set()
     g._enabled_modules = enabled
     return enabled
+
+
+def _dev_mode():
+    import os
+    return os.environ.get('CAPACTIVE_DEV_MODE', '0') == '1'
 
 
 def module_enabled(name: str) -> bool:
@@ -128,6 +144,13 @@ def register_gating(app):
                     logger.info(f'module gate: blocked {path} (module {mod}) '
                                 f'for org {session.get("org_id", "dev")}')
                     return render_template_string(_LOCKED_HTML, module_label=label), 403
+                break
+        for prefix in DEAL_DATA_PREFIXES:
+            if path == prefix or path.startswith(prefix + '/'):
+                if not any(module_enabled(m) for m in DEAL_MODULES):
+                    logger.info(f'module gate: blocked {path} (deal data) '
+                                f'for org {session.get("org_id", "dev")}')
+                    return {'error': 'not enabled for this organization'}, 403
                 break
         return None
 

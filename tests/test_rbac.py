@@ -14,8 +14,11 @@ import os
 import json
 import tempfile
 
-# Add parent to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# repo root on the path (this file lives in tests/); UTF-8 output so the
+# check marks print on a Windows console
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 from permissions import (
     PermissionStore, ROLE_TEMPLATES, SCOPES, SCOPE_ORDER, LEVELS,

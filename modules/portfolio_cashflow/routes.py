@@ -41,7 +41,9 @@ _RR_DIR = os.path.join(_STAGE_ROOT, 'staged_rent_rolls')
 portfolio_cashflow_bp = Blueprint('portfolio_cashflow', __name__, url_prefix='/portfolio-cashflow')
 
 _JOBS = {}
-_LATEST = {'xlsx': None, 'summary': None}
+# per org: {'xlsx': path, 'summary': {...}} — one org never sees another's
+# workbook or summary (2026-10-14 isolation audit)
+_LATEST = {}
 
 
 def register_portfolio_cashflow_routes(app):
@@ -214,8 +216,7 @@ def _run_generate(job_id, org_id, portfolio_id, style='summary'):
             'generated_at': datetime.datetime.now().isoformat(timespec='seconds'),
         }
         job.update(status='done', step='complete', detail='Deliverable ready.', summary=summary)
-        _LATEST['xlsx'] = xlsx_path
-        _LATEST['summary'] = summary
+        _LATEST[org_id] = {'xlsx': xlsx_path, 'summary': summary}
     except Exception as e:
         logger.exception('Portfolio cash flow generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
@@ -224,7 +225,8 @@ def _run_generate(job_id, org_id, portfolio_id, style='summary'):
 # ── Page ────────────────────────────────────────────────────────────────--
 @portfolio_cashflow_bp.route('/')
 def portfolio_cashflow_index():
-    return render_template('portfolio_cashflow.html', latest=_LATEST.get('summary'))
+    latest = _LATEST.get(session.get('org_id', 'dev')) or {}
+    return render_template('portfolio_cashflow.html', latest=latest.get('summary'))
 
 
 # ── API ─────────────────────────────────────────────────────────────────--
@@ -263,13 +265,13 @@ def api_generate():
     if style not in ('summary', 'consolidated'):
         style = 'summary'
     org_id = session.get('org_id', 'dev')
-    # Don't start a second build while one is already running.
+    # Don't start a second build while this org already has one running.
     for jid, j in _JOBS.items():
-        if j.get('status') == 'running':
+        if j.get('status') == 'running' and j.get('org_id') == org_id:
             return jsonify({'job_id': jid, 'already_running': True}), 202
-    job_id = uuid.uuid4().hex[:8]
+    job_id = uuid.uuid4().hex
     _JOBS[job_id] = {
-        'id': job_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting...',
+        'id': job_id, 'org_id': org_id, 'status': 'running', 'step': 'queued', 'detail': 'Starting...',
         'error': None, 'portfolio_id': portfolio_id, 'style': style,
         'started': datetime.datetime.now().isoformat(timespec='seconds'),
     }
@@ -280,14 +282,14 @@ def api_generate():
 @portfolio_cashflow_bp.route('/api/status/<job_id>')
 def api_status(job_id):
     job = _JOBS.get(job_id)
-    if not job:
+    if not job or job.get('org_id') != session.get('org_id', 'dev'):
         return jsonify({'error': 'Unknown job'}), 404
-    return jsonify({k: v for k, v in job.items() if k != 'traceback'})
+    return jsonify({k: v for k, v in job.items() if k not in ('traceback', 'org_id')})
 
 
 @portfolio_cashflow_bp.route('/api/download')
 def api_download():
-    path = _LATEST.get('xlsx')
+    path = (_LATEST.get(session.get('org_id', 'dev')) or {}).get('xlsx')
     if not path or not os.path.exists(path):
         abort(404)
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))

@@ -16,12 +16,13 @@ import uuid
 import functools
 from pathlib import Path
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, jsonify, send_file, session, g, Response
 )
+from flask.sessions import SecureCookieSessionInterface
 from werkzeug.utils import secure_filename
 
 from .database import Database
@@ -57,6 +58,24 @@ logger = _logging.getLogger(__name__)
 app = Flask(__name__, template_folder='web/templates', static_folder='web/static')
 app.secret_key = os.environ.get('CAPACTIVE_SECRET_KEY', os.urandom(24))
 
+
+class _SessionInterface(SecureCookieSessionInterface):
+    """Session cookie marked Secure whenever the request arrived over HTTPS
+    (Caddy in front, see wsgi.py ProxyFix), so it is never sent in clear;
+    plain-http access (localhost, SSH tunnel) keeps working."""
+    def get_cookie_secure(self, app):
+        return app.config['SESSION_COOKIE_SECURE'] or request.is_secure
+
+
+app.session_interface = _SessionInterface()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,      # page scripts can't read the session
+    SESSION_COOKIE_SAMESITE='Lax',     # not sent on cross-site form posts
+    # signed out after this much inactivity (sliding: each request renews it)
+    PERMANENT_SESSION_LIFETIME=timedelta(
+        hours=float(os.environ.get('CAPACTIVE_SESSION_HOURS', '8'))),
+)
+
 # Configuration
 DATA_DIR = os.environ.get('CAPACTIVE_DATA_DIR', 'data')
 CONFIG_DB = os.environ.get('CAPACTIVE_CONFIG_DB', 'capactive_config.db')
@@ -84,6 +103,15 @@ _PUBLIC_PREFIXES = (
     '/api/sync/',               # device-token auth (own decorator)
     '/api/status',              # healthcheck
 )
+
+
+@app.after_request
+def _session_idle_timeout(response):
+    # signed-in sessions expire after PERMANENT_SESSION_LIFETIME of inactivity
+    # (renewed on every request); set here so the sign-in response has it too
+    if session.get('user_id') or session.get('operator_id'):
+        session.permanent = True
+    return response
 
 
 @app.before_request
@@ -195,6 +223,51 @@ def _check_rate_limit(org_id):
             return False
         _rate_counters[org_id].append(now)
         return True
+
+# ─── Sign-in throttle ───────────────────────────────────────────────
+# Failed sign-ins are counted per email and per client IP (wsgi.py trusts
+# Caddy's X-Forwarded-For, so this is the real client). Too many inside the
+# window locks further attempts until the window passes — even with the
+# right password — so passwords can't be guessed at speed. In-memory: the
+# instance is one process (waitress threads).
+
+_LOGIN_WINDOW = int(os.environ.get('CAPACTIVE_LOGIN_WINDOW_SECONDS', '900'))
+_LOGIN_MAX_PER_ACCOUNT = int(os.environ.get('CAPACTIVE_LOGIN_MAX_FAILURES', '5'))
+_LOGIN_MAX_PER_IP = int(os.environ.get('CAPACTIVE_LOGIN_MAX_FAILURES_IP', '30'))
+_login_failures = {}   # key -> [timestamps]
+_login_lock = threading.Lock()
+
+
+def _login_keys(kind, email):
+    return ((f'{kind}:acct:{email}', _LOGIN_MAX_PER_ACCOUNT),
+            (f'{kind}:ip:{request.remote_addr}', _LOGIN_MAX_PER_IP))
+
+
+def _login_locked(kind, email):
+    """Minutes until sign-in is allowed again, or 0 if it is allowed now."""
+    now = time.time()
+    wait = 0
+    with _login_lock:
+        for key, limit in _login_keys(kind, email):
+            hits = [t for t in _login_failures.get(key, []) if now - t < _LOGIN_WINDOW]
+            _login_failures[key] = hits
+            if len(hits) >= limit:
+                wait = max(wait, _LOGIN_WINDOW - (now - hits[-limit]))
+    return int(wait // 60) + 1 if wait else 0
+
+
+def _login_failed(kind, email):
+    now = time.time()
+    with _login_lock:
+        for key, _ in _login_keys(kind, email):
+            _login_failures.setdefault(key, []).append(now)
+    logger.warning('failed %s sign-in for %s from %s', kind, email, request.remote_addr)
+
+
+def _login_succeeded(kind, email):
+    with _login_lock:
+        _login_failures.pop(f'{kind}:acct:{email}', None)
+
 
 # ─── Processing Queue ───────────────────────────────────────────────
 # Configurable worker pool for parallel job processing.
@@ -742,10 +815,17 @@ def login():
             flash('Email and password are required.', 'error')
             return redirect(request.url)
 
+        locked = _login_locked('user', email)
+        if locked:
+            flash(f'Too many failed sign-ins. Try again in {locked} minute'
+                  f'{"s" if locked != 1 else ""}.', 'error')
+            return redirect(request.url)
+
         store = get_config_store()
         try:
             user = store.get_user_by_email(email)
             if not user:
+                _login_failed('user', email)
                 flash('Invalid email or password.', 'error')
                 return redirect(request.url)
 
@@ -755,8 +835,10 @@ def login():
                 return redirect(request.url)
 
             if not check_password_hash(user['password_hash'], password):
+                _login_failed('user', email)
                 flash('Invalid email or password.', 'error')
                 return redirect(request.url)
+            _login_succeeded('user', email)
 
             # Get the org
             org = store.get_org(user['org_id'])
@@ -966,9 +1048,13 @@ def upload():
             finally:
                 store.close()
 
-        # Save uploaded files — handle ZIPs and PDFs
+        # Save uploaded files — handle ZIPs and PDFs. Each upload gets its own
+        # folder: the document row keeps this path, so a flat shared folder
+        # let a same-named file (from any org) overwrite an earlier one.
         saved = []
         all_skipped = []
+        up_dir = os.path.join(UPLOAD_FOLDER, f'up_{uuid.uuid4().hex[:12]}')
+        os.makedirs(up_dir, exist_ok=True)
         for f in uploaded_files:
             if not f.filename:
                 continue
@@ -976,7 +1062,7 @@ def upload():
 
             if is_archive(f.filename):
                 # Save zip to temp location, then extract PDFs
-                zip_path = os.path.join(UPLOAD_FOLDER, filename)
+                zip_path = os.path.join(up_dir, filename)
                 f.save(zip_path)
                 zip_dest = os.path.join(UPLOAD_FOLDER, f'zip_{str(uuid.uuid4())[:8]}')
                 os.makedirs(zip_dest, exist_ok=True)
@@ -989,7 +1075,7 @@ def upload():
                     flash(f'Failed to extract {filename}: {e}', 'error')
                     continue
             elif allowed_file(f.filename):
-                filepath = os.path.join(UPLOAD_FOLDER, filename)
+                filepath = os.path.join(up_dir, filename)
                 f.save(filepath)
                 saved.append((filename, filepath))
 
@@ -1673,8 +1759,12 @@ def admin_users():
             else:
                 store = get_config_store()
                 try:
-                    store.deactivate_user(target_user_id)
-                    flash('User deactivated.', 'success')
+                    target = store.get_user(target_user_id)
+                    if not target or target['org_id'] != org_id:
+                        flash('User not found.', 'error')
+                    else:
+                        store.deactivate_user(target_user_id)
+                        flash('User deactivated.', 'success')
                 finally:
                     store.close()
 
@@ -1988,9 +2078,11 @@ def admin_devices():
                     flash(str(e), 'error')
                     return redirect(request.url)
             elif action == 'revoke':
-                store.revoke_device(request.form.get('device_id'))
-                flash('Device revoked. Its token no longer authenticates.',
-                      'success')
+                if store.revoke_device(request.form.get('device_id'), org_id):
+                    flash('Device revoked. Its token no longer authenticates.',
+                          'success')
+                else:
+                    flash('Device not found.', 'error')
                 return redirect(request.url)
         finally:
             store.close()
@@ -2017,15 +2109,22 @@ def operator_login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
+        locked = _login_locked('operator', email.lower())
+        if locked:
+            return render_template(
+                'operator_login.html',
+                error=f'Too many failed attempts. Try again in {locked} min.')
         store = get_config_store()
         try:
             op = store.get_operator_by_email(email)
             if op and check_password_hash(op['password_hash'], password):
+                _login_succeeded('operator', email.lower())
                 session['operator_id'] = op['operator_id']
                 session['operator_name'] = op['display_name']
                 store.touch_operator_login(op['operator_id'])
                 store.log_operator_action(op['operator_id'], 'login')
                 return redirect(url_for('operator_dashboard'))
+            _login_failed('operator', email.lower())
             error = 'Invalid operator credentials.'
         finally:
             store.close()
@@ -4379,7 +4478,7 @@ def api_property_search():
 
 
 @app.route('/api/admin/auto-link-documents', methods=['POST'])
-@login_required
+@admin_required
 def api_auto_link_documents():
     """Auto-link unlinked documents to matching properties by name."""
     org_id = session['org_id']
@@ -4392,7 +4491,7 @@ def api_auto_link_documents():
 
 
 @app.route('/api/admin/rename-property/<int:property_id>', methods=['POST'])
-@login_required
+@admin_required
 def api_rename_property(property_id):
     """Rename a property and re-link documents."""
     new_name = request.json.get('name') if request.is_json else request.form.get('name')
@@ -4416,20 +4515,30 @@ def api_export(table):
     if table not in allowed_tables:
         return jsonify({'error': 'Invalid table'}), 400
 
+    import io
     import tempfile
     org_id = session['org_id']
+    # a private temp file per request (a shared name let two orgs exporting
+    # at once receive each other's CSV), read back and removed
+    fd, filepath = tempfile.mkstemp(suffix='.csv')
+    os.close(fd)
     db = get_org_db(org_id)
     try:
-        filepath = os.path.join(tempfile.gettempdir(), f'{table}_export.csv')
         count = db.export_to_csv(table, filepath)
+        with open(filepath, 'rb') as fh:
+            data = fh.read()
     finally:
         db.close()
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
 
     if count == 0:
         flash('No data to export.', 'error')
         return redirect(url_for('documents'))
 
-    return send_file(filepath, as_attachment=True,
+    return send_file(io.BytesIO(data), as_attachment=True, mimetype='text/csv',
                      download_name=f'{table}_{datetime.now().strftime("%Y%m%d")}.csv')
 
 
