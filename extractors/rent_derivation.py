@@ -923,6 +923,18 @@ def derive_current_rent(*, as_of: date,
     if dated and max(r.end for r in dated) < as_of:
         flags.append('schedule_ends_before_date')   # a later amendment is missing
 
+    # 3. every scheduled row has ended (holdover, or a renewal the file
+    #    doesn't hold): the last scheduled rent -- not the original Year 1
+    #    rolled forward past the tables that replaced it (a pilot got a
+    #    28-year-old Year 1 x 1.10^28, seven times the rent its extension
+    #    table ended at -- the amount the rent roll still bills)
+    placed = list(dated) + [r for r in rows if r.start and r.end]
+    if placed and max(r.end for r in placed) < as_of:
+        last = max(placed, key=lambda x: (x.end, x.pos))
+        return RentResult(last.monthly, 'last_scheduled', 'low', flags + ['after_schedule_end'],
+                          f'last scheduled rent ({last.start}..{last.end}); '
+                          f'nothing on paper after it')
+
     if not rows and not dated and not y1:
         ls = _lump_sum_term(flat)
         if ls:

@@ -709,6 +709,9 @@ def _needs(row: RosterRow) -> str:
         return 'lease past its expiration on paper — add the renewal / holdover terms'
     if 'schedule_ends_before_date' in f:
         return 'rent schedule ends before today — a later amendment is missing'
+    if 'after_schedule_end' in f:
+        return ('the rent schedule on paper has ended — the last scheduled rent is shown; '
+                'add the renewal or extension')
     if 'lump_sum_term' in f:
         return f'seasonal lease: {row.rent_detail} — not a monthly rent'
     if 'no_rent_found' in f:

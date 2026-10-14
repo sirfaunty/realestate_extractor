@@ -295,6 +295,20 @@ def test_schedule_ends_before_date_is_flagged_not_guessed():
     r = rent(t)
     assert r.method != 'schedule' and 'schedule_ends_before_date' in r.flags, r
     assert r.confidence == 'low'
+    # the last scheduled rent, kept low -- not a Year-1 rent rolled forward
+    assert r.method == 'last_scheduled' and r.monthly == 1900.00, r
+
+
+def test_ended_extension_table_beats_original_year1_escalation():
+    t = '''Minimum Rent: $2,000.00 per month, increasing 10% each Lease Year.
+    2. Extended Term: The term of the Lease is hereby extended for an additional period of
+    five (5) years starting on March 1, 2019. 3. Minimum Rent: During the Extended Term,
+    Tenant shall pay to Landlord annual Minimum Rent as follows: EXTENDED TERM ANNUAL RENT
+    MONTHLY RENT Year 1 $36,000.00 $3,000.00 Year 2 $36,720.00 $3,060.00 Year 3 $37,440.00
+    $3,120.00 Year 4 $38,160.00 $3,180.00 Year 5 $38,880.00 $3,240.00'''
+    r = derive_current_rent(as_of=date(2026, 6, 30), year1_monthly='2000.00', escalation_pct='10',
+                            commencement=date(1999, 3, 1), schedule_text=t)
+    assert (r.method, r.monthly, r.confidence) == ('last_scheduled', 3240.00, 'low'), r
 
 
 # ─── guards ──────────────────────────────────────────────────────────
