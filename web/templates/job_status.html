@@ -143,9 +143,7 @@
             </div>
             <div class="result-stats">
                 {% if r.success %}
-                <span>{{ r.financial_terms }} terms</span>
-                <span>{{ r.clauses }} clauses</span>
-                <span>{{ r.tabular_rows }} rows</span>
+                {% if r.page_count %}<span>{{ r.page_count }} page{{ 's' if r.page_count != 1 else '' }}</span>{% endif %}
                 <span>{{ r.time }}s</span>
                 {% else %}
                 <span style="color: var(--danger);">{{ r.error }}</span>
@@ -163,7 +161,7 @@
 </div>
 
 <div id="done-actions" style="display: {{ 'flex' if job.status != 'processing' else 'none' }}; gap: 12px; margin-top: 16px;">
-    <a href="{{ url_for('documents') }}" class="btn btn-primary">View Documents</a>
+    <a href="{{ url_for('documents') }}" class="btn btn-secondary">View Documents</a>
     <a href="{{ url_for('file_extractor') }}" class="btn btn-secondary">Upload Another</a>
     <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
 </div>
@@ -482,9 +480,8 @@ function pollStatus() {
                     }
                     html += '</div><div class="result-stats">';
                     if (r.success) {
-                        html += '<span>' + r.financial_terms + ' terms</span>';
-                        html += '<span>' + r.clauses + ' clauses</span>';
-                        html += '<span>' + r.tabular_rows + ' rows</span>';
+                        // ingest stores the document; terms come from the property analysis below
+                        if (r.page_count) html += '<span>' + r.page_count + (r.page_count === 1 ? ' page' : ' pages') + '</span>';
                         html += '<span>' + r.time + 's</span>';
                     } else {
                         html += '<span style="color:var(--danger)">' + (r.error || 'Unknown error') + '</span>';
@@ -536,9 +533,11 @@ function followAnalysis(aid) {
     fetch('/api/job/' + aid).then(r => r.json()).then(a => {
         const label = a.filename || 'AI analysis';
         if (a.status === 'completed') {
-            box.innerHTML = '<strong>✓ ' + label.replace(' (auto)', '') +
-                ' complete.</strong> <span style="color:var(--text-secondary)">' +
-                'Extracted terms and clauses are ready — approve in the Review Queue to finalize.</span>';
+            box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">' +
+                '<div><strong>✓ ' + label.replace(' (auto)', '') + ' complete.</strong> ' +
+                '<span style="color:var(--text-secondary)">Tenancies, rents and expirations are on the Lease Roster.</span></div>' +
+                (a.property_id ? '<a class="btn btn-primary" href="/property/' + a.property_id + '/roster">Open the Lease Roster</a>' : '') +
+                '</div>';
         } else if (a.status === 'failed') {
             box.innerHTML = '<strong style="color:var(--danger)">AI analysis failed:</strong> ' +
                 (a.error || 'see server log') + ' — re-run from the property page.';

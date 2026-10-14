@@ -187,4 +187,10 @@
     </p>
 </div>
 </dialog>
+<script>
+// links like "Add a property" land here with ?add=1 and open the form
+if (new URLSearchParams(location.search).get('add') === '1') {
+    document.getElementById('dlg-add-property').showModal();
+}
+</script>
 {% endblock %}

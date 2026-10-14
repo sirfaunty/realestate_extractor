@@ -304,6 +304,14 @@
                 <div class="stat-label">Market Rent Total</div>
             </div>
         </div>
+        {% elif not (ext.occupied or ext.vacant or ext.occupancy_rate or ext.monthly_gpr) %}
+        {# nothing from a rent roll yet: a row of zeros would contradict the roster figures above #}
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+            Occupancy, vacancy and rent per unit come from a rent roll.
+            <a href="{{ url_for('file_extractor', property_id=prop.id) }}">Upload one</a> to see them here.
+            {% if roster %}Tenancies, square feet and rent from the leases are on the
+            <a href="{{ url_for('property_roster', property_id=prop.id) }}">Lease Roster</a>.{% endif %}
+        </p>
         {% else %}
         <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
             <div class="stat-card" style="padding: 12px;">
@@ -605,7 +613,7 @@
     </div>
     {% endif %}
 
-    {% if not operations.rent_roll and not operations.lease_expirations and not operations.operating_expenses and not ext.total_units %}
+    {% if not roster and not operations.rent_roll and not operations.lease_expirations and not operations.operating_expenses and not ext.total_units %}
     <div class="card">
         <div class="empty-state">
             <p>No operations data yet. Link rent rolls, operating statements, and leases to this property to populate this view.</p>

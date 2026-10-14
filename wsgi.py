@@ -15,6 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from realestate_extractor.webapp import app  # noqa: E402
 
+# Caddy terminates TLS in front of the container (docker-compose --profile
+# tls); trust its one hop so absolute links (invite links) say https.
+from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 if __name__ == '__main__':
     # fallback for quick local checks without waitress
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)),

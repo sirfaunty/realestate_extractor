@@ -11,7 +11,7 @@
         <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--cap-navy); margin-bottom: 4px;">Dashboard</h2>
         <p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
             {% if d.document_count == 0 %}
-            Welcome to Capactive. Upload your first document to get started.
+            Welcome to Capactive. Start with the steps below.
             {% else %}
             {{ d.property_count }} propert{{ 'ies' if d.property_count != 1 else 'y' }}, {{ d.document_count }} document{{ 's' if d.document_count != 1 else '' }} processed
             {% endif %}
@@ -23,6 +23,27 @@
         {% endif %}
     </div>
 </div>
+
+{% if first_run %}
+<!-- Getting started: ticks itself off, disappears when done -->
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: baseline;">
+        <span>Getting started</span>
+        <span style="font-size: 12px; font-weight: 400; color: var(--text-muted);">{{ first_run.done }} of {{ first_run.steps|length }} done</span>
+    </div>
+    <ol class="first-run">
+        {% for st in first_run.steps %}
+        <li class="{{ 'done' if st.done else ('next' if st.next else '') }}">
+            <span class="first-run-mark">{% if st.done %}&#10003;{% else %}{{ loop.index }}{% endif %}</span>
+            <div>
+                {% if st.url and not st.done %}<a href="{{ st.url }}">{{ st.label }}</a>{% else %}<span>{{ st.label }}</span>{% endif %}
+                {% if not st.done %}<div class="first-run-hint">{{ st.hint }}</div>{% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+</div>
+{% endif %}
 
 <!-- ═══ TOP STATS ROW ═══ -->
 <div class="card-grid" style="margin-bottom: 20px;">

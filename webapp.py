@@ -80,6 +80,7 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 _PUBLIC_PREFIXES = (
     '/login', '/logout', '/setup', '/static/', '/favicon.ico',
     '/operator/login',          # operator credential entry
+    '/invite/',                 # set-password links (token is the credential)
     '/api/sync/',               # device-token auth (own decorator)
     '/api/status',              # healthcheck
 )
@@ -657,13 +658,13 @@ def setup():
 
         org_name = request.form.get('org_name', '').strip()
         admin_name = request.form.get('admin_name', '').strip()
-        admin_email = request.form.get('admin_email', '').strip()
+        admin_email = request.form.get('admin_email', '').strip().lower()
         password = request.form.get('password', '')
         password_confirm = request.form.get('password_confirm', '')
         license_key = request.form.get('license_key', '').strip()
 
-        if not all([org_name, admin_name, admin_email, password]):
-            flash('All fields are required.', 'error')
+        if not all([org_name, admin_name, admin_email, password, license_key]):
+            flash('All fields are required, including the license key.', 'error')
             return redirect(request.url)
 
         if len(password) < 8:
@@ -674,21 +675,17 @@ def setup():
             flash('Passwords do not match.', 'error')
             return redirect(request.url)
 
-        # Determine plan from license key or default to standard
-        plan = 'standard'
-        if license_key:
-            valid, detected_plan = validate_org_key(license_key)
-            if valid:
-                plan = detected_plan
-            else:
-                flash('Invalid license key. Using standard plan.', 'error')
+        # A key we issued is required: on a hosted instance, whoever reached
+        # /setup first would otherwise claim the whole instance.
+        valid, plan = validate_org_key(license_key)
+        if not valid:
+            flash("That license key isn't valid. Check it against your "
+                  "Capactive welcome email.", 'error')
+            return redirect(request.url)
 
         # Generate IDs and keys
         org_id = org_name.lower().replace(' ', '-')[:32]
         user_id = admin_email.split('@')[0].lower().replace('.', '-')
-
-        if not license_key:
-            license_key = generate_org_key(org_id, plan)
 
         pw_hash = generate_password_hash(password)
 
@@ -753,7 +750,8 @@ def login():
                 return redirect(request.url)
 
             if not user.get('password_hash'):
-                flash('No password set for this account. Contact your admin.', 'error')
+                flash("This account isn't set up yet. Open the invite link your "
+                      "admin sent you, or ask them for a new one.", 'error')
                 return redirect(request.url)
 
             if not check_password_hash(user['password_hash'], password):
@@ -767,6 +765,7 @@ def login():
                 return redirect(request.url)
 
             # Login successful
+            first_visit = not user.get('last_login')
             store.update_user_login(user['user_id'])
 
             session['user_id'] = user['user_id']
@@ -791,7 +790,8 @@ def login():
         finally:
             tracker.close()
 
-        flash(f'Welcome back, {user["display_name"]}!', 'success')
+        flash(f'Welcome, {user["display_name"]}!' if first_visit
+              else f'Welcome back, {user["display_name"]}!', 'success')
         return redirect(url_for('index'))
 
     return render_template('login.html')
@@ -828,6 +828,7 @@ def index():
                 dashboard['roster'] = portfolio_summary(db)
             except Exception:
                 logger.exception('lease roster summary failed')
+        first_run = _first_run_steps(db, org_id)
         llm = get_llm()
         llm_status = llm.is_available()
     finally:
@@ -843,7 +844,49 @@ def index():
     return render_template('index.html',
                            dashboard=dashboard,
                            llm_status=llm_status,
-                           usage=usage)
+                           usage=usage,
+                           first_run=first_run)
+
+
+def _first_run_steps(db, org_id):
+    """The getting-started checklist on the dashboard: each step links to
+    where it's done and ticks itself off. None once every step is done."""
+    try:
+        props = db.list_properties()
+        first = props[0]['id'] if props else None
+        docs = db.conn.execute('SELECT COUNT(*) FROM documents').fetchone()[0]
+        confirmed = db.conn.execute(
+            'SELECT COUNT(*) FROM lease_confirmations').fetchone()[0]
+        store = get_config_store()
+        try:
+            team = len(store.list_users(org_id))
+        finally:
+            store.close()
+    except Exception:
+        logger.exception('first-run checklist failed')
+        return None
+    steps = [
+        {'label': 'Add a property', 'done': bool(props),
+         'hint': 'Name, type and address — the rest is optional.',
+         'url': url_for('properties', add=1)},
+        {'label': 'Upload its leases', 'done': docs > 0,
+         'hint': 'PDFs, scans or a ZIP. Each lease is read in seconds.',
+         # no link until there's a property to upload to
+         'url': url_for('file_extractor', property_id=first) if first else None},
+        {'label': 'Confirm a commencement on the Lease Roster', 'done': confirmed > 0,
+         'hint': 'One click per lease turns its rent from an estimate into a confirmed figure.',
+         'url': url_for('property_roster', property_id=first) if first else None},
+    ]
+    if session.get('role') == 'admin':
+        steps.append({'label': 'Invite your team', 'done': team > 1,
+                      'hint': 'Each person gets a link to set their own password.',
+                      'url': url_for('admin_users')})
+    if all(st['done'] for st in steps):
+        return None
+    # the first open step is the one to do next
+    nxt = next(st for st in steps if not st['done'])
+    nxt['next'] = True
+    return {'steps': steps, 'done': sum(st['done'] for st in steps)}
 
 
 @app.route('/extract')
@@ -1568,7 +1611,7 @@ def admin_users():
 
         if action == 'add':
             name = request.form.get('display_name', '').strip()
-            email = request.form.get('email', '').strip()
+            email = request.form.get('email', '').strip().lower()
             role = request.form.get('role', 'member')
 
             if not name or not email:
@@ -1585,7 +1628,6 @@ def admin_users():
             store = get_config_store()
             try:
                 user = store.create_user(org_id, user_id, email, name, role=role)
-                user_key = generate_user_key(org_id, user_id)
 
                 # Initialize permissions based on role
                 pstore = get_permission_store()
@@ -1594,9 +1636,33 @@ def admin_users():
                 finally:
                     pstore.close()
 
-                flash(f'User {name} created. Their key: {user_key}', 'success')
+                token = store.create_invite(user_id, org_id,
+                                            created_by=session['user_id'])
+                session['invite_link'] = {
+                    'name': name, 'email': email,
+                    'url': url_for('accept_invite', token=token, _external=True)}
+                flash(f'{name} added. Send them the invite link below.', 'success')
             except ValueError as e:
                 flash(str(e), 'error')
+            finally:
+                store.close()
+
+        elif action == 'invite':
+            # new set-password link: first sign-in, or a forgotten password
+            target_user_id = request.form.get('user_id')
+            store = get_config_store()
+            try:
+                target = store.get_user(target_user_id)
+                if not target or target['org_id'] != org_id or not target['is_active']:
+                    flash('User not found.', 'error')
+                else:
+                    token = store.create_invite(target_user_id, org_id,
+                                                created_by=session['user_id'])
+                    session['invite_link'] = {
+                        'name': target['display_name'], 'email': target['email'],
+                        'url': url_for('accept_invite', token=token, _external=True)}
+                    flash(f"New link for {target['display_name']}. Any earlier link "
+                          f"no longer works.", 'success')
             finally:
                 store.close()
 
@@ -1618,14 +1684,44 @@ def admin_users():
     try:
         org = store.get_org(org_id)
         users = store.list_users(org_id, active_only=False)
+        pending = store.pending_invite_users(org_id)
     finally:
         store.close()
 
-    # Generate keys for display
     for u in users:
-        u['user_key'] = generate_user_key(org_id, u['user_id'])
+        u['invite_pending'] = u['user_id'] in pending
+        u['needs_setup'] = not u.get('password_hash')
 
-    return render_template('admin_users.html', org=org, users=users)
+    # the link is shown once, on the page right after it was made
+    invite_link = session.pop('invite_link', None)
+    return render_template('admin_users.html', org=org, users=users,
+                           invite_link=invite_link)
+
+
+@app.route('/invite/<token>', methods=['GET', 'POST'])
+def accept_invite(token):
+    """A user sets their own password from a one-time link (new account
+    or reset). Public route: the unguessable token is the credential."""
+    from werkzeug.security import generate_password_hash
+    store = get_config_store()
+    try:
+        invite = store.get_invite(token)
+        if not invite:
+            return render_template('invite.html', invite=None), 410
+        if request.method == 'POST':
+            pw = request.form.get('password', '')
+            if len(pw) < 8:
+                flash('Use at least 8 characters.', 'error')
+            elif pw != request.form.get('password2', ''):
+                flash("The passwords don't match.", 'error')
+            else:
+                store.use_invite(token, generate_password_hash(pw))
+                session.clear()
+                flash('Password set. Sign in to continue.', 'success')
+                return redirect(url_for('login'))
+        return render_template('invite.html', invite=invite)
+    finally:
+        store.close()
 
 
 @app.route('/api/sync/ping', methods=['GET', 'POST'])
@@ -2017,16 +2113,17 @@ def operator_provision():
     org_name = request.form.get('org_name', '').strip()
     plan = request.form.get('plan', 'standard')
     admin_name = request.form.get('admin_name', '').strip()
-    admin_email = request.form.get('admin_email', '').strip()
+    admin_email = request.form.get('admin_email', '').strip().lower()
+    # blank password = the admin sets their own from an invite link
     admin_password = request.form.get('admin_password', '')
     admin_password2 = request.form.get('admin_password2', '')
-    if not all([org_name, admin_name, admin_email, admin_password]):
-        flash('All provisioning fields are required.', 'error')
+    if not all([org_name, admin_name, admin_email]):
+        flash('Organization, admin name and admin email are required.', 'error')
         return redirect(url_for('operator_dashboard'))
-    if admin_password != admin_password2:
+    if admin_password and admin_password != admin_password2:
         flash('Admin passwords do not match — nothing was provisioned.', 'error')
         return redirect(url_for('operator_dashboard'))
-    if len(admin_password) < 8:
+    if admin_password and len(admin_password) < 8:
         flash('Admin password must be at least 8 characters.', 'error')
         return redirect(url_for('operator_dashboard'))
     if plan not in PLAN_FEATURES:
@@ -2043,8 +2140,14 @@ def operator_provision():
         store.create_org(org_id, org_name, license_key, plan=plan)
         store.create_user(org_id, user_id, admin_email, admin_name,
                           role='admin',
-                          password_hash=generate_password_hash(
-                              admin_password))
+                          password_hash=generate_password_hash(admin_password)
+                          if admin_password else None)
+        invite_url = None
+        if not admin_password:
+            invite_url = url_for('accept_invite', _external=True,
+                                 token=store.create_invite(
+                                     user_id, org_id,
+                                     created_by=session['operator_id']))
         store.log_operator_action(session['operator_id'], 'org_provisioned',
                                   org_id, f'plan={plan}')
     finally:
@@ -2059,6 +2162,11 @@ def operator_provision():
         pstore.close()
     flash(f'Provisioned {org_name} ({org_id}) on {plan}. '
           f'License key: {license_key}', 'success')
+    if invite_url:
+        session['provision_welcome'] = {
+            'org_name': org_name, 'admin_name': admin_name,
+            'admin_email': admin_email, 'invite_url': invite_url,
+            'login_url': url_for('login', _external=True)}
     return redirect(url_for('operator_dashboard'))
 
 

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set your password — capactive</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="auth-page">
+    <div class="auth-container">
+        <div class="auth-brand">
+            <svg width="48" height="48" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="16" width="6" height="10" rx="1.5" fill="#3A8FD4"/>
+                <rect x="11" y="10" width="6" height="16" rx="1.5" fill="#6BB3E8"/>
+                <rect x="20" y="4" width="6" height="22" rx="1.5" fill="#FFFFFF"/>
+                <path d="M4 14 L14 7 L23 3" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            </svg>
+            <span class="brand-wordmark">capactive</span>
+            <span class="brand-product">See the signal. Make the move.</span>
+        </div>
+
+        <div class="auth-card">
+            {% if invite %}
+            <h2>Set your password</h2>
+            <p class="subtitle">{{ invite.display_name }} · {{ invite.org_name }}<br>
+                You'll sign in with <strong>{{ invite.email }}</strong>.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST">
+                <div class="form-group">
+                    <label for="password">New password</label>
+                    <input type="password" id="password" name="password" placeholder="At least 8 characters"
+                           minlength="8" autocomplete="new-password" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password2">Confirm password</label>
+                    <input type="password" id="password2" name="password2" minlength="8"
+                           autocomplete="new-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Set password</button>
+            </form>
+            {% else %}
+            <h2>This link has expired</h2>
+            <p class="subtitle">Invite links work once and expire after 7 days.
+                Ask your admin for a new one.</p>
+            <a class="btn btn-primary" href="{{ url_for('login') }}">Go to sign in</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

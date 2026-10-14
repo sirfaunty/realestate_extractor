@@ -14,7 +14,7 @@ ensuring complete data isolation between tenants.
 import os
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -256,6 +256,21 @@ CREATE TABLE IF NOT EXISTS operator_audit (
 
 CREATE INDEX IF NOT EXISTS idx_operator_audit_op
     ON operator_audit(operator_id, at);
+
+-- One-time links that let a user set their own password (new accounts and
+-- resets). Stored hashed like device tokens; a new link replaces any
+-- unused one for that user.
+CREATE TABLE IF NOT EXISTS user_invites (
+    token_hash      TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(user_id),
+    org_id          TEXT NOT NULL,
+    created_by      TEXT,
+    created_at      TEXT,
+    expires_at      TEXT NOT NULL,
+    used_at         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_invites_user ON user_invites(user_id);
 """
 
 
@@ -557,6 +572,68 @@ class ConfigStore:
             (password_hash, user_id))
         self.conn.commit()
         return cur.rowcount > 0
+
+    # ─── Invites (users set their own password) ──────────────────────
+
+    INVITE_DAYS = 7
+
+    def create_invite(self, user_id: str, org_id: str,
+                      created_by: str = None) -> str:
+        """Issue a one-time set-password link token for a user. The
+        plaintext is returned once; only its hash is stored. Any unused
+        earlier link for the user stops working."""
+        import hashlib
+        import secrets
+        token = secrets.token_urlsafe(32)
+        now = datetime.now()
+        self.conn.execute(
+            "DELETE FROM user_invites WHERE user_id = ? AND used_at IS NULL",
+            (user_id,))
+        self.conn.execute(
+            "INSERT INTO user_invites (token_hash, user_id, org_id, created_by,"
+            " created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (hashlib.sha256(token.encode()).hexdigest(), user_id, org_id,
+             created_by, now.isoformat(),
+             (now + timedelta(days=self.INVITE_DAYS)).isoformat()))
+        self.conn.commit()
+        return token
+
+    def get_invite(self, token: str) -> Optional[Dict]:
+        """The invite and its user if the link is unused, unexpired and the
+        user is active; otherwise None."""
+        import hashlib
+        row = self.conn.execute("""
+            SELECT i.*, u.email, u.display_name, o.org_name
+            FROM user_invites i
+            JOIN users u ON u.user_id = i.user_id
+            JOIN organizations o ON o.org_id = i.org_id
+            WHERE i.token_hash = ? AND i.used_at IS NULL AND u.is_active = 1
+        """, (hashlib.sha256((token or '').encode()).hexdigest(),)).fetchone()
+        if not row or row['expires_at'] < datetime.now().isoformat():
+            return None
+        return dict(row)
+
+    def use_invite(self, token: str, password_hash: str) -> Optional[Dict]:
+        """Set the user's password from a valid invite and retire the link.
+        Returns the invite (with user fields) or None if it isn't valid."""
+        invite = self.get_invite(token)
+        if not invite:
+            return None
+        self.conn.execute(
+            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            (password_hash, invite['user_id']))
+        self.conn.execute(
+            "UPDATE user_invites SET used_at = ? WHERE token_hash = ?",
+            (datetime.now().isoformat(), invite['token_hash']))
+        self.conn.commit()
+        return invite
+
+    def pending_invite_users(self, org_id: str) -> set:
+        """user_ids in the org with an unused, unexpired invite."""
+        cur = self.conn.execute(
+            "SELECT user_id FROM user_invites WHERE org_id = ? AND used_at IS NULL"
+            " AND expires_at >= ?", (org_id, datetime.now().isoformat()))
+        return {r['user_id'] for r in cur.fetchall()}
 
     def get_user(self, user_id: str) -> Optional[Dict]:
         """Get user by ID, including org info."""

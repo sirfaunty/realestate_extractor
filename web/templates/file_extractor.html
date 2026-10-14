@@ -104,7 +104,7 @@
 
 <div class="page-header">
     <h2>File Extractor</h2>
-    <p>Upload documents for AI-powered extraction and analysis</p>
+    <p>Upload leases and other property documents — Capactive reads them on your private instance</p>
 </div>
 
 <form method="POST" enctype="multipart/form-data" id="extractor-form" action="{{ url_for('upload') }}">
@@ -146,17 +146,6 @@
 
         <div class="settings-row">
             <div class="form-group" style="margin-bottom: 0;">
-                <label for="doc_type">Document Type</label>
-                <select name="doc_type" id="doc_type">
-                    <option value="">Auto-detect</option>
-                    {% for t in templates %}
-                    <option value="{{ t.type }}">{{ t.name }}</option>
-                    {% endfor %}
-                </select>
-                <div class="hint">Leave as auto-detect to let the system classify each document.</div>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 0;">
                 <label for="property_id">Property <span style="color: var(--cap-red, #c0392b);">*</span></label>
                 {% if properties %}
                 <select name="property_id" id="property_id" required>
@@ -166,12 +155,28 @@
                     {% endfor %}
                 </select>
                 <div class="hint">Every document in this upload is filed to this property — no one-by-one matching in Review.
-                    Not listed? <a href="{{ url_for('properties') }}">Add the property</a> first.</div>
+                    Not listed? <a href="{{ url_for('properties', add=1) }}">Add the property</a> first.</div>
                 {% else %}
                 <div class="hint" style="color: var(--cap-red, #c0392b);">
-                    No properties yet. <a href="{{ url_for('properties') }}">Add a property</a> first, then upload its documents here.
+                    No properties yet. <a href="{{ url_for('properties', add=1) }}">Add a property</a> first, then upload its documents here.
                 </div>
                 {% endif %}
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="doc_type">Document Type</label>
+                <div id="doc-type-auto" class="hint" style="margin-top: 6px; font-size: 13px;">
+                    Detected automatically for each file.
+                    <a href="#" onclick="document.getElementById('doc-type-auto').style.display='none';
+                        document.getElementById('doc_type').style.display=''; document.getElementById('doc_type').focus(); return false;">Set it yourself</a>
+                </div>
+                {# rarely needed: auto-detect is right for almost every upload #}
+                <select name="doc_type" id="doc_type" style="display: none;">
+                    <option value="">Auto-detect</option>
+                    {% for t in templates %}
+                    <option value="{{ t.type }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
         </div>
 
@@ -182,7 +187,7 @@
     </div>
 
     <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
-        Select Files to Process
+        Choose Files to Upload
     </button>
 </form>
 
@@ -352,7 +357,7 @@ function showSelection(files, mode) {
         selectionInfo.innerHTML = '<span style="color: var(--cap-danger, #d44);">No supported files found in selection.</span>';
         selectionInfo.classList.add('visible');
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Select Files to Process';
+        submitBtn.textContent = 'Choose Files to Upload';
         return;
     }
 
@@ -397,7 +402,7 @@ function resetSelection() {
     selectionInfo.classList.remove('visible');
     selectionInfo.innerHTML = '';
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Select Files to Process';
+    submitBtn.textContent = 'Choose Files to Upload';
     [cardSingle, cardFolder, cardZip].forEach(c => c.classList.remove('active'));
 }
 

@@ -7,6 +7,22 @@
     <p>{{ org.org_name }} — {{ users|length }} of {{ org.features.max_users }} users</p>
 </div>
 
+{% if invite_link %}
+<div class="card" style="border-color: var(--cap-primary);">
+    <div class="card-header">Invite link for {{ invite_link.name }}</div>
+    <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 10px;">
+        Send this to {{ invite_link.email }}. It lets them set their own password, works once and expires in 7 days.
+        It's shown only now; if it gets lost, use <strong>New link</strong> in the table below.
+    </p>
+    <div style="display: flex; gap: 8px;">
+        <input type="text" id="invite-url" value="{{ invite_link.url }}" readonly
+               style="flex: 1; font-family: Consolas, monospace; font-size: 12px;" onclick="this.select()">
+        <button type="button" class="btn btn-primary"
+                onclick="navigator.clipboard.writeText(document.getElementById('invite-url').value); this.textContent='Copied'">Copy link</button>
+    </div>
+</div>
+{% endif %}
+
 <!-- Add User Form -->
 <div class="card">
     <div class="card-header">Add User</div>
@@ -43,7 +59,6 @@
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>User Key</th>
                 <th>Last Login</th>
                 <th>Status</th>
                 <th></th>
@@ -59,21 +74,29 @@
                         {{ u.role }}
                     </span>
                 </td>
-                <td>
-                    <span class="key-display" style="font-size: 11px; padding: 4px 8px;">{{ u.user_key }}</span>
-                </td>
                 <td style="font-size: 12px; color: var(--text-muted);">
                     {{ u.last_login[:10] if u.last_login else 'Never' }}
                 </td>
                 <td>
-                    {% if u.is_active %}
+                    {% if u.is_active and u.needs_setup %}
+                    <span class="badge badge-processing"
+                          title="{{ 'Their invite link is still open' if u.invite_pending else 'No open link — click New link and send it to them' }}">
+                        {{ 'Invited' if u.invite_pending else 'Needs a link' }}</span>
+                    {% elif u.is_active %}
                     <span class="badge badge-success">Active</span>
                     {% else %}
                     <span class="badge badge-error">Inactive</span>
                     {% endif %}
                 </td>
-                <td>
+                <td style="white-space: nowrap;">
                     {% if u.is_active and u.user_id != current_user.user_id %}
+                    <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                    <form method="POST" class="inline-form">
+                        <input type="hidden" name="action" value="invite">
+                        <input type="hidden" name="user_id" value="{{ u.user_id }}">
+                        <button type="submit" class="btn btn-sm btn-secondary"
+                                title="A new set-password link — for first sign-in or a forgotten password">New link</button>
+                    </form>
                     <form method="POST" class="inline-form" id="deactivate-form-{{ u.user_id }}">
                         <input type="hidden" name="action" value="deactivate">
                         <input type="hidden" name="user_id" value="{{ u.user_id }}">
@@ -82,6 +105,7 @@
                             Deactivate
                         </button>
                     </form>
+                    </div>
                     {% elif u.user_id == current_user.user_id %}
                     <span style="font-size: 12px; color: var(--text-muted);">You</span>
                     {% endif %}
@@ -94,8 +118,9 @@
 
 <div class="card" style="background: var(--cap-cloud); border-color: transparent;">
     <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
-        <strong>Sharing user keys:</strong> Each user needs both the organization key and their personal user key to log in.
-        Copy a user's key from the table above and share it securely. Keys cannot be recovered — if lost, deactivate the user and create a new one.
+        <strong>How teammates sign in:</strong> adding someone gives you a one-time invite link to send them.
+        They set their own password and then sign in with their email. If someone forgets their password,
+        click <strong>New link</strong>; their old password keeps working until they use it.
     </p>
 </div>
 {% endblock %}

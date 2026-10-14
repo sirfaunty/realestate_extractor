@@ -52,6 +52,26 @@
   {% endfor %}
 {% endwith %}
 
+{% set w = session.pop('provision_welcome', None) %}
+{% if w %}
+<div class="provision" style="margin-bottom:16px">
+  <div style="font-size:12px;color:#4ec98a;margin-bottom:8px">
+    Welcome message for {{ w.admin_name }} — copy and send it. The link is
+    shown only now; if it's lost, Enter workspace → Users → New link.</div>
+<textarea id="welcome-msg" readonly rows="11" style="width:100%;font-size:12px">Hi {{ w.admin_name }},
+
+Your Capactive workspace for {{ w.org_name }} is ready.
+
+1. Set your password (this link works once, for 7 days):
+   {{ w.invite_url }}
+2. After that, sign in at {{ w.login_url }} with {{ w.admin_email }}.
+3. Add your first property, upload its leases, then open its Lease Roster.
+   Add teammates under Admin > Users; each gets their own invite link.</textarea>
+  <button class="btn" type="button" style="margin-top:8px"
+          onclick="navigator.clipboard.writeText(document.getElementById('welcome-msg').value); this.textContent='Copied'">Copy message</button>
+</div>
+{% endif %}
+
 <h2>Organizations</h2>
 <table>
 <thead><tr><th>Org</th><th>Plan</th><th>Status</th><th>Users</th>
@@ -114,15 +134,18 @@
     </div>
     <div class="row" style="align-items:center">
       <input name="admin_password" type="password" class="pw"
-             placeholder="Admin password (8+ chars)" required minlength="8"
+             placeholder="Admin password — optional" minlength="8"
              style="width:220px">
       <input name="admin_password2" type="password" class="pw"
-             placeholder="Confirm password" required minlength="8"
+             placeholder="Confirm password" minlength="8"
              style="width:220px">
       <label style="font-size:11px;color:#8595ab;cursor:pointer">
         <input type="checkbox" onchange="togglePw(this)"> show
       </label>
     </div>
+    <div style="font-size:11px;color:#8595ab;margin-bottom:10px">
+      Leave the password blank to get an invite link: the admin sets their
+      own password (link works once, for 7 days).</div>
     <button class="btn btn-primary" type="submit">Provision</button>
   </form>
 </div>
