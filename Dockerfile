@@ -40,5 +40,11 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/status', timeout=4)" || exit 1
 
+# Caddy is the one proxy in front (the port is bound to localhost / the
+# compose network). Without these flags waitress drops X-Forwarded-*, so the
+# app never knows a request was https (cookie not Secure, http links) and
+# every visitor shares Caddy's address (one sign-in lockout for everyone).
 CMD ["waitress-serve", "--host", "0.0.0.0", "--port", "5000", \
-     "--threads", "8", "wsgi:app"]
+     "--threads", "8", "--trusted-proxy=*", "--trusted-proxy-count=1", \
+     "--trusted-proxy-headers=x-forwarded-for x-forwarded-proto x-forwarded-host", \
+     "wsgi:app"]
