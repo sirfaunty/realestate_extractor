@@ -677,6 +677,26 @@ def test_first_refusal_range_is_not_a_restatement():
     assert best_sf(t) == 2540, best_sf(t)
 
 
+def test_term_in_full_months_after_the_commencement():
+    import datetime
+    from realestate_extractor.extractors.lease_segmenter import _full_months_end, _full_months_term
+    assert _full_months_term('The initial term is ten (10) years (plus the initial partial calendar '
+                             'month, if any) commencing on the "Commencement Date" defined in Exhibit D '
+                             'and ending on the last day of the one hundred and twentieth (12oth) full '
+                             'consecutive calendar month after the Commencement Date') == 120
+    assert _full_months_term('ending on the last cay of the sixtieth (6oh) full calendar month '
+                             'after the: Commencement Date') == 60
+    assert _full_months_term('ending on the last day of the seventy-eighth full consecutive '
+                             'calendar month after the Commencement Date') == 78
+    assert _full_months_term('ending on the last day.of the. one hundred twentieth (120th) full '
+                             'calendar month afier the:\nCommencement Date') == 120
+    assert _full_months_term('the last day of the month in which the Term ends') is None
+    # a start on the 1st makes its own month the first full one
+    assert _full_months_end(datetime.date(2024, 4, 1), 120) == datetime.date(2034, 3, 31)
+    assert _full_months_end(datetime.date(2022, 1, 4), 63) == datetime.date(2027, 4, 30)
+    assert _full_months_end(datetime.date(2023, 12, 5), 84) == datetime.date(2030, 12, 31)
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

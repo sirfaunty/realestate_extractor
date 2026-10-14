@@ -402,6 +402,34 @@ def test_unassigned_upload_does_not_recount_the_portfolio():
     assert by_pid == {1: 2, None: 1}, by_pid
 
 
+def test_confirmed_commencement_finishes_a_full_months_term():
+    # "ending on the last day of the 63rd full calendar month after the
+    # Commencement Date", commencement set later: confirming it gives the date
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn in ((1, 'Elm Court - Bean Coffee Lease.pdf'), (2, 'Elm Court - Pet Barn Lease.pdf')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id, "
+                  "analysis_status) VALUES (?, ?, 'x', 'lease', 1, 'analyzed')", (i, fn))
+        c.execute("INSERT INTO financial_terms (document_id, term_type, value_raw) "
+                  "VALUES (?, 'term_full_months', ?)", (i, '63' if i == 1 else '36'))
+    c.commit()
+    as_of = date(2026, 10, 1)
+    keys = {r.label: r.key for r in build_roster(c, 1, as_of=as_of)}
+    assert all(r.expiration is None for r in build_roster(c, 1, as_of=as_of))
+    rows = {r.label: r for r in build_roster(c, 1, as_of=as_of, confirmed_commencements={
+        keys['bean coffee']: '2022-01-04',      # 63 full months from Feb 2022
+        keys['pet barn']: '2020-03-01'})}       # 36 months: ended 2023 -> left out
+    db.close()
+    assert rows['bean coffee'].expiration == date(2027, 4, 30), rows['bean coffee'].expiration
+    assert rows['bean coffee'].expiration_source == 'computed'
+    assert rows['pet barn'].expiration is None and rows['pet barn'].kind == 'tenancy'
+
+
 def test_need_attention_counts_tenancies_not_expired_leases():
     # "9 of 17 confirmed" beside "9 need attention" read as flipped when the
     # expired lease was counted in the second number

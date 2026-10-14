@@ -525,6 +525,77 @@ def _term_months(s):
     return None
 
 
+# "ending on the last day of the one hundred twentieth (120th) full calendar
+# month after the Commencement Date": the commencement itself is usually set
+# later (an exhibit, a delivery date), so the term is kept as a month count
+# that becomes a date once the commencement is known. OCR: "(12oth)", "(6oh)",
+# "(120")", "last cay", "day.of the.", "afier".
+_FULL_MONTHS_RX = re.compile(
+    r'(?i)last\W+[cd]ay\W+of\W+the\W+([a-z\s-]{0,60}?)\s*(?:\(?\s*([0-9]{1,3}[0-9oOlI]?)[^)\s]{0,4}\s*\)?\s*\)?\s*)?'
+    r'full\s+(?:consecutive\s+)?calendar\s+months?\s+(?:af\w{2}r|following)\W+(?:the\W+)?commencement')
+_ORD_UNITS = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5, 'sixth': 6,
+              'seventh': 7, 'eighth': 8, 'ninth': 9, 'tenth': 10, 'eleventh': 11, 'twelfth': 12}
+_TENS = {'twent': 20, 'thirt': 30, 'fort': 40, 'fift': 50, 'sixt': 60, 'sevent': 70,
+         'eight': 80, 'ninet': 90}
+
+
+def _ordinal_words(s):
+    """'one hundred and twenty-sixth' -> 126; None if it doesn't parse."""
+    w = re.findall(r'[a-z]+', s.lower().replace('-', ' '))
+    total = 0
+    for i, x in enumerate(w):
+        if x == 'hundred':
+            total = (total or 1) * 100
+        elif x in _ORD_UNITS:
+            total += _ORD_UNITS[x]
+        elif x in WORD_NUMS and x not in ('ten',) and i + 1 < len(w):
+            total += WORD_NUMS[x] if WORD_NUMS[x] < 10 else 0
+        elif any(x.startswith(t) for t in _TENS):
+            total += next(v for t, v in _TENS.items() if x.startswith(t))
+    return total or None
+
+
+def _full_months_term(text):
+    """N from 'the last day of the Nth full calendar month after the
+    Commencement Date', or None. Digits win (OCR-repaired); the words are the
+    fallback."""
+    m = _FULL_MONTHS_RX.search(text)
+    if not m:
+        return None
+    digits = (m.group(2) or '').translate(str.maketrans('oOlI', '0011'))
+    n = int(digits) if digits.isdigit() else _ordinal_words(m.group(1))
+    return n if n and 6 <= n <= 600 else None
+
+
+def _full_months_end(start, n):
+    """Last day of the Nth full calendar month after a commencement (a date):
+    a start on the 1st makes its own month the first full one."""
+    first = start.month - 1 + (n - 1 if start.day == 1 else n)
+    y, m = start.year + first // 12, first % 12 + 1
+    nxt = datetime.date(y + (m == 12), m % 12 + 1, 1)
+    return nxt - datetime.timedelta(days=1)
+
+
+def _full_months_fields(text, commencement=None, as_of=None):
+    """The 'Nth full calendar month' term as a term record, and the date it
+    gives when the commencement (M/D/YYYY) is known: (term or None, mdy or None).
+    A computed date already past is not given: extensions the file doesn't
+    hold would make it mark a live tenancy expired."""
+    n = _full_months_term(text)
+    if not n:
+        return None, None
+    term = {'term_type': 'term_full_months',
+            'term_label': 'Term: last day of the Nth full calendar month after the commencement',
+            'value_raw': str(n), 'confidence': 0.9, 'section_ref': 'term clause'}
+    if not commencement or RE_CONTINGENT.search(text):
+        return term, None
+    mth, d, y = (int(x) for x in commencement.split('/'))
+    end = _full_months_end(datetime.date(y, mth, d), n)
+    if end <= (as_of or datetime.date.today()):
+        return term, None
+    return term, f'{end.month}/{end.day}/{end.year}'
+
+
 def _add_months_minus_day(mdy, months):
     mth, d, y = (int(x) for x in mdy.split('/'))
     total = (mth - 1) + months
@@ -954,6 +1025,15 @@ def extract_targeted(pages, instruments, llm=None, as_of=None):
                if t['term_type'] == 'lease_commencement']
         if det:
             commencement = _to_mdy(det[0]['value_raw']) or commencement
+    det = [t for t in _deterministic_lease_fields(pages, tgt, set())
+           if t['term_type'] == 'lease_commencement']
+    c = _to_mdy(det[0]['value_raw']) if det else None
+    fm_term, fm_exp = _full_months_fields(body[:80000], c, datetime.date(*as_of))
+    if fm_term:
+        terms.append(fm_term)
+        if not governing_exp and fm_exp:
+            governing_exp = fm_exp
+            governing_src = f'computed: commencement {c} + {fm_term["value_raw"]} full months'
     if not governing_exp and commencement and tmonths:
         if contingent:
             terms.append({'term_type': 'commencement_contingent',

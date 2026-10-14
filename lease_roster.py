@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
-from .extractors.lease_segmenter import _sf_pick, _sf_scan
+from .extractors.lease_segmenter import _full_months_end, _sf_pick, _sf_scan
 from .extractors.rent_derivation import (
     derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num, _text_memo)
 
@@ -65,7 +65,7 @@ class RosterRow:
     commencement_source: str = ''   # confirmed | rent_roll | lease | '' (unknown)
     commencement_guess: Optional[date] = None     # best guess to pre-fill a confirmation
     rent_roll_monthly: Optional[float] = None     # uploaded rent roll, summed across suites
-    expiration_source: str = ''     # rent_roll | lease | '' (unknown)
+    expiration_source: str = ''     # rent_roll | lease | computed | '' (unknown)
     expiration_lease: Optional[date] = None       # what the paper says, kept when the rent roll wins
 
     @property
@@ -317,6 +317,17 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         row.expiration_lease = max(exps) if exps else None
         row.expiration = row.expiration_lease
         row.expiration_source = 'lease' if row.expiration_lease else ''
+        # the lease ends "the last day of the Nth full calendar month after the
+        # Commencement Date" and the commencement was set later: a confirmed
+        # commencement finishes the date (a rent roll's start can be a renewal
+        # or a rent step; its own end date is used instead, below). A past one
+        # is left out, like a past stated date (extensions the file may not hold).
+        fm = first('term_full_months')
+        if not row.expiration and fm and row.commencement_source == 'confirmed':
+            n = _num(fm['raw'])
+            end = _full_months_end(row.commencement, int(n)) if n else None
+            if end and end > as_of:
+                row.expiration, row.expiration_source = end, 'computed'
         # the rent roll is the landlord's current view: auto-renewals and
         # extensions that never reached paper. It wins for display / WALT /
         # expired status; a disagreement with the paper is flagged, not hidden

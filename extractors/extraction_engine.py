@@ -159,7 +159,8 @@ class ExtractionEngine:
         it is good at, but take parties / SF / rent / deposit from the
         deterministic reader, never from nearest-word guesses. Legacy dates
         are kept only where the reader finds none."""
-        from .lease_segmenter import _deterministic_lease_fields, _scan_expiration
+        from .lease_segmenter import (_deterministic_lease_fields, _full_months_fields,
+                                      _scan_expiration, _to_mdy)
         pages = [(p.page_number, p.text or '') for p in doc.pages]
         det = _deterministic_lease_fields(pages, {}, set())
         # short instruments (amendments, renewal-option letters) land here:
@@ -171,6 +172,17 @@ class ExtractionEngine:
                         'term_label': f'Expiration (governing: deterministic: {src})'[:120],
                         'value_raw': exp, 'expiration_date': exp, 'confidence': 0.8,
                         'section_ref': src})
+        comm = next((t['value_raw'] for t in det if t['term_type'] == 'lease_commencement'), None)
+        fm_term, fm_exp = _full_months_fields('\n'.join(t for _, t in pages)[:80000],
+                                              _to_mdy(comm) if comm else None)
+        if fm_term:
+            det.append(fm_term)
+            if fm_exp and not exp:
+                det.append({'term_type': 'governing_expiration',
+                            'term_label': 'Expiration (governing: computed from the '
+                                          'commencement + full months)',
+                            'value_raw': fm_exp, 'expiration_date': fm_exp, 'confidence': 0.8,
+                            'section_ref': 'term clause'})
         det_types = {t['term_type'] for t in det}
         if 'tenant_identity' in det_types:
             det_types.add('tenant_name')
