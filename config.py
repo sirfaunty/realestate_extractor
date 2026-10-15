@@ -304,6 +304,10 @@ class ConfigStore:
         cols = [row[1] for row in self.conn.execute("PRAGMA table_info(users)")]
         if 'password_hash' not in cols:
             self.conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+        if 'session_epoch' not in cols:
+            # bumped on every password change: older sessions stop working
+            self.conn.execute(
+                "ALTER TABLE users ADD COLUMN session_epoch INTEGER DEFAULT 0")
 
     def close(self):
         if self.conn:
@@ -570,9 +574,11 @@ class ConfigStore:
         return device
 
     def set_user_password(self, user_id: str, password_hash: str) -> bool:
-        """Replace a user's password hash (operator reset / self-service)."""
+        """Replace a user's password hash (operator reset / self-service).
+        Every session signed in before the change stops working."""
         cur = self.conn.execute(
-            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            "UPDATE users SET password_hash = ?, "
+            "session_epoch = COALESCE(session_epoch, 0) + 1 WHERE user_id = ?",
             (password_hash, user_id))
         self.conn.commit()
         return cur.rowcount > 0
@@ -624,7 +630,8 @@ class ConfigStore:
         if not invite:
             return None
         self.conn.execute(
-            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            "UPDATE users SET password_hash = ?, "
+            "session_epoch = COALESCE(session_epoch, 0) + 1 WHERE user_id = ?",
             (password_hash, invite['user_id']))
         self.conn.execute(
             "UPDATE user_invites SET used_at = ? WHERE token_hash = ?",
@@ -638,6 +645,19 @@ class ConfigStore:
             "SELECT user_id FROM user_invites WHERE org_id = ? AND used_at IS NULL"
             " AND expires_at >= ?", (org_id, datetime.now().isoformat()))
         return {r['user_id'] for r in cur.fetchall()}
+
+    def session_state(self, user_id: str) -> Optional[Dict]:
+        """What a signed-in session must re-check on every request: is the
+        user (and their org) still active, their current role, and the
+        session version (bumped by password changes)."""
+        row = self.conn.execute("""
+            SELECT u.user_id, u.org_id, u.role, u.is_active,
+                   COALESCE(u.session_epoch, 0) AS session_epoch,
+                   o.is_active AS org_active
+            FROM users u JOIN organizations o ON u.org_id = o.org_id
+            WHERE u.user_id = ?
+        """, (user_id,)).fetchone()
+        return dict(row) if row else None
 
     def get_user(self, user_id: str) -> Optional[Dict]:
         """Get user by ID, including org info."""
@@ -666,9 +686,10 @@ class ConfigStore:
         return dict(row) if row else None
 
     def update_user_password(self, user_id: str, password_hash: str):
-        """Update a user's password hash."""
+        """Update a user's password hash (ends their other sessions)."""
         self.conn.execute(
-            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            "UPDATE users SET password_hash = ?, "
+            "session_epoch = COALESCE(session_epoch, 0) + 1 WHERE user_id = ?",
             (password_hash, user_id))
         self.conn.commit()
 

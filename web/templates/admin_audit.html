@@ -43,7 +43,7 @@
                 <th>Timestamp</th>
                 <th>User</th>
                 <th>Action</th>
-                <th>Document</th>
+                <th>Document / detail</th>
                 <th>Type</th>
                 <th>Status</th>
                 <th>Time</th>
@@ -57,12 +57,13 @@
                 </td>
                 <td style="font-weight: 500;">{{ a.user_id or '—' }}</td>
                 <td>
-                    <span class="badge badge-{% if a.action == 'process_document' %}lease{% elif a.action == 'login' %}loan{% elif a.action == 'batch_process' %}rent_roll{% else %}closing{% endif %}">
+                    <span class="badge badge-{% if a.action == 'process_document' %}lease{% elif a.action == 'login' %}loan{% elif a.action == 'batch_process' %}rent_roll{% elif a.action in ('sign_in_failed', 'sign_in_blocked', 'user_deactivated', 'device_revoked') %}error{% else %}closing{% endif %}">
                         {{ a.action.replace('_', ' ') }}
                     </span>
                 </td>
-                <td style="font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    {{ a.filename or '—' }}
+                <td style="font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                    title="{{ a.filename or a.detail or '' }}{{ ' — by ' ~ a.by if a.by else '' }}">
+                    {{ a.filename or a.detail or '—' }}{% if a.by and not a.filename %} <span style="color: var(--text-muted);">· by {{ a.by }}</span>{% endif %}
                 </td>
                 <td style="font-size: 12px;">{{ a.document_type or '—' }}</td>
                 <td>

@@ -48,6 +48,13 @@ DEAL_MODULES = ['closing_books', 'tif_analysis', 'distribution', 'debt_analysis'
                 'partnership_dashboard', 'portfolio_cashflow', 'lease_abstraction',
                 'disposition_diligence', 'portfolio_ownership', 'residential']
 
+# Modules that read the instance's engagement data (deal registry, warehouse,
+# deal seeds) rather than the org's own database. Turning one on for an org
+# shows that org this instance's engagement data — right on a dedicated
+# client instance, wrong for any other org sharing it. The operator's
+# Modules page warns on these.
+SHARED_DATA_MODULES = set(DEAL_MODULES) | {'deliverables'}
+
 # Display groupings for the admin UI (order matters).
 MODULE_GROUPS = [
     ('Deal Documents', ['closing_books', 'tif_analysis', 'distribution',

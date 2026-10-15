@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, jsonify, send_file, session, g, Response
+    flash, jsonify, send_file, session, g, Response, has_request_context
 )
 from flask.sessions import SecureCookieSessionInterface
 from werkzeug.utils import secure_filename
@@ -121,15 +121,77 @@ def _require_authentication():
     path = request.path or '/'
     if any(path == p.rstrip('/') or path.startswith(p) for p in _PUBLIC_PREFIXES):
         return None
+    if session.get('operator_id') and not _operator_still_valid():
+        session.clear()
+        return redirect(url_for('operator_login'))
     if path.startswith('/operator'):
         if session.get('operator_id'):
             return None
         return redirect(url_for('operator_login'))
     if session.get('user_id'):
-        return None
+        reason = _session_revoked_reason()
+        if not reason:
+            return None
+        _audit(session.get('org_id'), 'session_ended', session.get('user_id'), reason)
+        session.clear()
+        if path.startswith('/api/'):
+            return jsonify({'error': 'signed out', 'reason': reason}), 401
+        flash(reason, 'error')
+        return redirect(url_for('login'))
     if path.startswith('/api/'):
         return jsonify({'error': 'authentication required'}), 401
     return redirect(url_for('login'))
+
+
+def _audit(org_id, action, user_id=None, detail=None, success=True):
+    """Record a security event in the org's Audit Trail (Admin → Audit
+    Trail). Never lets a logging problem break the request."""
+    if not org_id:
+        return
+    try:
+        from .usage import UsageEvent
+        by = session.get('user_id') if has_request_context() else None
+        if has_request_context() and session.get('operator_id'):
+            by = f"operator {session.get('operator_name') or session['operator_id']}"
+        tracker = get_usage_tracker()
+        try:
+            tracker.log_event(UsageEvent(
+                org_id=org_id, user_id=user_id, action=action, success=success,
+                metadata={'detail': detail, 'by': by}))
+        finally:
+            tracker.close()
+    except Exception:
+        logger.exception('audit log failed (%s)', action)
+
+
+def _session_revoked_reason():
+    """Re-check a signed-in session against the database on every request,
+    so deactivating a user or org, or changing a password, takes effect at
+    once instead of when the session idles out. Refreshes the role.
+    Returns why the session ended, or None if it is still good."""
+    store = get_config_store()
+    try:
+        st = store.session_state(session['user_id'])
+    finally:
+        store.close()
+    if not st or not st['is_active'] or st['org_id'] != session.get('org_id'):
+        return 'You have been signed out: this account is no longer active.'
+    if not st['org_active']:
+        return 'You have been signed out: this organization is no longer active.'
+    # an operator inside a workspace is authenticated as an operator, not by
+    # the user's password, so the password version doesn't apply to them
+    if not session.get('operator_id') and session.get('epoch', 0) != st['session_epoch']:
+        return 'You have been signed out because the password was changed. Sign in again.'
+    session['role'] = st['role']
+    return None
+
+
+def _operator_still_valid():
+    store = get_config_store()
+    try:
+        return store.get_operator(session['operator_id']) is not None
+    finally:
+        store.close()
 
 
 @app.after_request
@@ -817,6 +879,15 @@ def login():
 
         locked = _login_locked('user', email)
         if locked:
+            st = get_config_store()
+            try:
+                known = st.get_user_by_email(email)
+            finally:
+                st.close()
+            if known:
+                _audit(known['org_id'], 'sign_in_blocked', known['user_id'],
+                       f'locked after repeated failures (from {request.remote_addr})',
+                       success=False)
             flash(f'Too many failed sign-ins. Try again in {locked} minute'
                   f'{"s" if locked != 1 else ""}.', 'error')
             return redirect(request.url)
@@ -836,6 +907,8 @@ def login():
 
             if not check_password_hash(user['password_hash'], password):
                 _login_failed('user', email)
+                _audit(user['org_id'], 'sign_in_failed', user['user_id'],
+                       f'wrong password (from {request.remote_addr})', success=False)
                 flash('Invalid email or password.', 'error')
                 return redirect(request.url)
             _login_succeeded('user', email)
@@ -856,6 +929,7 @@ def login():
             session['display_name'] = user['display_name']
             session['role'] = user['role']
             session['plan'] = org.plan
+            session['epoch'] = user.get('session_epoch') or 0
 
         finally:
             store.close()
@@ -1727,6 +1801,8 @@ def admin_users():
                 session['invite_link'] = {
                     'name': name, 'email': email,
                     'url': url_for('accept_invite', token=token, _external=True)}
+                _audit(org_id, 'user_added', user_id,
+                       f'{email} as {role}; invite link issued')
                 flash(f'{name} added. Send them the invite link below.', 'success')
             except ValueError as e:
                 flash(str(e), 'error')
@@ -1744,6 +1820,8 @@ def admin_users():
                 else:
                     token = store.create_invite(target_user_id, org_id,
                                                 created_by=session['user_id'])
+                    _audit(org_id, 'invite_issued', target_user_id,
+                           f"new set-password link for {target['email']}")
                     session['invite_link'] = {
                         'name': target['display_name'], 'email': target['email'],
                         'url': url_for('accept_invite', token=token, _external=True)}
@@ -1764,6 +1842,8 @@ def admin_users():
                         flash('User not found.', 'error')
                     else:
                         store.deactivate_user(target_user_id)
+                        _audit(org_id, 'user_deactivated', target_user_id,
+                               target['email'])
                         flash('User deactivated.', 'success')
                 finally:
                     store.close()
@@ -1807,6 +1887,8 @@ def accept_invite(token):
             else:
                 store.use_invite(token, generate_password_hash(pw))
                 session.clear()
+                _audit(invite['org_id'], 'password_set', invite['user_id'],
+                       'from an invite link; earlier sessions ended')
                 flash('Password set. Sign in to continue.', 'success')
                 return redirect(url_for('login'))
         return render_template('invite.html', invite=invite)
@@ -2072,6 +2154,7 @@ def admin_devices():
                         org_id, name, created_by=session.get('user_id'))
                     new_token = reg['token']
                     new_device = name
+                    _audit(org_id, 'device_registered', None, name)
                     flash('Device registered. Copy the token now — it will '
                           'not be shown again.', 'success')
                 except ValueError as e:
@@ -2079,6 +2162,7 @@ def admin_devices():
                     return redirect(request.url)
             elif action == 'revoke':
                 if store.revoke_device(request.form.get('device_id'), org_id):
+                    _audit(org_id, 'device_revoked', None, request.form.get('device_id'))
                     flash('Device revoked. Its token no longer authenticates.',
                           'success')
                 else:
@@ -2249,6 +2333,8 @@ def operator_provision():
                                      created_by=session['operator_id']))
         store.log_operator_action(session['operator_id'], 'org_provisioned',
                                   org_id, f'plan={plan}')
+        _audit(org_id, 'user_added', user_id, f'{admin_email} as admin (provisioned)'
+               + ('; invite link issued' if invite_url else ''))
     finally:
         store.close()
     db = get_org_db(org_id)
@@ -2294,6 +2380,8 @@ def operator_reset_password(org_id):
             flash('User not found in that organization.', 'error')
             return redirect(url_for('operator_dashboard'))
         store.set_user_password(user_id, generate_password_hash(pw))
+        _audit(org_id, 'password_reset', user_id,
+               'set by Capactive support; earlier sessions ended')
         store.log_operator_action(session['operator_id'], 'password_reset',
                                   org_id, f'user {user_id}')
     finally:
@@ -2380,7 +2468,7 @@ def admin_modules():
     lists bespoke modules named after other clients' deals. Reachable only
     inside an operator impersonation session (org context + operator
     credential); the operator console is the front door."""
-    from .modules.gating import MODULE_GROUPS, MODULE_ROUTES
+    from .modules.gating import MODULE_GROUPS, MODULE_ROUTES, SHARED_DATA_MODULES
     from .modules import registry as module_registry
     org_id = session['org_id']
 
@@ -2424,12 +2512,14 @@ def admin_modules():
                 'display_name': m.get('display_name', n.replace('_', ' ').title()),
                 'description': m.get('description', ''),
                 'enabled': all_enabled or n in enabled_set,
+                'shared_data': n in SHARED_DATA_MODULES,
             })
         groups.append({'label': label, 'entries': entries})
 
     return render_template('admin_modules.html',
                            org=org, groups=groups, all_enabled=all_enabled,
-                           plan=org.plan)
+                           plan=org.plan,
+                           other_orgs=len(get_config_store().list_orgs()) > 1)
 
 
 @app.route('/admin/permissions', methods=['GET', 'POST'])
@@ -2513,6 +2603,14 @@ def admin_audit():
         user_filter = request.args.get('user')
         activity = tracker.get_user_activity(
             org_id, user_id=user_filter, days=days, limit=200)
+        for a in activity:
+            meta = {}
+            try:
+                meta = json.loads(a.get('metadata') or '{}') or {}
+            except (TypeError, ValueError):
+                pass
+            a['detail'] = meta.get('detail') if isinstance(meta, dict) else None
+            a['by'] = meta.get('by') if isinstance(meta, dict) else None
     finally:
         tracker.close()
 
