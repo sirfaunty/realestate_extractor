@@ -19,6 +19,13 @@ services:
     restart: unless-stopped
     environment:
       CAPACTIVE_SECRET_KEY: ${CAPACTIVE_SECRET_KEY:?set CAPACTIVE_SECRET_KEY (see header comment)}
+      # outgoing email (invites, password resets) — optional; see docs/DEPLOY.md
+      CAPACTIVE_SMTP_HOST: ${CAPACTIVE_SMTP_HOST:-}
+      CAPACTIVE_SMTP_PORT: ${CAPACTIVE_SMTP_PORT:-587}
+      CAPACTIVE_SMTP_USER: ${CAPACTIVE_SMTP_USER:-}
+      CAPACTIVE_SMTP_PASSWORD: ${CAPACTIVE_SMTP_PASSWORD:-}
+      CAPACTIVE_MAIL_FROM: ${CAPACTIVE_MAIL_FROM:-}
+      CAPACTIVE_MAIL_REPLY_TO: ${CAPACTIVE_MAIL_REPLY_TO:-}
     volumes:
       - capactive_data:/app/realestate_extractor/data
     ports:

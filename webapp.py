@@ -35,6 +35,7 @@ from .extractors.extraction_engine import DocumentClassifier
 from .templates.document_templates import list_templates, TEMPLATES
 from .reconciliation import reconcile_terms
 from .config import ConfigStore, PLAN_FEATURES
+from . import mailer
 from .licensing import (
     generate_org_key, generate_user_key, validate_org_key,
     validate_user_key, EntitlementChecker, create_license_file,
@@ -100,6 +101,7 @@ _PUBLIC_PREFIXES = (
     '/login', '/logout', '/setup', '/static/', '/favicon.ico',
     '/operator/login',          # operator credential entry
     '/invite/',                 # set-password links (token is the credential)
+    '/forgot',                  # request a password-reset email
     '/api/sync/',               # device-token auth (own decorator)
     '/api/status',              # healthcheck
 )
@@ -950,7 +952,54 @@ def login():
               else f'Welcome back, {user["display_name"]}!', 'success')
         return redirect(url_for('index'))
 
-    return render_template('login.html')
+    return render_template('login.html', mail_on=mailer.mail_enabled())
+
+
+RESET_HOURS = 1
+
+
+@app.route('/forgot', methods=['GET', 'POST'])
+def forgot_password():
+    """Email a one-time reset link. The answer is the same whether or not
+    the address has an account, so the page can't be used to find users."""
+    if not mailer.mail_enabled():
+        return render_template('forgot.html', mail_on=False)
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if email and not _login_locked('reset', email):
+            _login_failed('reset', email)   # counts requests, not failures
+            store = get_config_store()
+            try:
+                user = store.get_user_by_email(email)
+                org = store.get_org(user['org_id']) if user else None
+                if user and org and org.is_active:
+                    token = store.create_invite(user['user_id'], user['org_id'],
+                                                hours=RESET_HOURS)
+                    subject, body = mailer.reset_message(
+                        user['display_name'],
+                        url_for('accept_invite', token=token, _external=True),
+                        RESET_HOURS)
+                    sent = mailer.send_email(user['email'], subject, body)
+                    _audit(user['org_id'], 'password_reset_requested', user['user_id'],
+                           f'reset link emailed (from {request.remote_addr})' if sent
+                           else 'reset link could not be emailed', success=sent)
+            finally:
+                store.close()
+        return render_template('forgot.html', mail_on=True, sent=True)
+    return render_template('forgot.html', mail_on=True)
+
+
+def _email_invite(target, org_name, url, admin=False):
+    """Email an invite link; True if the mail server took it."""
+    subject, body = mailer.invite_message(
+        target['display_name'], org_name, target['email'], url,
+        url_for('login', _external=True), admin=admin)
+    return mailer.send_email(target['email'], subject, body)
+
+
+def _email_password_changed(user, how):
+    subject, body = mailer.password_changed_message(user['display_name'], how)
+    return mailer.send_email(user['email'], subject, body)
 
 
 @app.route('/logout')
@@ -1798,12 +1847,16 @@ def admin_users():
 
                 token = store.create_invite(user_id, org_id,
                                             created_by=session['user_id'])
-                session['invite_link'] = {
-                    'name': name, 'email': email,
-                    'url': url_for('accept_invite', token=token, _external=True)}
+                url = url_for('accept_invite', token=token, _external=True)
+                emailed = _email_invite({'display_name': name, 'email': email},
+                                        session.get('org_name') or org_id, url)
+                session['invite_link'] = {'name': name, 'email': email,
+                                          'url': url, 'emailed': emailed}
                 _audit(org_id, 'user_added', user_id,
-                       f'{email} as {role}; invite link issued')
-                flash(f'{name} added. Send them the invite link below.', 'success')
+                       f'{email} as {role}; invite '
+                       + ('emailed' if emailed else 'link issued'))
+                flash(f'{name} added. ' + (f'Invite emailed to {email}.' if emailed
+                      else 'Send them the invite link below.'), 'success')
             except ValueError as e:
                 flash(str(e), 'error')
             finally:
@@ -1820,13 +1873,17 @@ def admin_users():
                 else:
                     token = store.create_invite(target_user_id, org_id,
                                                 created_by=session['user_id'])
+                    url = url_for('accept_invite', token=token, _external=True)
+                    emailed = _email_invite(target, target['org_name'], url)
                     _audit(org_id, 'invite_issued', target_user_id,
-                           f"new set-password link for {target['email']}")
+                           f"new set-password link for {target['email']}"
+                           + ('; emailed' if emailed else ''))
                     session['invite_link'] = {
                         'name': target['display_name'], 'email': target['email'],
-                        'url': url_for('accept_invite', token=token, _external=True)}
-                    flash(f"New link for {target['display_name']}. Any earlier link "
-                          f"no longer works.", 'success')
+                        'url': url, 'emailed': emailed}
+                    flash(f"New link for {target['display_name']}"
+                          + (f" emailed to {target['email']}" if emailed else '')
+                          + '. Any earlier link no longer works.', 'success')
             finally:
                 store.close()
 
@@ -1877,7 +1934,8 @@ def accept_invite(token):
     try:
         invite = store.get_invite(token)
         if not invite:
-            return render_template('invite.html', invite=None), 410
+            return render_template('invite.html', invite=None,
+                                   mail_on=mailer.mail_enabled()), 410
         if request.method == 'POST':
             pw = request.form.get('password', '')
             if len(pw) < 8:
@@ -1887,8 +1945,11 @@ def accept_invite(token):
             else:
                 store.use_invite(token, generate_password_hash(pw))
                 session.clear()
+                notified = invite['had_password'] and _email_password_changed(
+                    invite, 'from a reset link')
                 _audit(invite['org_id'], 'password_set', invite['user_id'],
-                       'from an invite link; earlier sessions ended')
+                       'from an invite link; earlier sessions ended'
+                       + ('; change notice emailed' if notified else ''))
                 flash('Password set. Sign in to continue.', 'success')
                 return redirect(url_for('login'))
         return render_template('invite.html', invite=invite)
@@ -2326,15 +2387,19 @@ def operator_provision():
                           password_hash=generate_password_hash(admin_password)
                           if admin_password else None)
         invite_url = None
+        emailed = False
         if not admin_password:
             invite_url = url_for('accept_invite', _external=True,
                                  token=store.create_invite(
                                      user_id, org_id,
                                      created_by=session['operator_id']))
+            emailed = _email_invite({'display_name': admin_name, 'email': admin_email},
+                                    org_name, invite_url, admin=True)
         store.log_operator_action(session['operator_id'], 'org_provisioned',
                                   org_id, f'plan={plan}')
         _audit(org_id, 'user_added', user_id, f'{admin_email} as admin (provisioned)'
-               + ('; invite link issued' if invite_url else ''))
+               + ('; invite emailed' if emailed
+                  else '; invite link issued' if invite_url else ''))
     finally:
         store.close()
     db = get_org_db(org_id)
@@ -2350,7 +2415,7 @@ def operator_provision():
     if invite_url:
         session['provision_welcome'] = {
             'org_name': org_name, 'admin_name': admin_name,
-            'admin_email': admin_email, 'invite_url': invite_url,
+            'admin_email': admin_email, 'invite_url': invite_url, 'emailed': emailed,
             'login_url': url_for('login', _external=True)}
     return redirect(url_for('operator_dashboard'))
 
@@ -2380,8 +2445,10 @@ def operator_reset_password(org_id):
             flash('User not found in that organization.', 'error')
             return redirect(url_for('operator_dashboard'))
         store.set_user_password(user_id, generate_password_hash(pw))
+        notified = _email_password_changed(user, 'by Capactive support')
         _audit(org_id, 'password_reset', user_id,
-               'set by Capactive support; earlier sessions ended')
+               'set by Capactive support; earlier sessions ended'
+               + ('; change notice emailed' if notified else ''))
         store.log_operator_action(session['operator_id'], 'password_reset',
                                   org_id, f'user {user_id}')
     finally:

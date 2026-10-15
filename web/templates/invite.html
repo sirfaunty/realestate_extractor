@@ -49,8 +49,10 @@
             </form>
             {% else %}
             <h2>This link has expired</h2>
-            <p class="subtitle">Invite links work once and expire after 7 days.
-                Ask your admin for a new one.</p>
+            <p class="subtitle">Set-password links work once and expire (invites after
+                7 days, reset links after an hour).{% if mail_on %} You can
+                <a href="{{ url_for('forgot_password') }}">email yourself a new one</a>
+                or{% endif %} ask your admin for a new one.</p>
             <a class="btn btn-primary" href="{{ url_for('login') }}">Go to sign in</a>
             {% endif %}
         </div>

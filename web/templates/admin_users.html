@@ -9,9 +9,11 @@
 
 {% if invite_link %}
 <div class="card" style="border-color: var(--cap-primary);">
-    <div class="card-header">Invite link for {{ invite_link.name }}</div>
+    <div class="card-header">{% if invite_link.emailed %}Invite emailed to {{ invite_link.name }}{% else %}Invite link for {{ invite_link.name }}{% endif %}</div>
     <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 10px;">
-        Send this to {{ invite_link.email }}. It lets them set their own password, works once and expires in 7 days.
+        {% if invite_link.emailed %}We emailed this link to {{ invite_link.email }}. If it doesn't arrive, send it yourself.
+        {% else %}Send this to {{ invite_link.email }}.{% endif %}
+        It lets them set their own password, works once and expires in 7 days.
         It's shown only now; if it gets lost, use <strong>New link</strong> in the table below.
     </p>
     <div style="display: flex; gap: 8px;">

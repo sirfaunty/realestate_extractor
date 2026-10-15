@@ -45,6 +45,26 @@ the first contact pins the device fingerprint).
 Store the secret key in an `.env` file next to the compose file if you
 prefer (`CAPACTIVE_SECRET_KEY=...`); compose reads it automatically.
 
+## Email (optional)
+
+Invites, "Forgot password?" links and password-changed notices go out over
+SMTP. Our provider is Postmark (a Server's default transactional stream);
+any SMTP provider works. Add to the same `.env` (never commit it):
+
+```
+CAPACTIVE_SMTP_HOST=smtp.postmarkapp.com
+CAPACTIVE_SMTP_PORT=587
+CAPACTIVE_SMTP_USER=<Postmark server API token>
+CAPACTIVE_SMTP_PASSWORD=<the same token>
+CAPACTIVE_MAIL_FROM=Capactive <no-reply@capactive.co>
+CAPACTIVE_MAIL_REPLY_TO=support@capactive.co
+```
+
+The From domain must be verified with the provider (DKIM + Return-Path
+DNS records). Then `docker compose --profile tls up -d` to pick it up.
+Without these settings email is off: there is no "Forgot password?" link,
+and admins copy invite links and send them themselves.
+
 ## Data & state
 
 Everything persistent lives in the `capactive_data` volume: org SQLite

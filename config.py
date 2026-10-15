@@ -588,10 +588,11 @@ class ConfigStore:
     INVITE_DAYS = 7
 
     def create_invite(self, user_id: str, org_id: str,
-                      created_by: str = None) -> str:
+                      created_by: str = None, hours: int = None) -> str:
         """Issue a one-time set-password link token for a user. The
         plaintext is returned once; only its hash is stored. Any unused
-        earlier link for the user stops working."""
+        earlier link for the user stops working. Lasts INVITE_DAYS, or
+        `hours` (password resets are short-lived)."""
         import hashlib
         import secrets
         token = secrets.token_urlsafe(32)
@@ -604,7 +605,8 @@ class ConfigStore:
             " created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
             (hashlib.sha256(token.encode()).hexdigest(), user_id, org_id,
              created_by, now.isoformat(),
-             (now + timedelta(days=self.INVITE_DAYS)).isoformat()))
+             (now + (timedelta(hours=hours) if hours
+                     else timedelta(days=self.INVITE_DAYS))).isoformat()))
         self.conn.commit()
         return token
 
@@ -613,7 +615,8 @@ class ConfigStore:
         user is active; otherwise None."""
         import hashlib
         row = self.conn.execute("""
-            SELECT i.*, u.email, u.display_name, o.org_name
+            SELECT i.*, u.email, u.display_name, o.org_name,
+                   COALESCE(u.password_hash, '') != '' AS had_password
             FROM user_invites i
             JOIN users u ON u.user_id = i.user_id
             JOIN organizations o ON o.org_id = i.org_id

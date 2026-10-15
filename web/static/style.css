@@ -1357,3 +1357,9 @@ details[open] summary::before {
     background: var(--cap-cloud);
     color: var(--cap-primary);
 }
+
+.auth-alt {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 13px;
+}

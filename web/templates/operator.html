@@ -56,7 +56,8 @@
 {% if w %}
 <div class="provision" style="margin-bottom:16px">
   <div style="font-size:12px;color:#4ec98a;margin-bottom:8px">
-    Welcome message for {{ w.admin_name }} — copy and send it. The link is
+    {% if w.emailed %}Emailed to {{ w.admin_email }}. A copy is below in case it doesn't arrive; the link is
+    {% else %}Welcome message for {{ w.admin_name }} — copy and send it. The link is{% endif %}
     shown only now; if it's lost, Enter workspace → Users → New link.</div>
 <textarea id="welcome-msg" readonly rows="11" style="width:100%;font-size:12px">Hi {{ w.admin_name }},
 
