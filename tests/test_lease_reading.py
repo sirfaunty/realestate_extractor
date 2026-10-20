@@ -507,6 +507,21 @@ def test_round3_dates():
         == '6/30/2024'
 
 
+def test_data_sheet_expiration_date_of_term():
+    # "Expiration Date of Term:" on a mall data sheet, all-caps date
+    assert stated('Grand Opening Date: AS DETERMINED BY LANDLORD AND CURRENTLY ESTIMATED TO BE '
+                  'SEPTEMBER 28, 2006. Expiration Date of Term: JANUARY 31, 2017') == '1/31/2017'
+    assert stated('Expiration Date of the Lease Term: March 31, 2021') == '3/31/2021'
+
+
+def test_rent_pair_with_net_marker_between():
+    # "Annualized Rent / Monthly Installments" table: "$16,620.00 NNN $1,385.00"
+    t = flat('Lease Years Annualized Rent Monthly Installments For that portion of the initial '
+             '$16,620.00 NNN $1,385.00 Term which falls within calendar year 2005 For the '
+             'remainder of the $33,340.00 NNN $2,770.00 initial Term')
+    assert _year1_monthly_rent(t, t)[0] == 1385.00
+
+
 def test_abatement_window_is_not_the_term():
     t = flat('Tenant shall pay no Rent during the first six (6) months of the Term, from '
              'March 1, 2015, through August 31, 2015 (the “Rent Abatement Period”).')

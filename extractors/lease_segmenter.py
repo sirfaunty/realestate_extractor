@@ -647,7 +647,9 @@ RE_EXPIRE_STMT = re.compile(
     rf'(?i)(?:expire|expiring|ending|terminat\w+)[^.]{{0,140}}?on\s+({_MONTH_DATE})'
     # summary label: "1.7 EXPIRATION DATE: July 31, 2018"
     # also "K. TERMINATION DATE: ...", "The lease expiration date shall be ..."
-    rf'|(?i:expiration|termination)\s+date\s*(?:[:.\-]|shall\s+be|is)\s*({_MONTH_DATE})'
+    # data sheet: "Expiration Date of Term: JANUARY 31, 2017"
+    rf'|(?i:expiration|termination)\s+date(?:\s+of\s+(?:the\s+)?(?:lease\s+)?term)?'
+    rf'\s*(?:[:.\-]|shall\s+be|is)\s*({_MONTH_DATE})'
     # "beginning on the Commencement Date and ending December 31, 2018";
     # "The term of this Lease shall be from June 20, 2022 to June 30, 2025"
     rf'|\band\s+ending\s+({_MONTH_DATE})'
@@ -1708,7 +1710,8 @@ def _year1_monthly_rent(rent_txt, flat, sf=None):
     #    Ahead of the wording rules: a table header "ANNUAL RENT MONTHLY RENT"
     #    puts the ANNUAL figure first after the word "monthly".
     for src in srcs:
-        for pm in re.finditer(amt + r'\s*[;,|/]?\s*' + amt, src):
+        #    "$16,620.00 NNN $1,385.00": a net marker between the pair
+        for pm in re.finditer(amt + r'\s*[;,|/]?\s*(?:NNN\s+)?' + amt, src):
             a, b = _money(pm.group(1)), _money(pm.group(2))
             if (not a or not b or not _rent_ctx_ok(src, pm.start())
                     or _option_ctx(src, pm.start())):
