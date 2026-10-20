@@ -186,7 +186,7 @@
 {% endif %}
 
 <!-- ═══ TWO-COLUMN LAYOUT ═══ -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+<div class="grid-2" style="margin-bottom: 20px;">
 
     <!-- Documents by Type -->
     {% if d.docs_by_type %}
@@ -211,7 +211,7 @@
     <!-- Extraction Summary -->
     <div class="card">
         <div class="card-header">Extraction Summary</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="grid-2" style="gap: 12px;">
             <div class="stat-card" style="padding: 12px;">
                 <div class="stat-value" style="font-size: 20px;">{{ d.clause_count }}</div>
                 <div class="stat-label">Clauses Extracted</div>

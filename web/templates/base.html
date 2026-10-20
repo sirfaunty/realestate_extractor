@@ -21,7 +21,7 @@
     </div>
     <div style="height:30px"></div>
     {% endif %}
-    <nav class="sidebar">
+    <nav class="sidebar" id="sidebar-nav">
         <div class="sidebar-brand">
             <div class="brand-logo">
                 <!-- Capactive ascending bar icon -->
@@ -269,7 +269,14 @@
         </div>
     </nav>
 
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
     <main class="main">
+        <div class="mobile-bar">
+            <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Open menu"
+                    aria-controls="sidebar-nav" aria-expanded="false">&#9776;</button>
+            <span class="mobile-brand">Capactive</span>
+        </div>
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
@@ -551,6 +558,23 @@
 </style>
 
 <script>
+// ─── Phone navigation: the menu button slides the sidebar in over the page ───
+(function () {
+    const toggle = document.getElementById('nav-toggle');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const nav = document.getElementById('sidebar-nav');
+    if (!toggle || !backdrop || !nav) return;
+    const setOpen = (open) => {
+        document.body.classList.toggle('nav-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    };
+    toggle.addEventListener('click', () => setOpen(!document.body.classList.contains('nav-open')));
+    backdrop.addEventListener('click', () => setOpen(false));
+    nav.addEventListener('click', (e) => { if (e.target.closest('a[href]')) setOpen(false); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+})();
+
 // ─── Modal API ──────────────────────────────────────────────────────
 const capModal = {
     _overlay: null,
