@@ -2605,15 +2605,18 @@ def admin_permissions():
         target_user = request.form.get('user_id')
         action = request.form.get('action')
 
+        if action == 'set_role':
+            role = request.form.get('role_template')
+            # The seat check closes the per-request stores, so fetch the
+            # permission store only after it (a closed store can't write).
+            blocked = _seat_block_reason(org_id, role, exclude_user=target_user)
+            if blocked:
+                flash(blocked, 'error')
+                return redirect(url_for('admin_permissions'))
+
         pstore = get_permission_store()
         try:
             if action == 'set_role':
-                role = request.form.get('role_template')
-                blocked = _seat_block_reason(org_id, role,
-                                             exclude_user=target_user)
-                if blocked:
-                    flash(blocked, 'error')
-                    return redirect(url_for('admin_permissions'))
                 pstore.set_user_role(target_user, org_id, role)
                 flash(f'Role updated to {role}.', 'success')
 
