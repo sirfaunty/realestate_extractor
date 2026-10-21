@@ -1372,6 +1372,12 @@ details[open] summary::before {
     .main { margin-left: 0; padding: 16px; }
     .main:not(.main-wide) { max-width: none; }
     .card-grid { grid-template-columns: 1fr 1fr; }
+    /* phone sweep: inline flex rows (page headers, filter forms) wrap instead
+       of running off the page; long names and addresses break mid-word */
+    .filter-bar, .main [style*="display: flex"] { flex-wrap: wrap; }
+    .main input[style*="width:"], .main select[style*="width:"] { max-width: 100%; }
+    .main { overflow-wrap: anywhere; }
+    .form-dialog-body { padding: 16px; }
 }
 
 @media (max-width: 480px) {
@@ -1379,6 +1385,10 @@ details[open] summary::before {
     .grid-2 { grid-template-columns: 1fr; }
     .data-table { font-size: 12px; }
     .data-table th, .data-table td { padding: 8px 10px; }
+    /* inline fixed-column grids ("2fr 1fr 1fr") stack; auto-fit grids already wrap */
+    .main [style*="grid-template-columns: 1fr"],
+    .main [style*="grid-template-columns: 2fr"],
+    .main [style*="grid-template-columns: 3fr"] { grid-template-columns: 1fr !important; }
 }
 
 /* ─── Autocomplete ─── */
