@@ -307,6 +307,21 @@ def main():
     test("an operator inside a workspace isn't signed out by the user's password version",
          opc.get('/').status_code == 200)
 
+    # A placeholder or short CAPACTIVE_SECRET_KEY must stop the app from
+    # starting (it would sign every session cookie with a guessable string).
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def starts_with(key):
+        env = dict(os.environ, CAPACTIVE_SECRET_KEY=key, PYTHONPATH=root)
+        r = subprocess.run([sys.executable, '-c', 'import realestate_extractor.webapp'],
+                           env=env, capture_output=True, text=True, cwd=root)
+        return r.returncode == 0, r.stderr
+    ok, err = starts_with('<paste-hex>')
+    test('a placeholder secret key refuses to start', not ok and 'CAPACTIVE_SECRET_KEY' in err)
+    test('a short secret key refuses to start', not starts_with('abc123')[0])
+    test('a real secret key starts', starts_with('f' * 64)[0])
+
     print(f'\n{passed} passed, {failed} failed')
     sys.exit(1 if failed else 0)
 

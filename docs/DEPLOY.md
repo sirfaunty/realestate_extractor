@@ -44,6 +44,8 @@ the first contact pins the device fingerprint).
 
 Store the secret key in an `.env` file next to the compose file if you
 prefer (`CAPACTIVE_SECRET_KEY=...`); compose reads it automatically.
+Generate it with `openssl rand -hex 32`: the app refuses to start on a
+value shorter than 32 characters or one still containing `<...>`.
 
 ## Email (optional)
 

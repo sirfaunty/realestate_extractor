@@ -57,7 +57,13 @@ import logging as _logging
 logger = _logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='web/templates', static_folder='web/static')
-app.secret_key = os.environ.get('CAPACTIVE_SECRET_KEY', os.urandom(24))
+_secret = os.environ.get('CAPACTIVE_SECRET_KEY')
+if _secret is not None and (len(_secret) < 32 or '<' in _secret or '>' in _secret):
+    # A placeholder left in .env ("<paste-hex>") would sign every session
+    # cookie with a guessable string. Refuse to start instead.
+    raise SystemExit('CAPACTIVE_SECRET_KEY must be a real secret of at least 32 '
+                     'characters (generate one: openssl rand -hex 32)')
+app.secret_key = _secret if _secret is not None else os.urandom(24)
 
 
 class _SessionInterface(SecureCookieSessionInterface):
