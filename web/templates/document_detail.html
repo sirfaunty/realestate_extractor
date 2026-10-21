@@ -37,7 +37,7 @@
         <div style="font-size: 13px; color: var(--text-secondary);">
             <strong style="color: var(--text-primary);">Synced document</strong>
             &middot; from device <code style="font-size: 12px;">{{ doc.origin_device_id }}</code>
-            &middot; last sync {{ doc.synced_at[:16] if doc.synced_at else '—' }}
+            &middot; last sync {{ doc.synced_at[:16]|replace('T', ' ') if doc.synced_at else '—' }}
             {% if sync_history %}&middot; {{ sync_history|length }} prior
             version{{ 's' if sync_history|length != 1 }}{% endif %}
         </div>

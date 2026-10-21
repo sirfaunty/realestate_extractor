@@ -2004,6 +2004,7 @@ def api_sync_run():
     items = data.get('documents', [])
     if not items:
         return jsonify({'error': 'no documents in payload'}), 400
+    _sweep_orphan_pdfs(g.device_org_id)   # each push starts by tidying the store
     db = get_org_db(g.device_org_id)
     results, errors = [], []
     try:
@@ -2062,6 +2063,8 @@ def api_sync_pdf():
     finally:
         db.close()
     if not matched:
+        if not deduped:
+            os.remove(fp)   # nothing references it: don't leave an orphan
         return jsonify({'error': f'no synced document with origin_doc_id '
                                  f'{origin_doc_id} — push /api/sync/run '
                                  f'first'}), 404
@@ -2087,6 +2090,48 @@ def _partial_dir(org_id, sha):
     d = os.path.join(_pdf_store(org_id), '.partial', sha)
     os.makedirs(d, exist_ok=True)
     return d
+
+
+def _sweep_orphan_pdfs(org_id, partial_max_age_hours=24):
+    """Housekeeping for an org's synced-PDF store: delete PDFs that no
+    document references (uploads that 404'd before this guard existed, or
+    documents since removed) and chunk folders older than a day. Files
+    touched in the last hour are left alone (an upload may be between its
+    write and its attach). Returns (files removed, bytes freed); never raises."""
+    import shutil as _shutil
+    import time as _time
+    removed = freed = 0
+    try:
+        store = os.path.join(DATA_DIR, 'synced_pdfs', org_id)
+        if not os.path.isdir(store):
+            return 0, 0
+        db = get_org_db(org_id)
+        try:
+            referenced = {os.path.normcase(os.path.abspath(r[0])) for r in db.conn.execute(
+                "SELECT filepath FROM documents WHERE filepath IS NOT NULL")}
+        finally:
+            db.close()
+        now = _time.time()
+        for name in os.listdir(store):
+            fp = os.path.join(store, name)
+            if name == '.partial':
+                for sha in os.listdir(fp):
+                    pdir = os.path.join(fp, sha)
+                    if now - os.path.getmtime(pdir) > partial_max_age_hours * 3600:
+                        _shutil.rmtree(pdir, ignore_errors=True)
+                        removed += 1
+                continue
+            if not os.path.isfile(fp) or now - os.path.getmtime(fp) < 3600:
+                continue
+            if os.path.normcase(os.path.abspath(fp)) not in referenced:
+                freed += os.path.getsize(fp)
+                os.remove(fp)
+                removed += 1
+    except Exception:
+        logger.exception('synced-pdf sweep failed for %s', org_id)
+    if removed:
+        logger.info('synced-pdf sweep for %s: removed %d (%.1f MB)', org_id, removed, freed / 1e6)
+    return removed, freed
 
 
 def _attach_pdf(org_id, device_id, origin_doc_id, fp):
@@ -2192,6 +2237,8 @@ def api_sync_pdf_complete():
 
     if not _attach_pdf(g.device_org_id, g.device['device_id'],
                        origin_doc_id, final):
+        if not deduped:
+            os.remove(final)   # nothing references it: don't leave an orphan
         return jsonify({'error': f'no synced document with origin_doc_id '
                                  f'{origin_doc_id} — push /api/sync/run '
                                  f'first'}), 404
@@ -2232,6 +2279,15 @@ def admin_devices():
                     _audit(org_id, 'device_revoked', None, request.form.get('device_id'))
                     flash('Device revoked. Its token no longer authenticates.',
                           'success')
+                else:
+                    flash('Device not found.', 'error')
+                return redirect(request.url)
+            elif action == 'reset_fingerprint':
+                if store.reset_device_fingerprint(request.form.get('device_id'), org_id):
+                    _audit(org_id, 'device_fingerprint_reset', None,
+                           request.form.get('device_id'))
+                    flash('Fingerprint reset. The next machine to use this '
+                          "device's token pins itself.", 'success')
                 else:
                     flash('Device not found.', 'error')
                 return redirect(request.url)
@@ -2690,10 +2746,11 @@ def admin_audit():
     finally:
         tracker.close()
 
-    # Get user list for filter dropdown
+    # Get user list for filter dropdown (deactivated users too: their
+    # events are the ones most worth looking up)
     store = get_config_store()
     try:
-        users = store.list_users(org_id)
+        users = store.list_users(org_id, active_only=False)
     finally:
         store.close()
 

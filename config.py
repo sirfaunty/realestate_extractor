@@ -545,6 +545,17 @@ class ConfigStore:
         self.conn.commit()
         return cur.rowcount > 0
 
+    def reset_device_fingerprint(self, device_id: str, org_id: str) -> bool:
+        """Forget a device's pinned fingerprint (machine rebuilt) so the
+        next contact with the same token pins again: no revoke + re-register.
+        Only within the given org; revoked devices stay revoked."""
+        cur = self.conn.execute(
+            "UPDATE devices SET fingerprint = NULL "
+            "WHERE device_id = ? AND org_id = ? AND is_active = 1",
+            (device_id, org_id))
+        self.conn.commit()
+        return cur.rowcount > 0
+
     def authenticate_device(self, token: str,
                             fingerprint: str = None) -> Optional[Dict]:
         """Resolve a plaintext token to an active device, enforcing

@@ -6,13 +6,10 @@
     <title>{% block title %}capactive{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body{% if session.get('operator_id') and session.get('org_id') %} class="op-session"{% endif %}>
 <div class="layout">
     {% if session.get('operator_id') and session.get('org_id') %}
-    <div style="position:fixed; top:0; left:0; right:0; z-index:100000;
-                background:#7c2d12; color:#fed7aa; font-size:12.5px;
-                padding:6px 16px; text-align:center;
-                font-family:Consolas,monospace;">
+    <div class="operator-banner">
         CAPACTIVE OPERATOR SESSION — you are inside
         <strong>{{ session.get('org_id') }}</strong> as its admin; actions
         are audited &nbsp;·&nbsp;

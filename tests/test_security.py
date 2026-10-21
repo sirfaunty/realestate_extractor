@@ -132,7 +132,8 @@ def main():
     store.create_org('birch', 'Birch Test Partners', generate_org_key('birch', 'standard'))
     store.create_user('birch', 'blake', 'blake@birch.test', 'Blake', role='admin',
                       password_hash=generate_password_hash('right-pass-1'))
-    dev_a = store.register_device('alder', 'Alder desk')['device_id']
+    reg_a = store.register_device('alder', 'Alder desk')
+    dev_a, tok_a = reg_a['device_id'], reg_a['token']
     store.close()
     perms = PermissionStore(os.environ['CAPACTIVE_CONFIG_DB'])
     perms.connect()
@@ -154,6 +155,67 @@ def main():
     test("another org's admin can't revoke our device",
          any(d['device_id'] == dev_a and d['is_active'] for d in store.list_devices('alder')))
     store.close()
+
+    print('\nDevice fingerprint reset (machine rebuilt, token kept)')
+    def ping(fp):
+        return app.test_client().get('/api/sync/ping', headers={
+            'Authorization': f'Bearer {tok_a}', 'X-Device-Fingerprint': fp}).status_code
+    def pinned():
+        s = ConfigStore(os.environ['CAPACTIVE_CONFIG_DB'], TMP)
+        s.connect()
+        try:
+            return next(d['fingerprint'] for d in s.list_devices('alder') if d['device_id'] == dev_a)
+        finally:
+            s.close()
+    test('first contact pins the fingerprint', ping('machine-one') == 200 and pinned() == 'machine-one')
+    test('a different machine with the same token is refused', ping('machine-two') != 200)
+    b.post('/admin/devices', data={'action': 'reset_fingerprint', 'device_id': dev_a})
+    test("another org's admin can't reset it", pinned() == 'machine-one')
+    r = a.post('/admin/devices', data={'action': 'reset_fingerprint', 'device_id': dev_a},
+               follow_redirects=True)
+    test('our admin can', pinned() is None and 'Fingerprint reset' in r.get_data(as_text=True))
+    test('...and the rebuilt machine pins itself on its next contact',
+         ping('machine-two') == 200 and pinned() == 'machine-two')
+    test('the Devices page offers the action only for a pinned device',
+         'reset_fingerprint' in a.get('/admin/devices').get_data(as_text=True))
+
+    print('\nSynced-PDF store: no orphans')
+    import hashlib
+    blob = b'%PDF-1.4 orphan test'
+    sha = hashlib.sha256(blob).hexdigest()
+    r = app.test_client().post(f'/api/sync/pdf?sha256={sha}&origin_doc_id=999',
+                               data=blob, content_type='application/pdf',
+                               headers={'Authorization': f'Bearer {tok_a}',
+                                        'X-Device-Fingerprint': 'machine-two'})
+    pdf_store = os.path.join(webapp.DATA_DIR, 'synced_pdfs', 'alder')
+    test('a PDF for a document that never arrived is refused', r.status_code == 404)
+    test('...and not kept on disk', not os.path.exists(os.path.join(pdf_store, f'{sha}.pdf')))
+
+    from realestate_extractor.database import Database
+    os.makedirs(os.path.join(pdf_store, '.partial', 'stale'), exist_ok=True)
+    os.makedirs(os.path.join(pdf_store, '.partial', 'fresh'), exist_ok=True)
+    kept, orphan, recent = (os.path.join(pdf_store, n) for n in ('k' * 64 + '.pdf', 'o' * 64 + '.pdf', 'r' * 64 + '.pdf'))
+    for p in (kept, orphan, recent):
+        with open(p, 'wb') as fh:
+            fh.write(b'%PDF-1.4 x')
+    old = time.time() - 3 * 3600
+    for p in (kept, orphan, os.path.join(pdf_store, '.partial', 'stale')):
+        os.utime(p, (old, old))
+    s = ConfigStore(os.environ['CAPACTIVE_CONFIG_DB'], TMP)
+    s.connect()
+    odb = Database(s.get_org_db_path('alder'))
+    s.close()
+    odb.connect()
+    odb.insert_document('kept.pdf', kept, 'lease', auto_create_property=False)
+    odb.close()
+    with app.test_request_context():
+        removed, _freed = webapp._sweep_orphan_pdfs('alder', partial_max_age_hours=1)
+    test('the sweep removes the unreferenced PDF and the stale chunk folder',
+         removed == 2 and not os.path.exists(orphan)
+         and not os.path.exists(os.path.join(pdf_store, '.partial', 'stale')))
+    test('...and keeps the referenced PDF, a file written in the last hour, and a fresh chunk folder',
+         os.path.exists(kept) and os.path.exists(recent)
+         and os.path.exists(os.path.join(pdf_store, '.partial', 'fresh')))
 
     before = set(glob.glob(os.path.join(webapp.UPLOAD_FOLDER, 'up_*')))
     for client, text in ((a, b'alder lease text'), (b, b'birch lease text')):
@@ -303,6 +365,8 @@ def main():
     test('the Modules page flags instance-data modules', 'instance data' in page)
     test('...and warns that this instance hosts other organizations',
          'hosts other organizations' in page)
+    test('inside a workspace the operator banner is a styled bar and the body is marked',
+         'class="operator-banner"' in page and 'class="op-session"' in page)
     set_sql("UPDATE users SET password_hash = 'x', session_epoch = 5 WHERE user_id = 'casey'")
     test("an operator inside a workspace isn't signed out by the user's password version",
          opc.get('/').status_code == 200)

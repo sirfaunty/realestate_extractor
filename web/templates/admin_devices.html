@@ -73,6 +73,14 @@
                     <input type="hidden" name="device_id" value="{{ d.device_id }}">
                     <button type="submit" class="btn btn-sm btn-secondary">Revoke</button>
                 </form>
+                {% if d.fingerprint %}
+                <form method="POST" style="display: inline;"
+                      onsubmit="return capModal.confirmThen(event, 'Forget the machine pinned to {{ d.device_name }}? The next machine to use its token pins itself. Use this after a rebuild, not for a lost token (revoke that).', {title: 'Reset fingerprint?', confirmLabel: 'Reset'});">
+                    <input type="hidden" name="action" value="reset_fingerprint">
+                    <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                    <button type="submit" class="btn btn-sm btn-secondary" title="Machine rebuilt: keep the token, forget the old machine">Reset fingerprint</button>
+                </form>
+                {% endif %}
                 {% endif %}
             </td>
         </tr>

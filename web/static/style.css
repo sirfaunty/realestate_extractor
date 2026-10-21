@@ -76,6 +76,19 @@ a:hover {
     min-height: 100vh;
 }
 
+/* operator impersonation: a fixed bar across the top; the sidebar and the
+   phone bar start below it so it covers nothing */
+.operator-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100000;
+    height: 30px; box-sizing: border-box;
+    background: #7c2d12; color: #fed7aa; font-size: 12.5px;
+    padding: 6px 16px; text-align: center;
+    font-family: Consolas, monospace; white-space: nowrap; overflow: hidden;
+}
+.operator-banner a { color: #fff; font-weight: 600; }
+body.op-session .sidebar { top: 30px; }
+body.op-session .mobile-bar { top: 30px; }
+
 .sidebar {
     width: 240px;
     background: var(--cap-navy);
