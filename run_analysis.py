@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from realestate_extractor.database import Database
 from realestate_extractor.property_analyzer import PropertyAnalyzer
+from realestate_extractor.extractors.llm_client import DisabledLLMClient
 from realestate_extractor.extractors.extraction_engine import DocumentClassifier
 from realestate_extractor.templates.document_templates import TEMPLATES
 
@@ -281,7 +282,7 @@ def get_docs_to_process(db, property_id, mode='full', doc_types=None):
     return process_ids, skip_ids
 
 
-def analyze_property(db, property_id, mode='full', doc_types=None):
+def analyze_property(db, property_id, mode='full', doc_types=None, use_ai=False):
     """Run Phase 2 analysis on a single property."""
     prop = db.conn.execute(
         "SELECT id, name FROM properties WHERE id = ?", (property_id,)
@@ -330,7 +331,9 @@ def analyze_property(db, property_id, mode='full', doc_types=None):
         if skip_ids:
             print(f"Skipping {len(skip_ids)} docs with good extraction results.\n")
 
-    analyzer = PropertyAnalyzer(db)
+    # Rules-only unless asked, the same default as the product: the AI pass
+    # adds about a minute per lease and no measured rent accuracy.
+    analyzer = PropertyAnalyzer(db, llm_client=None if use_ai else DisabledLLMClient())
 
     # Progress callback
     def on_step(event, detail):
@@ -417,6 +420,8 @@ def main():
                         help='Run cross-document term reconciliation')
     parser.add_argument('--db', default=DB_PATH,
                         help=f'Database path (default: {DB_PATH})')
+    parser.add_argument('--ai', action='store_true',
+                        help='also run the LLM gap-fill pass (needs Ollama); default is rules-only')
 
     args = parser.parse_args()
 
@@ -472,10 +477,10 @@ def main():
             return
         print(f"Analyzing {len(rows)} properties...\n")
         for prop_id, prop_name in rows:
-            analyze_property(db, prop_id, mode=mode, doc_types=args.doc_type)
+            analyze_property(db, prop_id, mode=mode, doc_types=args.doc_type, use_ai=args.ai)
             print()
     elif args.property_id:
-        analyze_property(db, args.property_id, mode=mode, doc_types=args.doc_type)
+        analyze_property(db, args.property_id, mode=mode, doc_types=args.doc_type, use_ai=args.ai)
     else:
         # No arguments — list properties and prompt
         print("No property specified. Available properties:")
