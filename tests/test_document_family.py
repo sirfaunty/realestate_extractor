@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from realestate_extractor.extractors.document_family import (  # noqa: E402
     INSTRUMENT, LEASE_SUMMARY, NER_SHEET, archived_hint, assemble_rent_chain,
-    rent_chain_family)
+    instrument_pages, rent_chain_family, worksheet_page)
 
 passed = failed = 0
 
@@ -74,12 +74,36 @@ def main():
     test('not: "terminate" inside a word (determination)',
          not archived_hint('EC-Bean-Determination Letter.pdf'))
 
+    print('\nPages inside a packet')
+    test('a worksheet page', worksheet_page(NER) == NER_SHEET)
+    test('a summary report page', worksheet_page(SUMMARY) == LEASE_SUMMARY)
+    test('a lease page', worksheet_page(LEASE) is None)
+    test('a lease page with a Summary of Basic Lease Terms heading',
+         worksheet_page(BASIC_TERMS) is None)
+    packet = [PACKET, LEASE, 'rent table page: Months 13-24 $2,060.00 per month', NER, SUMMARY,
+              'From Date To Date Annual Amount Monthly Amount 1/1/2026 12/31/2026 $30,000.00 $2,500.00']
+    kept, n = instrument_pages(packet)
+    test('the stapled worksheet and summary pages leave the packet',
+         n == 3 and kept == packet[:3])
+    test("a summary report's continuation page is a summary page too",
+         worksheet_page('LEASE SUMMARY DATE: 5/9/2022 Elm Court Bean Coffee - CONTINUED '
+                        'EXCLUSIVES: N/A OPTIONS: one 5-year option at $2,400.00 per month')
+         == LEASE_SUMMARY)
+    sel = assemble_rent_chain([('NERS__EC Bean NERS 8-24-22.pdf',
+                                ['From: A. Leasing Message: new lease, see attached sheet. ' * 10,
+                                 NER, 'Approved 8/25/22'])])
+    test('a worksheet filed behind its e-mail cover is still a worksheet',
+         sel.kept == [] and 'summaries_only' in sel.flags)
+    sel = assemble_rent_chain([('EC-Bean-License.pdf', [LEASE, NER])])
+    test('a short lease with a sheet stapled behind it is the lease, sheet page stripped',
+         sel.kept == [0] and 'MOS VACANT' not in sel.text and 'Base Rent' in sel.text)
+
     print('\nAssembling the rent chain')
-    docs = [('EC-BeanCoffee-Lease.pdf', LEASE, 30),
-            ('NERS__EC Bean Coffee NERS_2-11-2025.pdf', NER, 1),
-            ('Lease Summaries__Elm Court - Bean Coffee (216).pdf', SUMMARY, 4),
-            ('ArchivedLeases__EC-BeanCoffee-1998.pdf', LEASE.replace('2,000', '900'), 28),
-            ('EC-BeanCoffee-1st Amendment.pdf', 'FIRST AMENDMENT TO LEASE ' + LEASE, 6)]
+    docs = [('EC-BeanCoffee-Lease.pdf', [LEASE] * 30),
+            ('NERS__EC Bean Coffee NERS_2-11-2025.pdf', [NER]),
+            ('Lease Summaries__Elm Court - Bean Coffee (216).pdf', [SUMMARY] * 4),
+            ('ArchivedLeases__EC-BeanCoffee-1998.pdf', [LEASE.replace('2,000', '900')] * 28),
+            ('EC-BeanCoffee-1st Amendment.pdf', ['FIRST AMENDMENT TO LEASE ' + LEASE] * 6)]
     sel = assemble_rent_chain(docs)
     test('keeps the archived lease first, then the lease and the amendment',
          sel.kept == [3, 0, 4])
@@ -90,9 +114,17 @@ def main():
          and 'MRI Lease ID' not in sel.text and 'MOS VACANT' not in sel.text)
     test('flags say what was reordered and left out',
          sorted(sel.flags) == ['archived_first', 'summaries_ignored'])
+    sel = assemble_rent_chain([('EC-BeanCoffee-Lease.pdf', [LEASE, NER, SUMMARY])])
+    test('a lease packet with the worksheet and summary stapled in: those pages go',
+         sel.kept == [0] and 'MOS VACANT' not in sel.text and 'MRI Lease ID' not in sel.text
+         and 'Base Rent' in sel.text and sel.flags == ['worksheet_pages_removed'])
+    sel = assemble_rent_chain([('EC-BeanCoffee-Lease.pdf', LEASE)])
+    test('a single string is one page', sel.kept == [0] and sel.text == LEASE and sel.flags == [])
     sel = assemble_rent_chain([docs[3]])
     test('only an archived lease: it stays, flagged archived_only',
          sel.kept == [0] and sel.flags == ['archived_only'])
+    test('an archived lease filed as a scanned packet keeps its own pages',
+         assemble_rent_chain([('Archived Scans__EC-Bean.pdf', [PACKET, LEASE])]).text.count('Base Rent') == 2)
     sel = assemble_rent_chain([docs[1], docs[2]])
     test('only worksheets: nothing kept, flagged summaries_only',
          sel.kept == [] and sel.text == '' and 'summaries_only' in sel.flags)

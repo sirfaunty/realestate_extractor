@@ -114,19 +114,19 @@ def _terms(conn, doc_ids):
 
 
 def _text(conn, doc_id, limit=None):
-    return _text_pages(conn, doc_id, limit)[0]
+    t = '\n'.join(_pages(conn, doc_id))
+    return t[:limit] if limit else t
 
 
-def _text_pages(conn, doc_id, limit=None):
-    # (text, page count) of a document's stored page text
+def _pages(conn, doc_id) -> list:
+    """A document's stored page texts, in page order."""
     try:
         rows = conn.execute(
             "SELECT content FROM document_fulltext WHERE CAST(document_id AS INTEGER)=? "
             "ORDER BY CAST(page_number AS INTEGER)", (doc_id,)).fetchall()
     except sqlite3.Error:
-        return '', 0
-    t = '\n'.join(r[0] or '' for r in rows)
-    return (t[:limit] if limit else t), len(rows)
+        return []
+    return [r[0] or '' for r in rows]
 
 
 def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
@@ -269,13 +269,13 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         pairs = sorted(zip(row.doc_ids, row.filenames))
         row.doc_ids = [i for i, _ in pairs]
         row.filenames = [f for _, f in pairs]
-        pages = [_text_pages(conn, i) for i in row.doc_ids]
-        chain_text = '\n\n'.join(t for t, _ in pages)
+        pages = [_pages(conn, i) for i in row.doc_ids]
+        chain_text = '\n\n'.join('\n'.join(p) for p in pages)
         # rent evidence = the instruments: worksheets, the management
         # system's lease summaries and archived copies are left out of the
         # rent chain (their tables can't be placed and would block a high
         # answer, or an old lease's row would win)
-        sel = assemble_rent_chain([(f, t, n) for f, (t, n) in zip(row.filenames, pages)])
+        sel = assemble_rent_chain(list(zip(row.filenames, pages)))
         rent_text = sel.text
         kept_ids = [row.doc_ids[i] for i in sel.kept]
         ts = ([terms.get(i, {}) for i in kept_ids]

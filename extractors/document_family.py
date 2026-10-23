@@ -49,6 +49,20 @@ INSTRUMENT = 'instrument'
 NER_SHEET = 'ner_sheet'
 LEASE_SUMMARY = 'lease_summary'
 
+# a worksheet or summary PAGE inside a lease packet (a scanned lease often
+# has the deal sheet and the management-system summary stapled behind it):
+# the sheet's title or its table header on the page; the summary's report
+# fields on the page (never the words "lease summary" alone, which a
+# lease's own summary-of-terms page uses)
+_NER_PAGE = re.compile(r'YRS\s+MOS\s+PSF\s+MONTHLY\s+ANNUALLY|'
+                       r'YEAR\s+P\.?\s*S\.?\s*F\.?,?\s+MONTHLY\s+ANNUALLY|'
+                       r'NET\s+RENT\s+OPERATING\s+COSTS\s+GROSS\s+RENT|'
+                       r'TOTAL\s+(?:EFFECTIVE\s+)?CONTRACT\s+RENT|'
+                       r'MOS\s+VACANT|CARRY\s+COST', re.I)
+_SUMMARY_PAGE = re.compile(r'MRI\s+Lease\s+ID|From\s+Date\s+To\s+Date\s+Annual\s+Amount|'
+                           r'PREPARED\s+BY\s*:.{0,80}LEASED\s+BY\s*:|'
+                           r'LEASE\s+SUMMARY\s+DATE\s*:', re.I | re.S)   # its "- CONTINUED" pages
+
 
 def rent_chain_family(text: str, page_count: int | None = None) -> str:
     """INSTRUMENT, NER_SHEET or LEASE_SUMMARY from the document's opening
@@ -68,6 +82,27 @@ def rent_chain_family(text: str, page_count: int | None = None) -> str:
     return INSTRUMENT
 
 
+def worksheet_page(page_text: str) -> str | None:
+    """NER_SHEET or LEASE_SUMMARY when this one page is a worksheet / summary
+    page (by its title, table header or report fields), else None."""
+    t = re.sub(r'\s+', ' ', page_text or '')
+    if _CHECKLIST.search(t[:1500]):
+        return None            # the packet cover lists the worksheets by name
+    if _NER.search(t[:1500]) or _NER_PAGE.search(t):
+        return NER_SHEET
+    if _SUMMARY_PAGE.search(t):
+        return LEASE_SUMMARY
+    return None
+
+
+def instrument_pages(pages: list) -> tuple[list, int]:
+    """The pages of an instrument that are its own text: worksheet and
+    summary pages stapled into the packet are dropped. (kept pages, dropped
+    count)."""
+    kept = [p for p in pages if not worksheet_page(p)]
+    return kept, len(pages) - len(kept)
+
+
 def archived_hint(filename: str) -> bool:
     """The file was filed under an archived / terminated / old folder (the
     folder names travel in the file name when a tree is flattened)."""
@@ -83,7 +118,10 @@ class ChainSelection:
 
 
 def assemble_rent_chain(docs: list) -> ChainSelection:
-    """docs: [(filename, text, page_count or None), ...] in document order.
+    """docs: [(filename, pages), ...] in document order, pages = the
+    document's page texts (a single string is taken as one page).
+    Worksheet / summary pages inside an instrument are dropped too (flag
+    worksheet_pages_removed).
     Instruments make the chain; worksheets and summaries are dropped (a
     tenancy with only those keeps nothing: flag summaries_only -- a
     worksheet is not the lease). Instruments filed as archived / terminated
@@ -93,8 +131,24 @@ def assemble_rent_chain(docs: list) -> ChainSelection:
     schedule that supersedes the answer (measured 2026-10-23: dropping them
     lost 7 correct rents; ordering them first kept the 48 new high answers)."""
     sel = ChainSelection()
-    fam = [rent_chain_family(t, n) for _, t, n in docs]
-    arch = [archived_hint(f) for f, _, _ in docs]
+    docs = [(f, [p] if isinstance(p, str) else list(p)) for f, p in docs]
+    # a document is a worksheet / summary when EVERY page of it is one; a
+    # lease with sheets stapled behind it is an instrument whose sheet
+    # pages are stripped below (a short lease followed by a sheet must not
+    # read as a sheet)
+    # A sheet filed with its e-mail or approval cover (short pages) is still
+    # a sheet: the whole document reads as one and only a dense residual
+    # page (a lease page is 2,500+ characters) makes it an instrument.
+    fam = []
+    for _, p in docs:
+        ws = [worksheet_page(x) for x in p if x.strip()]
+        residual = [len(x) for x in p if x.strip() and not worksheet_page(x)]
+        whole = rent_chain_family('\n'.join(p), len(p))
+        if ws and (all(ws) or (whole != INSTRUMENT and max(residual, default=0) < 2500)):
+            fam.append(NER_SHEET if NER_SHEET in ws else LEASE_SUMMARY)
+        else:
+            fam.append(INSTRUMENT)
+    arch = [archived_hint(f) for f, _ in docs]
     instruments = [i for i, f in enumerate(fam) if f == INSTRUMENT]
     current = [i for i in instruments if not arch[i]]
     older = [i for i in instruments if arch[i]]
@@ -110,5 +164,12 @@ def assemble_rent_chain(docs: list) -> ChainSelection:
         sel.flags.append('archived_only')
     if docs and not instruments:
         sel.flags.append('summaries_only')
-    sel.text = '\n\n'.join(docs[i][1] for i in sel.kept)
+    texts, removed = [], 0
+    for i in sel.kept:
+        pages, n = instrument_pages(docs[i][1])
+        removed += n
+        texts.append('\n'.join(pages))
+    if removed:
+        sel.flags.append('worksheet_pages_removed')
+    sel.text = '\n\n'.join(texts)
     return sel
