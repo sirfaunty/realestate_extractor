@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
+from .extractors.document_family import assemble_rent_chain
 from .extractors.lease_segmenter import _full_months_end, _sf_pick, _sf_scan
 from .extractors.rent_derivation import (
     derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num, _text_memo)
@@ -113,14 +114,19 @@ def _terms(conn, doc_ids):
 
 
 def _text(conn, doc_id, limit=None):
+    return _text_pages(conn, doc_id, limit)[0]
+
+
+def _text_pages(conn, doc_id, limit=None):
+    # (text, page count) of a document's stored page text
     try:
         rows = conn.execute(
             "SELECT content FROM document_fulltext WHERE CAST(document_id AS INTEGER)=? "
             "ORDER BY CAST(page_number AS INTEGER)", (doc_id,)).fetchall()
     except sqlite3.Error:
-        return ''
+        return '', 0
     t = '\n'.join(r[0] or '' for r in rows)
-    return t[:limit] if limit else t
+    return (t[:limit] if limit else t), len(rows)
 
 
 def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
@@ -260,8 +266,20 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     # 3. per tenancy: facts + current rent over the whole lease chain
     out = []
     for k, row in groups.items():
-        row.doc_ids.sort()
-        ts = [terms.get(i, {}) for i in row.doc_ids]
+        pairs = sorted(zip(row.doc_ids, row.filenames))
+        row.doc_ids = [i for i, _ in pairs]
+        row.filenames = [f for _, f in pairs]
+        pages = [_text_pages(conn, i) for i in row.doc_ids]
+        chain_text = '\n\n'.join(t for t, _ in pages)
+        # rent evidence = the instruments: worksheets, the management
+        # system's lease summaries and archived copies are left out of the
+        # rent chain (their tables can't be placed and would block a high
+        # answer, or an old lease's row would win)
+        sel = assemble_rent_chain([(f, t, n) for f, (t, n) in zip(row.filenames, pages)])
+        rent_text = sel.text
+        kept_ids = [row.doc_ids[i] for i in sel.kept]
+        ts = ([terms.get(i, {}) for i in kept_ids]
+              + [terms.get(i, {}) for i in row.doc_ids if i not in kept_ids])
 
         def first(*types):
             for t in ts:
@@ -270,7 +288,6 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                         return t[ty]
             return None
 
-        chain_text = '\n\n'.join(_text(conn, i) for i in row.doc_ids)
         sf = first('square_footage', 'square_feet', 'rentable_sf')
         if sf:
             v = sf.get('num') or _num(sf.get('raw'))
@@ -352,11 +369,12 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             escalation_pct=esc['raw'] if esc else None,
             commencement=row.commencement,
             expiration=row.expiration_lease,      # paper only — never the rent roll's
-            schedule_text=chain_text,
+            schedule_text=rent_text,
             commencement_confirmed=row.commencement_source in ('confirmed', 'rent_roll'),
             square_feet=row.square_feet)
         row.monthly_rent, row.rent_method = r.monthly, r.method
         row.rent_confidence, row.rent_flags, row.rent_detail = r.confidence, list(r.flags), r.detail
+        row.rent_flags.extend(sel.flags)
         # an amendment changed the premises (expansion / relocation): a rent
         # rolled forward from the ORIGINAL Year-1 rent no longer describes
         # them ("Base Rent shall be adjusted to reflect the expanded Premises")
@@ -375,7 +393,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             row.rent_confidence = 'medium'
             row.rent_flags.append('rent_implausible_for_size')
         if rent_roll.get(k, {}).get('monthly'):
-            _check_rent_roll(row, rent_roll[k]['monthly'], chain_text)
+            _check_rent_roll(row, rent_roll[k]['monthly'], rent_text)
         # a document in the chain not analyzed yet may change the answer
         if not_analyzed & set(row.doc_ids):
             row.rent_flags.append('not_analyzed')
@@ -714,6 +732,9 @@ def _needs(row: RosterRow) -> str:
                 'add the renewal or extension')
     if 'lump_sum_term' in f:
         return f'seasonal lease: {row.rent_detail} — not a monthly rent'
+    if 'summaries_only' in f:
+        return ('only rent worksheets / lease summaries on file — add the signed '
+                'lease and its amendments')
     if 'no_rent_found' in f:
         return 'no rent schedule found — add the rent exhibit or amendment'
     if not row.commencement or 'no_commencement' in f or row.commencement_source == 'lease':
