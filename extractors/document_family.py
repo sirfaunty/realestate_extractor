@@ -112,6 +112,7 @@ def archived_hint(filename: str) -> bool:
 @dataclass
 class ChainSelection:
     text: str = ''
+    texts: list = field(default_factory=list)       # one entry per kept document, in order
     kept: list = field(default_factory=list)        # indices into docs, in order
     dropped: dict = field(default_factory=dict)     # index -> reason
     flags: list = field(default_factory=list)
@@ -171,5 +172,6 @@ def assemble_rent_chain(docs: list) -> ChainSelection:
         texts.append('\n'.join(pages))
     if removed:
         sel.flags.append('worksheet_pages_removed')
+    sel.texts = texts
     sel.text = '\n\n'.join(texts)
     return sel

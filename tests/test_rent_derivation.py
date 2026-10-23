@@ -586,6 +586,52 @@ def test_parse_memo_returns_equal_independent_copies():
     assert parse_dated_rows(t) == parse_dated_rows(t)
 
 
+def test_later_instrument_table_counts_from_its_own_start():
+    # the original lease's table counts from the commencement; the
+    # extension amendment (its own document) states its Effective Date and
+    # carries a Year 1 / Year 2 table with no date next to it -> with the
+    # chain passed document by document, the amendment table counts from
+    # the Effective Date and its row for today wins; one blob -> unplaced
+    lease = """2. Minimum Rent. Tenant shall pay Landlord annual Minimum Rent:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Lease Year 1 $18,000.00 $1,500.00
+    Lease Year 2 $18,600.00 $1,550.00
+    Lease Year 3 $19,200.00 $1,600.00
+    Lease Year 4 $19,800.00 $1,650.00"""
+    amendment = """FIRST AMENDMENT TO LEASE. This First Amendment is made by Elm Partners
+    LLC, as Landlord, and Bean Coffee Inc, as Tenant. The Effective Date of this
+    Amendment is January 1, 2025. """ + 'x ' * 200 + """
+    3. Minimum Rent. From the Effective Date, Tenant shall pay Landlord Minimum
+    Rent for the Premises as follows:
+    TERM ANNUAL RENT MONTHLY RENT
+    Year 1 $36,000.00 $3,000.00
+    Year 2 $37,080.00 $3,090.00
+    Year 3 $38,192.40 $3,182.70"""
+    r = derive_current_rent(as_of=AS_OF, commencement='2023-08-01',
+                            schedule_docs=[lease, amendment])
+    assert r.monthly == 3090.00, r                       # Year 2 of the amendment
+    assert 'later_schedule_unplaced' not in r.flags, r
+    assert '[instrument]' in r.detail and r.confidence == 'medium', r
+    # one blob: the amendment's HEADING marks where its instrument begins,
+    # so its table still counts from its Effective Date
+    r = derive_current_rent(as_of=AS_OF, commencement='2023-08-01',
+                            schedule_text=lease + '\n\n' + amendment)
+    assert r.monthly == 3090.00 and '[instrument]' in r.detail, r
+    # without a heading or a document boundary the table stays unplaced
+    r = derive_current_rent(as_of=AS_OF, commencement='2023-08-01',
+                            schedule_text=lease + '\n\n' + amendment.replace('FIRST AMENDMENT TO LEASE.', ''))
+    assert r.monthly == 1600.00 and 'later_schedule_unplaced' in r.flags, r
+    # a renewal OPTION table in a later document is still not placed
+    option = """Option to Extend. Tenant shall have the option to extend the Term for
+    one (1) Extended Term of five (5) years. The Effective Date of this Amendment
+    is January 1, 2025. During the Extended Term Tenant shall pay Minimum Rent:
+    Year 1 $40,000.00 $3,333.33
+    Year 2 $41,200.00 $3,433.33"""
+    r = derive_current_rent(as_of=AS_OF, commencement='2023-08-01',
+                            schedule_docs=[lease, option])
+    assert r.monthly == 1600.00, r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

@@ -370,6 +370,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             commencement=row.commencement,
             expiration=row.expiration_lease,      # paper only — never the rent roll's
             schedule_text=rent_text,
+            schedule_docs=sel.texts,
             commencement_confirmed=row.commencement_source in ('confirmed', 'rent_roll'),
             square_feet=row.square_feet)
         row.monthly_rent, row.rent_method = r.monthly, r.method

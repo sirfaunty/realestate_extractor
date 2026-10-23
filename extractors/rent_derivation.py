@@ -387,6 +387,42 @@ def _term_lengths(flat: str) -> tuple[Optional[int], Optional[int]]:
 _Y1 = r'(?:lease\s+)?year\s*(?:1|one|i|l|\|)(?![A-Za-z0-9])\W{0,3}'
 
 
+# where one instrument ends and the next begins inside a scanned packet
+# (the original lease and its amendments in one PDF): the heading of an
+# amendment, extension, assignment or a new lease, in capitals as a heading
+# is printed (prose mentions -- "the First Amendment" -- stay lower case)
+_INSTRUMENT_HEADING = re.compile(
+    r'\b(?:(?:FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|\d{1,2}(?:ST|ND|RD|TH))'
+    r'\s+AMENDMENT\s+(?:TO|OF)\s+(?:THE\s+)?(?:\w+\s+){0,3}?LEASE|AMENDMENT\s+(?:NO\.?|NUMBER)\s*\d{1,2}\b|'
+    r'LEASE\s+(?:EXTENSION|RENEWAL|MODIFICATION|AMENDMENT)\s+AGREEMENT|'
+    r'(?:ASSIGNMENT\s+(?:AND\s+ASSUMPTION\s+)?OF\s+LEASE)|'
+    r'(?:SHOPPING\s+CENTER\s+|OFFICE\s+|RETAIL\s+|GROUND\s+|LAND\s+)?LEASE\s+AGREEMENT\b)')
+
+
+def _instrument_segments(flat: str, bounds: Optional[list]) -> list:
+    """Start positions of the instruments in the chain: every document
+    start plus every instrument heading inside the text, sorted."""
+    starts = {0}
+    for a, _ in (bounds or []):
+        starts.add(a)
+    for m in _INSTRUMENT_HEADING.finditer(flat):
+        starts.add(m.start())
+    return sorted(starts)
+
+
+def _instrument_start(doc_flat: str) -> Optional[date]:
+    """The start date an instrument states for itself (its first 8,000
+    characters: recitals and the term article), by the clearest wording
+    first. None when it states none."""
+    head = doc_flat[:8000]
+    for rx in _INSTRUMENT_START:
+        for m in rx.finditer(head):
+            d = parse_date(m.group(1))
+            if d:
+                return d
+    return None
+
+
 def _table_anchor(flat: str, first: int, last: int) -> Optional[date]:
     """A relative table's own start date, if the text states it.
 
@@ -430,6 +466,19 @@ _RANGE = re.compile(
     r'and\s+(?:ending|expiring|terminating)(?:\s+on)?|'
     r'10(?=\d{1,2}/))'                       # OCR: "to" read as "10" ("1/1/20261012/31/2026")
     r'\s*(' + _D + r')', re.I)
+
+# an instrument's own start, stated in its recitals or term article: "the
+# Commencement Date shall be March 1, 2024", "the Extended Term shall
+# commence on November 1, 2022", "effective as of January 1, 2025"
+_INSTRUMENT_START = [
+    re.compile(r'(?i)\b(?:rent\s+)?commencement\s+date\b[^.$]{0,40}?'
+               r'(?:shall\s+(?:be|mean)|is|means|of|:)\s*(?:the\s+)?(' + _D + ')'),
+    re.compile(r'(?i)\b(?:term|amendment|extension|extended\s+term|lease)\b[^.$]{0,100}?'
+               r'\b(?:shall\s+)?(?:commence|begin|commencing|beginning|be\s+effective)\s+'
+               r'(?:on\s+|as\s+of\s+)?(' + _D + ')'),
+    re.compile(r'(?i)\beffective\s+date\b[^.$]{0,60}?(?:is|shall\s+be|means|:)\s*(?:the\s+)?(' + _D + ')'),
+    re.compile(r'(?i)\b(?:dated\s+)?effective\s+(?:as\s+of\s+|on\s+)?(' + _D + ')'),
+]
 _OPTION_CTX = re.compile(r'\b(?:extended\s+term|extension\s+(?:term|option|period)|'
                          r'option\s+(?:to\s+)?(?:extend|renew)|renewal\s+(?:term|option|period))\b',
                          re.I)
@@ -445,13 +494,18 @@ def _is_option_table(flat: str, pos: int) -> bool:
                 and not _EXECUTED_CTX.search(flat[max(0, pos - 1500):pos]))
 
 
-def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = ()) -> bool:
+def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = (),
+                    own_table=None) -> bool:
     """A relative rent table later in the chain than after_pos that could
     not be dated and is not a renewal option. A row the dated parser already
     placed ("Year 3 $27,233.30 $2,269.44 (1/1/2028 to 12/31/2028)") is not
     unplaced."""
+    # a table dated only from its instrument's own stated start is placed
+    # well enough to answer, not well enough to let an EARLIER row show
+    # unreviewed (the instrument may count from delivery, not that date)
     placed = {round(d.monthly, 2) for d in dated}
-    return any(x.start is None and x.pos > after_pos and round(x.monthly, 2) not in placed
+    return any((x.start is None or (x.label.endswith('[instrument]') and x.table != own_table))
+               and x.pos > after_pos and round(x.monthly, 2) not in placed
                and not _is_option_table(flat, x.pos)
                for x in rows)
 
@@ -768,14 +822,28 @@ def _offsets(r: ScheduleRow) -> tuple[int, int]:
 
 
 def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
-            expiration: Optional[date], flat: str = '') -> set:
+            expiration: Optional[date], flat: str = '',
+            bounds: Optional[list] = None) -> set:
     """Date the relative rows. Each table counts from its own stated start
     if it has one; the first table (the original lease) from the
-    commencement; failing both, the LAST table is back-dated from the
-    expiration (its final row ends the term). Returns the anchoring methods
-    used, for confidence."""
+    commencement; a table in a LATER instrument (bounds = the documents'
+    (start, end) spans in flat) from that instrument's own stated start;
+    failing all, the LAST table is back-dated from the expiration (its
+    final row ends the term). Returns the anchoring methods used, for
+    confidence."""
     used = set()
     tables = sorted({r.table for r in rows})
+
+    segs = _instrument_segments(flat, bounds) if (bounds or flat) else [0]
+
+    def seg_of(pos):
+        k = 0
+        for i, s in enumerate(segs):
+            if s <= pos:
+                k = i
+        return k
+
+    first_seg = seg_of(min(r.pos for r in rows)) if rows else None
     ini, ext = _term_lengths(flat) if flat else (None, None)
     if not ini:
         ini = next((12 * r.years for r in rows if r.years), None)
@@ -811,6 +879,13 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
             continue
         a = trs[0].anchor or (commencement if t == tables[0] else None)
         how = 'stated' if trs[0].anchor else 'commencement'
+        if not a and flat and not _is_option_table(flat, trs[0].pos):
+            k = seg_of(trs[0].pos)
+            if k != first_seg:
+                end = segs[k + 1] if k + 1 < len(segs) else len(flat)
+                s = _instrument_start(flat[segs[k]:end])
+                if s:
+                    a, how = s, 'instrument'
         if not a and expiration and t == tables[-1]:
             span = max(_offsets(r)[1] for r in trs)
             a, how = add_months(expiration + timedelta(days=1), -span), 'expiration'
@@ -832,14 +907,30 @@ def derive_current_rent(*, as_of: date,
                         commencement=None, expiration=None,
                         schedule_text: str = '',
                         commencement_confirmed: bool = False,
-                        square_feet=None) -> RentResult:
+                        square_feet=None,
+                        schedule_docs: Optional[list] = None) -> RentResult:
     """Monthly base rent in effect on `as_of`, with method + confidence.
+
+    schedule_docs: the chain as one text per instrument (in chain order);
+    with it, a later instrument's undated rent table counts from that
+    instrument's own stated start. Replaces schedule_text when given.
 
     commencement_confirmed: the commencement came from a user confirmation
     or the rent roll, not from reading the lease — a stated Year-1 rent rolled
     forward by a stated fixed escalation is then fully determined (high)."""
     # scanned PDFs use typographic dashes ("1 ‐ 3", U+2010) the table
     # patterns don't know; one hyphen for all of them
+    bounds = None
+    if schedule_docs:
+        # one flat text per document, joined by one space: the parsers
+        # flatten whitespace the same way, so positions line up
+        parts = [re.sub(r'\s+', ' ', re.sub('[‐‑‒–—−]', '-', d or '')).strip()
+                 for d in schedule_docs]
+        bounds, at = [], 0
+        for p in parts:
+            bounds.append((at, at + len(p)))
+            at += len(p) + 1
+        schedule_text = ' '.join(parts)
     schedule_text = re.sub('[‐‑‒–—−]', '-', schedule_text or '')
     comm = commencement if isinstance(commencement, date) else parse_date(commencement)
     exp = expiration if isinstance(expiration, date) else parse_date(expiration)
@@ -867,7 +958,7 @@ def derive_current_rent(*, as_of: date,
     if exp and re.search(rf'\b\d{{1,2}}/\d{{1,2}}/\d{{4}}\s*(?:to|through|thru|[-–])?\s*'
                          rf'0?{exp.month}/0?{exp.day}/{exp.year}\b', flat):
         exp_for_backdate = None
-    how = _anchor(rows, comm, exp_for_backdate, flat)
+    how = _anchor(rows, comm, exp_for_backdate, flat, bounds)
 
     dated = parse_dated_rows(schedule_text) if schedule_text else []
     cov = [r for r in dated if r.start <= as_of <= r.end]
@@ -906,7 +997,7 @@ def derive_current_rent(*, as_of: date,
         # high only for explicitly labelled rows (Months / Lease Year) dated
         # from a stated start or the commencement; sequential guesses and
         # expiration back-dating are medium
-        if _later_unplaced(rows, flat, r.pos, dated):
+        if _later_unplaced(rows, flat, r.pos, dated, own_table=r.table):
             flags.append('later_schedule_unplaced')
         # within a month of a step, which row applies hinges on the exact
         # commencement day and billing practice — not certain enough to show
