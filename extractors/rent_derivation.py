@@ -298,6 +298,8 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
     if not out:
         out = _single_amount_rows(flat)
     if not out:
+        out = _per_month_rows(flat)
+    if not out:
         out = _named_term_rows(flat, sf)
     for t in {r.table for r in out}:
         trs = [r for r in out if r.table == t]
@@ -318,6 +320,33 @@ _SINGLE_HDR = re.compile(
     r'|\b(monthly|annual)\s+(?:base\s+|minimum\s+|fixed\s+)?rent\b[^$]{0,40}?\b(?:lease\s+)?(years?|months?)\b')
 # cents are optional: a summary block writes "Months Monthly Rent 1-12 $2,292  13-24 $2,361"
 _SINGLE_ROW = re.compile(r'(?i)(?:(?:lease\s+)?(?:years?|months?)\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*\$\s*([\d,]+(?:\.\d{2})?)(?![\d.])')
+# prose rows that say the unit themselves: "Years 1 through 5 $4,500.00 per
+# month Years 6 through 10 $4,950.00 per month" -- no table header needed
+_PER_MONTH_ROW = re.compile(r'(?i)\b(years?|months?)\s*(\d{1,3})\s*(?:-|–|through|thru|to)\s*(\d{1,3})\s*'
+                            r'\$\s*([\d,]+(?:\.\d{2})?)\s*(?:per\s+(?:calendar\s+)?month|/\s*mo\b|monthly|per\s+(?:lease\s+)?year|annually)')
+
+
+def _per_month_rows(flat: str) -> list[ScheduleRow]:
+    rows, nxt, kind = [], None, None
+    for m in _PER_MONTH_ROW.finditer(flat):
+        k = m.group(1).lower()
+        a, b, v = int(m.group(2)), int(m.group(3)), _num(m.group(4))
+        unit = m.group(0).lower()
+        monthly = v if ('month' in unit.split('$')[-1] or '/' in unit.split('$')[-1]) else round(v / 12, 2)
+        if not v or b < a or monthly > MAX_MONTHLY:
+            continue
+        ctx = flat[max(0, m.start() - 300):m.start()].lower()
+        if nxt is None:
+            if a != 1 or 'rent' not in ctx or re.search(r'sublease|subtenant', ctx):
+                continue
+            kind = k
+        elif a != nxt or k != kind:
+            break
+        rows.append(ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),
+                                label=f"{'years' if kind.startswith('year') else 'months'} {a}-{b}",
+                                table=1, pos=m.start()))
+        nxt = b + 1
+    return rows if len(rows) >= 2 else []
 
 
 def _single_amount_rows(flat: str) -> list[ScheduleRow]:
@@ -380,6 +409,10 @@ def _term_lengths(flat: str) -> tuple[Optional[int], Optional[int]]:
     ext = re.search(r'(?i)(?:additional|extended|extension|renewal|option)\s+(?:terms?|periods?)\s+of\s+'
                     r'(?:[a-z\- ]{0,30}\(\s*)?(\d{1,2})\s*\)?\s*(?:full\s+)?(?:lease\s+)?(years?|months?)',
                     flat)
+    if not ext:
+        # "two (2) options to renew the Term for five (5) years each"
+        ext = re.search(r'(?i)\b(?:options?|renew|extend)\b[^.$]{0,80}?\bfor\s+(?:[a-z\- ]{0,20}\(\s*)?(\d{1,2})'
+                        r'\s*\)?\s*(years?|months?)\s+each\b', flat)
     return (months(ini) if ini else None), (months(ext) if ext else None)
 
 
@@ -479,6 +512,13 @@ _INSTRUMENT_START = [
     re.compile(r'(?i)\beffective\s+date\b[^.$]{0,60}?(?:is|shall\s+be|means|:)\s*(?:the\s+)?(' + _D + ')'),
     re.compile(r'(?i)\b(?:dated\s+)?effective\s+(?:as\s+of\s+|on\s+)?(' + _D + ')'),
 ]
+# a period column that wraps: "10/01/2025- $10.50 $7,779.63 $93,355.50 09/30/2030"
+# (start, dash, up to three amounts, then the end date) -> "start - end amounts"
+_SPLIT_RANGE = re.compile(r'(' + _D + r')\s*-\s*((?:\$\s*\d[\d,]*(?:\.\d{2})?\s+){1,3})(' + _D + r')(?!\s*-)')
+# a rent table's column header, when the word "rent" itself is further up
+# the page than the context window reaches ("LEASE TERM | TIME PERIOD |
+# PER SQ FT | MONTHLY | ANNUALLY")
+_RENT_HEADER = re.compile(r'(?i)per\s*sq\.?\s*(?:ft|foot)|monthly\W{0,6}annual(?:ly)?|\bp\.?\s*s\.?\s*f\.?\b')
 _OPTION_CTX = re.compile(r'\b(?:extended\s+term|extension\s+(?:term|option|period)|'
                          r'option\s+(?:to\s+)?(?:extend|renew)|renewal\s+(?:term|option|period))\b',
                          re.I)
@@ -582,6 +622,9 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
     Amounts are read AFTER the range (up to the next range); if there are
     none there, BEFORE it (back to the previous range)."""
     flat = re.sub(r'\s+', ' ', text or '')
+    # a wrapped period column puts the end date after the amounts: move it
+    # back beside its start date (same tokens, so positions barely shift)
+    flat = _SPLIT_RANGE.sub(lambda m: f'{m.group(1)} - {m.group(3)} {m.group(2).strip()} ', flat)
     ranges = list(_RANGE.finditer(flat))
 
     # Which side of the date range holds THIS row's amounts? Real tables mix
@@ -657,7 +700,7 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
         seg = seg_before if before else seg_after
         ctx = flat[max(0, m.start() - 600):m.start()].lower()
         near = (flat[max(0, m.start() - 120):m.start()] + flat[m.end():m.end() + 80]).lower()
-        if 'rent' not in ctx or _BAD_CTX.search(near):
+        if not ('rent' in ctx or _RENT_HEADER.search(ctx)) or _BAD_CTX.search(near):
             continue
         monthly = _monthly_from(seg, flat[max(0, m.start() - 500):m.start()],
                                 nearest_last=before)
@@ -1020,12 +1063,21 @@ def derive_current_rent(*, as_of: date,
                      default=None)
     if placed_end and as_of > placed_end:
         start = placed_end + timedelta(days=1)
+        _, ext = _term_lengths(flat)
         for t in sorted({x.table for x in rows if x.start is None and _is_option_table(flat, x.pos)}):
             trs = [x for x in rows if x.table == t]
             if any(x.label.startswith('term ') for x in trs):
                 continue
+            # unlabelled rows of an option table are usually one per renewal
+            # TERM ("the first Additional Renewal Term ... the second ..."):
+            # each spans the option length when the lease states one
+            per_term = ext if ext and all(x.label.startswith('seq ') for x in trs) else None
             for x in trs:
-                a, b = _offsets(x)
+                if per_term:
+                    n = int(x.label.split()[1])
+                    a, b = per_term * (n - 1), per_term * n
+                else:
+                    a, b = _offsets(x)
                 x.start = add_months(start, a)
                 x.end = add_months(start, b) - timedelta(days=1)
                 x.label += ' [option]'

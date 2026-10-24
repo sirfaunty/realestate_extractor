@@ -570,6 +570,11 @@ _DOC_WORDS = {
     # generic place words: part of a CENTER's name, never a tenancy's
     # ("Elm Court Shopping Center - Art Frame ..." vs "Elm Court - ...")
     'shopping', 'center', 'centre', 'plaza', 'mall', 'marketplace', 'commons',
+    # the landlord's own paperwork filed beside the lease: a worksheet or a
+    # summary named after the tenant must join that tenancy, not seed one
+    'ners', 'ner', 'sheet', 'summary', 'summaries', 'checklist', 'checklists',
+    'correspondence', 'misc', 'miscellaneous', 'docs', 'documents', 'files', 'file',
+    'supporting', 'archived', 'archive', 'terminated', 'scans',
 }
 
 

@@ -662,6 +662,65 @@ def test_option_period_rent_after_the_scheduled_term():
     assert r.method == 'last_scheduled' and r.monthly == 2121.80, r
 
 
+def test_wrapped_period_column_national_tenant_form():
+    # the period column wraps under the amounts: "Second Renewal Term
+    # 10/01/2017- $10.00 $7,409.17 $88,910.00 09/30/2022" -- the end date
+    # sits after the amounts. Each row is still a dated row.
+    t = """Section A.9 of the Lease is hereby amended and restated as follows:
+    | LEASE TERM | TIME PERIOD | PER SQ FT MONTHLY | ANNUALLY |
+    Second Renewal Term 10/01/2017- $10.00 $7,409.17 $88,910.00 09/30/2022
+    Interim Term 10/01/2022- $9.00 $6,668.25 $80,019.00 09/30/2025
+    Third Renewal Term 10/01/2025- $10.50 $7,779.63 $93,355.50 09/30/2030
+    Fourth Renewal Term 10/01/2030- $11.00 $8,150.08 $97,801.00 09/30/2035"""
+    rows = parse_dated_rows(t)
+    assert [(r.start.isoformat(), r.end.isoformat(), r.monthly) for r in rows] == [
+        ('2017-10-01', '2022-09-30', 7409.17), ('2022-10-01', '2025-09-30', 6668.25),
+        ('2025-10-01', '2030-09-30', 7779.63), ('2030-10-01', '2035-09-30', 8150.08)], rows
+    r = rent(t)
+    assert r.monthly == 7779.63 and r.confidence == 'high', r
+    # the unwrapped form of the same table reads the same
+    t2 = ("LEASE TERM | TIME PERIOD | PER SQ FT | MONTHLY | ANNUALLY "
+          "Original Lease Term | 09/29/14-09/30/19 $6.50 $5,192.96 $62,315.50 "
+          "Extension Term 10/01/19-09/30/20 $6.00 $4,793.50 $57,522.00")
+    assert [(r.start.isoformat(), r.monthly) for r in parse_dated_rows(t2)] == [('2014-09-29', 5192.96), ('2019-10-01', 4793.5)]
+
+
+def test_per_month_prose_rows_without_a_table_header():
+    t = """3. Rent: Tenant promises to pay rent to Landlord from the Rent Commencement
+    Date until the last day of the Primary Term according to the following schedule:
+    Years 1 through 5 $4,500.00 per month Years 6 through 10 $4,950.00 per month
+    Years 11 through 15 $5,445.00 per month Years 16 through 20 $5,989.50 per month"""
+    rows = parse_rent_schedule(t)
+    assert [(r.label, r.monthly) for r in rows] == [('years 1-5', 4500.0), ('years 6-10', 4950.0),
+                                                     ('years 11-15', 5445.0), ('years 16-20', 5989.5)], rows
+    r = rent(t, commencement='2012-03-01')          # 2026-06-30 is lease year 15
+    assert r.monthly == 5445.00 and r.method == 'schedule' and r.confidence == 'high', r
+    r = derive_current_rent(as_of=date(2018, 1, 15), commencement='2012-03-01', schedule_text=t)
+    assert r.monthly == 4950.00, r
+
+
+def test_option_rent_stated_per_renewal_term_spans_the_term():
+    # two five-year renewal options, each with its own stated rent; the
+    # scheduled term ended 2024-10-31, so today sits in the FIRST option term
+    # (year 2 of it), not in a notional second year-row of the option table
+    t = """Minimum Rent: PERIOD ANNUAL RENT MONTHLY RENT
+    Lease Year 1 $30,000.00 $2,500.00
+    Lease Year 2 $30,900.00 $2,575.00
+    Lease Year 3 $31,827.00 $2,652.25
+    """ + 'x ' * 200 + """
+    30. Options. Tenant shall have two (2) options ("Renewal Options") to renew the
+    Term for five (5) years each (each an "Additional Renewal Term"). The annual
+    Minimum Rent for the first Additional Renewal Term shall be in the amount of
+    Thirty-Five Thousand Two Hundred Ninety-Three and 50/100 dollars ($35,293.50) and
+    shall be paid in monthly installments of Two Thousand Nine Hundred Forty-One and
+    13/100 dollars ($2,941.13). The annual Minimum Rent for the second Additional
+    Renewal Term shall be in the amount of Thirty-Eight Thousand Eight Hundred
+    Twenty-Two and 88/100 dollars ($38,822.88) and shall be paid in monthly
+    installments of Three Thousand Two Hundred Thirty-Five and 24/100 dollars ($3,235.24)."""
+    r = rent(t, commencement='2021-11-01')          # term ends 2024-10-31
+    assert r.monthly == 2941.13 and r.method == 'option_period', r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
