@@ -632,6 +632,36 @@ def test_later_instrument_table_counts_from_its_own_start():
     assert r.monthly == 1600.00, r
 
 
+def test_option_period_rent_after_the_scheduled_term():
+    # the scheduled term ended in 2025; the lease carries a renewal-option
+    # rent table. Today the tenant is still billed -> the option table counts
+    # from the day after the term ended: Year 2 of the option, medium, flagged
+    t = """3. Minimum Rent. Tenant shall pay Landlord Minimum Rent as follows:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Lease Year 1 $24,000.00 $2,000.00
+    Lease Year 2 $24,720.00 $2,060.00
+    Lease Year 3 $25,461.60 $2,121.80
+    """ + 'x ' * 200 + """
+    28. Option to Renew. Tenant shall have one (1) option to renew the Term for
+    five (5) years (the "Renewal Option"). Minimum Rent during the renewal option
+    period shall be:
+    RENEWAL OPTION RENT ANNUAL RENT MONTHLY RENT
+    Year 1 $27,000.00 $2,250.00
+    Year 2 $27,810.00 $2,317.50
+    Year 3 $28,644.30 $2,387.03"""
+    r = rent(t, commencement='2022-07-01')          # term ends 2025-06-30; option Year 1 runs to 2026-06-30
+    assert r.monthly == 2250.00 and r.method == 'option_period', r
+    r2 = derive_current_rent(as_of=date(2026, 9, 1), commencement='2022-07-01', schedule_text=t)
+    assert r2.monthly == 2317.50 and r2.method == 'option_period', r2
+    assert r.confidence == 'medium' and 'option_period_assumed' in r.flags, r
+    # inside the scheduled term the option table is not consulted
+    r = derive_current_rent(as_of=date(2024, 1, 15), commencement='2022-07-01', schedule_text=t)
+    assert r.monthly == 2060.00 and r.confidence == 'high', r
+    # no option table on paper: the last scheduled rent, low, as before
+    r = rent(t.split('28. Option')[0], commencement='2022-07-01')
+    assert r.method == 'last_scheduled' and r.monthly == 2121.80, r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

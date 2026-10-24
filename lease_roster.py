@@ -721,6 +721,9 @@ def _needs(row: RosterRow) -> str:
     if 'premises_changed_since_year1' in f:
         return ('premises changed by amendment — the rent shown is from the original '
                 'premises; confirm the current rent')
+    if 'option_period_assumed' in f:
+        return ('the scheduled term has ended — the renewal-option rent is shown; '
+                'confirm the option was exercised, or add the renewal')
     if 'later_schedule_unplaced' in f:
         return ("a later amendment's rent table has no start date — "
                 "check which rent applies today")

@@ -1011,6 +1011,38 @@ def derive_current_rent(*, as_of: date,
                           f'{len(rows)}-row schedule, row {r.label} '
                           f'({r.start}..{r.end})'
                           + (f' + {len(par)} parallel space(s)' if 'multi_space_sum' in flags else ''))
+    # 2b. past the scheduled term, with renewal-option rent tables on paper:
+    #     the landlord still bills, so an option is in effect. The first
+    #     option table counts from the day after the scheduled term ends,
+    #     the next from the day after that one -- medium, never unreviewed
+    #     (whether the option was exercised is not on this paper)
+    placed_end = max((r.end for r in list(dated) + [x for x in rows if x.start and x.end]),
+                     default=None)
+    if placed_end and as_of > placed_end:
+        start = placed_end + timedelta(days=1)
+        for t in sorted({x.table for x in rows if x.start is None and _is_option_table(flat, x.pos)}):
+            trs = [x for x in rows if x.table == t]
+            if any(x.label.startswith('term ') for x in trs):
+                continue
+            for x in trs:
+                a, b = _offsets(x)
+                x.start = add_months(start, a)
+                x.end = add_months(start, b) - timedelta(days=1)
+                x.label += ' [option]'
+            cov = [x for x in trs if x.start <= as_of <= x.end]
+            if cov:
+                r = max(cov, key=lambda x: (x.start, x.pos))
+                return RentResult(r.monthly, 'option_period', 'medium',
+                                  flags + ['option_period_assumed'],
+                                  f'{len(trs)}-row option table from {start}, row {r.label} '
+                                  f'({r.start}..{r.end}); scheduled term ended {placed_end}')
+            start = max(x.end for x in trs) + timedelta(days=1)
+            for x in trs:               # not in effect: leave the table unplaced for step 3
+                x.start = x.end = None
+                x.label = x.label[:-len(' [option]')]
+        # beyond every option period: the last SCHEDULED rent (step 3) stays
+        # the answer -- measured 2026-10-24: holding over at the last option
+        # rent instead lost 2 of 3 such tenancies (the option was never taken)
     if dated and max(r.end for r in dated) < as_of:
         flags.append('schedule_ends_before_date')   # a later amendment is missing
 
