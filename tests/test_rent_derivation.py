@@ -721,6 +721,49 @@ def test_option_rent_stated_per_renewal_term_spans_the_term():
     assert r.monthly == 2941.13 and r.method == 'option_period', r
 
 
+def test_rent_roll_start_dates_the_current_instrument_table_when_its_end_agrees():
+    # the chain: the original lease (Lease Year table) and a renewal amendment
+    # with its own Year 1 / Year 2 table and no start date. The rent roll says
+    # the lease started 2025-02-10 and ends 2027-02-09: dated from that start
+    # the amendment table ends exactly there -> it is the current instrument's
+    # table (high); the lease table, so dated, would end 2028 -> not it
+    lease = """2. Minimum Rent. Tenant shall pay Landlord annual Minimum Rent:
+    PERIOD ANNUAL RENT MONTHLY RENT
+    Lease Year 1 $18,000.00 $1,500.00
+    Lease Year 2 $18,600.00 $1,550.00
+    Lease Year 3 $19,200.00 $1,600.00"""
+    amendment = """SECOND AMENDMENT TO LEASE. Landlord and Tenant agree the Term is
+    extended for two (2) years. """ + 'x ' * 200 + """
+    3. Minimum Rent. During the extended Term Tenant shall pay Minimum Rent:
+    TERM ANNUAL RENT MONTHLY RENT
+    Year 1 $36,000.00 $3,000.00
+    Year 2 $37,080.00 $3,090.00"""
+    r = derive_current_rent(as_of=AS_OF, commencement='2025-02-10', commencement_confirmed=True,
+                            commencement_is_term_start=True, term_end='2027-02-09',
+                            schedule_docs=[lease, amendment])
+    assert r.monthly == 3090.00 and '[term start+]' in r.detail and r.confidence == 'medium', r
+    # the roll's end does not agree with the amendment table (a 3-year end):
+    # the start is not this instrument's -> the old rule: Lease Year 2
+    r = derive_current_rent(as_of=AS_OF, commencement='2025-02-10', commencement_confirmed=True,
+                            commencement_is_term_start=True, term_end='2028-02-09',
+                            schedule_docs=[lease, amendment])
+    assert r.monthly == 1550.00 and '[commencement]' in r.detail, r
+    # no end known: coverage alone places it, at medium
+    r = derive_current_rent(as_of=AS_OF, commencement='2025-02-10', commencement_confirmed=True,
+                            commencement_is_term_start=True, schedule_docs=[lease, amendment])
+    assert r.monthly == 3090.00 and r.confidence == 'medium' and '[term start]' in r.detail, r
+    # the same date as a confirmed ORIGINAL commencement: the lease table
+    r = derive_current_rent(as_of=AS_OF, commencement='2025-02-10', commencement_confirmed=True,
+                            schedule_docs=[lease, amendment])
+    assert r.monthly == 1550.00, r
+    # a packet filed twice: the duplicate of the lease table is not "the
+    # current instrument"; with no amendment the lease table counts from the date
+    r = derive_current_rent(as_of=AS_OF, commencement='2025-02-10', commencement_confirmed=True,
+                            commencement_is_term_start=True, term_end='2028-02-09',
+                            schedule_docs=[lease, lease])
+    assert r.monthly == 1550.00 and r.confidence == 'high', r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

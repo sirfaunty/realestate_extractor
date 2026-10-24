@@ -544,7 +544,8 @@ def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = (),
     # well enough to answer, not well enough to let an EARLIER row show
     # unreviewed (the instrument may count from delivery, not that date)
     placed = {round(d.monthly, 2) for d in dated}
-    return any((x.start is None or (x.label.endswith('[instrument]') and x.table != own_table))
+    return any((x.start is None or (re.search(r'\[(?:instrument|term start\+?)\]$', x.label)
+                                    and x.table != own_table))
                and x.pos > after_pos and round(x.monthly, 2) not in placed
                and not _is_option_table(flat, x.pos)
                for x in rows)
@@ -864,9 +865,15 @@ def _offsets(r: ScheduleRow) -> tuple[int, int]:
     return 12 * (n - 1), 12 * n
 
 
+def _fresh(trs: list) -> bool:
+    # a table that starts its own count (Year 1 / Months 1-12 / first row)
+    return bool(re.match(r'(?:year 1|years 1-|months 0-|months 1-|seq 1|term 0)\b', trs[0].label))
+
+
 def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
             expiration: Optional[date], flat: str = '',
-            bounds: Optional[list] = None) -> set:
+            bounds: Optional[list] = None, term_start: bool = False,
+            term_end: Optional[date] = None, as_of: Optional[date] = None) -> set:
     """Date the relative rows. Each table counts from its own stated start
     if it has one; the first table (the original lease) from the
     commencement; a table in a LATER instrument (bounds = the documents'
@@ -887,6 +894,40 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
         return k
 
     first_seg = seg_of(min(r.pos for r in rows)) if rows else None
+
+    # The commencement is a rent roll's lease start = the CURRENT term's
+    # start. With amendments in the chain it belongs to the current
+    # instrument's own fresh table, not the original lease's. The candidate
+    # is the LAST unique fresh non-option table (a packet filed twice repeats
+    # its tables); it is accepted only when, dated from the start, it ends
+    # within 45 days of the roll's lease end ('term start+', high-grade) or,
+    # with no end known, covers today ('term start', medium). Otherwise the
+    # original table counts from the date, as before.
+    current_table, current_how = None, None
+    if term_start and commencement and rows:
+        def amounts(t):
+            return tuple(round(r.monthly, 2) for r in rows if r.table == t)
+        seen = set()
+        cands = []
+        for t in tables:
+            trs = [r for r in rows if r.table == t]
+            sig = amounts(t)
+            if sig in seen:
+                continue
+            seen.add(sig)
+            if (_fresh(trs) and not _is_option_table(flat, trs[0].pos)
+                    and not all(r.label.startswith('term ') for r in trs)
+                    and not trs[0].anchor):
+                cands.append(t)
+        # the original lease's own table is the ordinary commencement case
+        if cands and cands[-1] != tables[0]:
+            t = cands[-1]
+            trs = [r for r in rows if r.table == t]
+            span_end = add_months(commencement, max(_offsets(r)[1] for r in trs)) - timedelta(days=1)
+            if term_end and abs((span_end - term_end).days) <= 45:
+                current_table, current_how = t, 'term start+'
+            elif not term_end and as_of and add_months(commencement, min(_offsets(r)[0] for r in trs)) <= as_of <= span_end:
+                current_table, current_how = t, 'term start'
     ini, ext = _term_lengths(flat) if flat else (None, None)
     if not ini:
         ini = next((12 * r.years for r in rows if r.years), None)
@@ -920,8 +961,12 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
                 r.label += f' [{how}]'
             used.add(how)
             continue
-        a = trs[0].anchor or (commencement if t == tables[0] else None)
-        how = 'stated' if trs[0].anchor else 'commencement'
+        if current_table is not None:
+            a = trs[0].anchor or (commencement if t == current_table else None)
+            how = 'stated' if trs[0].anchor else current_how
+        else:
+            a = trs[0].anchor or (commencement if t == tables[0] else None)
+            how = 'stated' if trs[0].anchor else 'commencement'
         if not a and flat and not _is_option_table(flat, trs[0].pos):
             k = seg_of(trs[0].pos)
             if k != first_seg:
@@ -951,12 +996,19 @@ def derive_current_rent(*, as_of: date,
                         schedule_text: str = '',
                         commencement_confirmed: bool = False,
                         square_feet=None,
-                        schedule_docs: Optional[list] = None) -> RentResult:
+                        schedule_docs: Optional[list] = None,
+                        commencement_is_term_start: bool = False,
+                        term_end=None) -> RentResult:
     """Monthly base rent in effect on `as_of`, with method + confidence.
 
     schedule_docs: the chain as one text per instrument (in chain order);
     with it, a later instrument's undated rent table counts from that
     instrument's own stated start. Replaces schedule_text when given.
+
+    commencement_is_term_start: the commencement is a rent roll's lease
+    start, i.e. the CURRENT term's start; with amendments in the chain it
+    dates the current instrument's table, validated against term_end (the
+    rent roll's lease end) when given.
 
     commencement_confirmed: the commencement came from a user confirmation
     or the rent roll, not from reading the lease — a stated Year-1 rent rolled
@@ -1001,7 +1053,9 @@ def derive_current_rent(*, as_of: date,
     if exp and re.search(rf'\b\d{{1,2}}/\d{{1,2}}/\d{{4}}\s*(?:to|through|thru|[-–])?\s*'
                          rf'0?{exp.month}/0?{exp.day}/{exp.year}\b', flat):
         exp_for_backdate = None
-    how = _anchor(rows, comm, exp_for_backdate, flat, bounds)
+    t_end = term_end if isinstance(term_end, date) or term_end is None else parse_date(term_end)
+    how = _anchor(rows, comm, exp_for_backdate, flat, bounds,
+                  commencement_is_term_start, t_end, as_of)
 
     dated = parse_dated_rows(schedule_text) if schedule_text else []
     cov = [r for r in dated if r.start <= as_of <= r.end]
@@ -1050,6 +1104,9 @@ def derive_current_rent(*, as_of: date,
         conf = ('high' if not (set(flags) - {'multi_space_sum'})
                 and not r.label.startswith('seq')
                 and r.label.endswith('[commencement]') else 'medium')
+        # a '[term start+]' row (the current instrument's table dated from the
+        # rent roll's start, its end agreeing) answers at medium: measured
+        # 2026-10-24, letting it show unreviewed traded one right for one wrong
         return RentResult(monthly, 'schedule', conf, flags,
                           f'{len(rows)}-row schedule, row {r.label} '
                           f'({r.start}..{r.end})'
