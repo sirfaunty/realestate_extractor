@@ -144,6 +144,46 @@ def main():
         torn = True
     test('no manifest -> the door refuses and the consumer keeps its previous pull', torn)
 
+    print("\nPage numbers are the file's pages")
+    gap_db = os.path.join(tmp, 'gaps.db')
+    g = Database(gap_db)
+    g.connect()
+    gpid = g.create_property('Birch Row', property_type='retail')
+    gdid = g.insert_document('BR-Lease.pdf', os.path.join(tmp, 'BR-Lease.pdf'), 'lease',
+                             auto_create_property=False)
+    # a six-page scan: pages 3 and 6 are blank, so ingest stored no text for them
+    g.conn.execute("UPDATE documents SET property_id=?, file_hash=?, page_count=6, is_scanned=1 WHERE id=?",
+                   (gpid, 'e' * 64, gdid))
+    for n, text in ((1, LEASE[0]), (2, 'recital. ' * 20), (4, LEASE[1]), (5, 'IN WITNESS WHEREOF')):
+        g.conn.execute("INSERT INTO document_fulltext(document_id, page_number, content) VALUES (?,?,?)",
+                       (gdid, n, text))
+    g.conn.commit()
+    from realestate_extractor.lease_roster import _pages  # noqa: E402
+    pg = _pages(g.conn, gdid)
+    g.close()
+    test('a blank page keeps its place: six entries, pages 3 and 6 empty',
+         len(pg) == 6 and pg[2] == '' and pg[5] == '' and pg[3] == LEASE[1])
+    gout = os.path.join(tmp, 'gap_door')
+    gman = publish_property_door(gap_db, gout, 'BIRCHROW', property_id=gpid, as_of=date(2026, 9, 1),
+                                 property_label='Birch Row')
+    import sqlite3  # noqa: E402
+    gc = sqlite3.connect(os.path.join(gout, gman['database']))
+    reg_pages = gc.execute('SELECT pages FROM cap_document').fetchone()[0]
+    page_rows = gc.execute('SELECT page_no, method FROM cap_page_text ORDER BY page_no').fetchall()
+    gc.close()
+    test('the registry counts every page of the file and every page has a row',
+         reg_pages == 6 and [r[0] for r in page_rows] == [1, 2, 3, 4, 5, 6])
+    test('a page nothing could read is marked, not dropped',
+         dict(page_rows)[3] == 'none' and dict(page_rows)[6] == 'none' and dict(page_rows)[4] == 'ocr')
+    from realestate_extractor.modules.module_door import _Cite, _flat  # noqa: E402
+    chain = _flat('\n'.join(pg)).strip()
+    test('a cite after the blank page lands on the file page (4), not the 3rd readable page',
+         _Cite([(gdid, pg)]).at(chain.index('Lease Year 3')) == (gdid, 4))
+    again = publish_property_door(gap_db, gout, 'BIRCHROW', property_id=gpid, as_of=date(2026, 9, 1))
+    test('a republish leaves exactly one generation db, the one the manifest names',
+         [f for f in os.listdir(gout) if f.endswith('.db')] == [again['database']]
+         and again['database'] != gman['database'])
+
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{passed} passed, {failed} failed')
     sys.exit(1 if failed else 0)

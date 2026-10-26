@@ -86,6 +86,8 @@ class _Cite:
             start = at
             page_marks, cur = [], at
             for n, fp in enumerate(flat_pages, 1):
+                if not fp:        # a blank page adds nothing to the flat text
+                    continue
                 page_marks.append((cur, n))
                 cur += len(fp) + 1
             end = at + len(_flat('\n'.join(pages)).strip())
@@ -101,6 +103,22 @@ class _Cite:
                         page = n
                 return doc_id, page
         return None, None
+
+
+def _file_pages(doc: dict, pages: list) -> list:
+    """Pad a document's pages out to the file's own page count when the file
+    is on hand (older ingests recorded only the pages that had text)."""
+    path = doc.get('filepath') or ''
+    if path.lower().endswith('.pdf') and os.path.exists(path):
+        try:
+            import fitz
+            with fitz.open(path) as f:
+                n = f.page_count
+            if n > len(pages):
+                return pages + [''] * (n - len(pages))
+        except Exception:
+            pass
+    return pages
 
 
 def _property_docs(conn, property_id):
@@ -126,7 +144,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
     as_of = as_of or date.today()
     conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
     docs = _property_docs(conn, property_id)
-    pages_by_doc = {d['id']: _pages(conn, d['id']) for d in docs}
+    pages_by_doc = {d['id']: _file_pages(d, _pages(conn, d['id'])) for d in docs}
 
     # registry + page text
     t_doc, t_page = [], []
@@ -141,7 +159,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
                       int(archived_hint(d.get('filename') or '')), d.get('review_status'),
                       d.get('processed_at')))
         for n, p in enumerate(pages, 1):
-            t_page.append((d['id'], n, method, len(p or ''), p or ''))
+            # every page of the file has a row; a page nothing could read says so
+            t_page.append((d['id'], n, method if (p or '').strip() else 'none', len(p or ''), p or ''))
 
     # the roster = the lease rows
     rows = build_roster(conn, property_id, as_of=as_of,
@@ -426,4 +445,13 @@ would show unreviewed (confidence high).
                 'tables': man_tables, 'files': files, 'script': 'modules/module_door.py'}
     with open(man_path, 'w', encoding='utf-8') as fh:
         json.dump(manifest, fh, indent=1)
+    # one current generation per folder: once the manifest names the new db,
+    # an older generation left beside it goes (the consumer reads only what
+    # the manifest names; a stray db would look like a second current one)
+    for f in os.listdir(out_dir):
+        if f != db_name and f.startswith(f'{PREFIX}_{package.lower()}_') and f.endswith('.db'):
+            try:
+                os.remove(os.path.join(out_dir, f))
+            except OSError:
+                pass
     return manifest

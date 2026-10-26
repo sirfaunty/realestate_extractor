@@ -119,14 +119,29 @@ def _text(conn, doc_id, limit=None):
 
 
 def _pages(conn, doc_id) -> list:
-    """A document's stored page texts, in page order."""
+    """A document's page texts, one entry per page of the FILE: entry n-1 is
+    page n. Pages with no stored text (blank, or OCR found nothing) are ''
+    so a page cite is the file's page, not a count of the readable ones."""
     try:
         rows = conn.execute(
-            "SELECT content FROM document_fulltext WHERE CAST(document_id AS INTEGER)=? "
+            "SELECT CAST(page_number AS INTEGER), content FROM document_fulltext "
+            "WHERE CAST(document_id AS INTEGER)=? "
             "ORDER BY CAST(page_number AS INTEGER)", (doc_id,)).fetchall()
     except sqlite3.Error:
         return []
-    return [r[0] or '' for r in rows]
+    try:
+        total = conn.execute('SELECT page_count FROM documents WHERE id = ?',
+                             (doc_id,)).fetchone()
+        total = int(total[0] or 0) if total else 0
+    except (sqlite3.Error, TypeError, ValueError):
+        total = 0
+    by_no = {}
+    for n, text in rows:
+        if n is not None and n >= 1:
+            by_no[n] = '\n'.join(filter(None, (by_no.get(n), text or '')))
+    if not by_no:
+        return [r[1] or '' for r in rows]
+    return [by_no.get(n, '') for n in range(1, max(total, max(by_no)) + 1)]
 
 
 def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,

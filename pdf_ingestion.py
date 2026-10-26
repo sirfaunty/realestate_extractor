@@ -354,8 +354,9 @@ def _extract_with_pymupdf(filepath: str, doc: DocumentContent) -> DocumentConten
             is_scanned=False
         ))
 
+    # the file's page count, not the number of pages that had text
+    doc.page_count = pdf.page_count
     pdf.close()
-    doc.page_count = len(doc.pages)
 
     return doc
 
