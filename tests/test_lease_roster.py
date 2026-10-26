@@ -476,6 +476,34 @@ def test_need_attention_counts_tenancies_not_expired_leases():
     assert s['expired_on_paper'] == 1, s
 
 
+
+def test_one_tenancy_filed_under_label_variants_is_one_row():
+    from realestate_extractor.lease_roster import _merge_label_variants, _same_label
+    # spacing, filing words, a glued filing word, a typo, a repeated word
+    assert _same_label('maplecrest', 'maple crest')
+    assert _same_label('leasedocuments harborviewdance', 'harborviewdance scannedlease')
+    assert _same_label('pinewoodbakery', 'pinewoodbakery fid')
+    assert _same_label('ostrander chiropractic', 'ostradner chiropractic')
+    assert _same_label('fenwick', 'fenwick fenwick')
+    # the start of a longer label counts only when both name the same tenant
+    assert _same_label('red kite', 'redkitepizzascannedlease', same_tenant=True)
+    assert not _same_label('red kite', 'redkitepizzascannedlease')
+    # different names stay apart
+    assert not _same_label('salon one', 'salon two', same_tenant=True)
+    assert not _same_label('oak grill', 'oak grove', same_tenant=True)
+    g = {'fn:maplecrest': RosterRow(tenant='', label='maplecrest', doc_ids=[1, 2], filenames=['a', 'b'],
+                                    aliases=['Maplecrest Dental PA']),
+         'fn:maple crest': RosterRow(tenant='', label='maple crest', doc_ids=[3], filenames=['c'],
+                                     aliases=['Maplecrest Dental PA']),
+         'fn:fenwick': RosterRow(tenant='', label='fenwick', doc_ids=[4], filenames=['d'], aliases=['Fenwick LLC']),
+         'fn:fenwick fenwick': RosterRow(tenant='', label='fenwick fenwick', doc_ids=[5], filenames=['e'],
+                                         aliases=['Birch Optical Inc'])}
+    _merge_label_variants(g)
+    assert sorted(g['fn:maplecrest'].doc_ids) == [1, 2, 3] and 'fn:maple crest' not in g, g.keys()
+    # the same label but two different legal tenants: two leases, kept apart
+    assert 'fn:fenwick' in g and 'fn:fenwick fenwick' in g, g.keys()
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

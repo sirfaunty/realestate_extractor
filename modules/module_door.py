@@ -43,8 +43,11 @@ from datetime import date, datetime
 from ..extractors.document_family import archived_hint, assemble_rent_chain, rent_chain_family
 from ..extractors.rent_derivation import (
     _anchor, _instrument_start, _is_option_table, parse_dated_rows, parse_rent_schedule)
+from ..extractors.articles import split_articles, sweep
 from ..extractors.citation import Cite, cite_date, cite_number, cite_text
+from ..extractors.second_read import in_read, load_reads
 from ..lease_roster import _pages, build_roster
+from .tenant_keys import match_tenant_keys
 
 PREFIX = 'cap'
 PUBLISHER = 'Capactive lease extraction'
@@ -74,7 +77,8 @@ def _cite_cols(c: Cite, doc_id, doc_sha: dict, doc_method: dict, period_basis, w
     if c.page is None:
         return (doc_sha.get(doc_id), None, None, None, period_basis,
                 f'{what} not found printed on any page of the document')
-    return (doc_sha.get(doc_id), c.quote, doc_method.get(doc_id), c.basis, period_basis, None)
+    method = doc_method(doc_id, c.page, c.quote) if callable(doc_method) else doc_method.get(doc_id)
+    return (doc_sha.get(doc_id), c.quote, method, c.basis, period_basis, None)
 
 
 def _cite_amount(pages: list, monthly, annual, page_hint) -> Cite:
@@ -225,6 +229,37 @@ def _file_pages(doc: dict, pages: list) -> list:
     return pages
 
 
+def _opening(pages: list, a) -> str:
+    """An article's quote: its opening words as they stand on its first page
+    (a slice of that page, up to 200 characters, never across a page)."""
+    if not a.page_from or a.page_from > len(pages):
+        return ''
+    page = pages[a.page_from - 1] or ''
+    head = a.body[:60]
+    i = page.find(head)
+    if i < 0:
+        i = page.find(a.body[:20]) if len(a.body) >= 20 else -1
+    if i < 0:
+        return ''
+    return page[i:i + 200].rsplit(' ', 1)[0].strip() if len(page) - i > 200 else page[i:].strip()
+
+
+def _read_agreement(conn, reads_db) -> dict:
+    """{(doc_id, page): agreement of the two reads}."""
+    out = {}
+    for src in (conn, reads_db):
+        if src is None:
+            continue
+        try:
+            c = src if isinstance(src, sqlite3.Connection) else sqlite3.connect(f'file:{src}?mode=ro', uri=True)
+            for d, p, a in c.execute("SELECT document_id, page_number, agreement FROM page_reads "
+                                     "ORDER BY method = 'ocr_second_read'"):
+                out[(int(d), int(p))] = a
+        except sqlite3.Error:
+            pass
+    return out
+
+
 def _property_docs(conn, property_id):
     where, args = '', []
     if property_id is not None:
@@ -243,12 +278,21 @@ def _confirmations(conn, property_id):
         return {}
 
 
-def build_door_tables(db_path: str, property_id=None, as_of: date | None = None) -> dict:
-    """Read a property's extraction DB and return {table: (columns, rows)}."""
+def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
+                      reads_db: str | None = None, tenant_keys: tuple | None = None) -> dict:
+    """Read a property's extraction DB and return {table: (columns, rows)}.
+    Second OCR reads (extractors/second_read.py) come from the DB's own
+    page_reads table and, when given, reads_db. tenant_keys = (roll rows,
+    alias table) maps each tenancy to the owner's rent-roll key
+    (modules/tenant_keys.py); the engine's own key stays in source_tenant_key."""
     as_of = as_of or date.today()
     conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
     docs = _property_docs(conn, property_id)
     pages_by_doc = {d['id']: _file_pages(d, _pages(conn, d['id'])) for d in docs}
+    second = load_reads(conn)
+    if reads_db:
+        second.update(load_reads(reads_db))
+    second_agree = _read_agreement(conn, reads_db)
 
     # registry + page text
     t_doc, t_page = [], []
@@ -263,8 +307,11 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
                       int(archived_hint(d.get('filename') or '')), d.get('review_status'),
                       d.get('processed_at')))
         for n, p in enumerate(pages, 1):
-            # every page of the file has a row; a page nothing could read says so
-            t_page.append((d['id'], n, method if (p or '').strip() else 'none', len(p or ''), p or ''))
+            # every page of the file has a row; a page nothing could read says so.
+            # An OCR page carries its second read and how far the two agree.
+            s2 = second.get((d['id'], n))
+            m = method if (p or '').strip() else ('ocr_second_read' if (s2 or '').strip() else 'none')
+            t_page.append((d['id'], n, m, len(p or ''), p or '', s2, second_agree.get((d['id'], n))))
 
     # the roster = the lease rows
     rows = build_roster(conn, property_id, as_of=as_of,
@@ -272,10 +319,47 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
     t_lease, t_chain, t_step, t_opt, t_fact = [], [], [], [], []
     step_id = opt_id = fact_id = 0
     doc_sha = {d['id']: d.get('file_hash') for d in docs}
-    doc_method = {d['id']: ('ocr' if d.get('is_scanned') else 'text') for d in docs}
+    scanned = {d['id']: bool(d.get('is_scanned')) for d in docs}
+
+    def doc_method(doc_id, page, quote):
+        """How the quoted page was read: its text layer, one OCR read, or two
+        OCR reads that both print the quote (corroborated) or do not."""
+        s2 = second.get((doc_id, page))
+        if s2 is not None:
+            first = pages_by_doc.get(doc_id, [])
+            p1 = first[page - 1] if page and page <= len(first) else ''
+            in1, in2 = in_read(quote, p1), in_read(quote, s2)
+            if in1 and in2:
+                return 'ocr_corroborated'
+            return 'ocr_second_read_only' if in2 else 'ocr_uncorroborated'
+        return 'ocr' if scanned.get(doc_id) else 'text'
+
+    second_pages = {}
+    for (sd, sp), st in second.items():
+        second_pages.setdefault(sd, {})[sp] = st
+
+    def cite_reads(doc_id, fn, *args):
+        """Cite from the first read; when it prints nothing, from the second read."""
+        first = pages_by_doc.get(doc_id, [])
+        c = fn(first, *args)
+        if c.page is None and doc_id in second_pages:
+            alt = [second_pages[doc_id].get(i, '') for i in range(1, max(len(first), max(second_pages[doc_id])) + 1)]
+            c2 = fn(alt, *args)
+            if c2.page is not None:
+                return c2
+        return c
+    # the owner's rent-roll keys, when given: (roll rows, alias table)
+    keyed = {}
+    if tenant_keys:
+        keyed = match_tenant_keys(
+            [(row.key or _slug(row.tenant), [n for n in row.tenant.split(' / ')] + list(row.aliases)
+              + ([row.label] if row.label else []))
+             for row in rows], tenant_keys[0], tenant_keys[1] if len(tenant_keys) > 1 else None)
     for row in rows:
         lease_id = row.key or _slug(row.tenant)
-        tenant_key = _slug(row.tenant.split(' / ')[0])
+        source_key = _slug(row.tenant.split(' / ')[0])
+        km = keyed.get(lease_id)
+        tenant_key = (km.tenant_key if km and km.tenant_key else source_key)
         doc_list = [(i, pages_by_doc.get(i, [])) for i in row.doc_ids]
         sel = assemble_rent_chain([(fn, pg) for (i, pg), fn in zip(doc_list, row.filenames)])
         kept_docs = [doc_list[i] for i in sel.kept]
@@ -298,34 +382,73 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
                         row.monthly_rent, row.rent_method, row.rent_confidence,
                         ';'.join(row.rent_flags), row.rent_detail, row.needs,
                         int(row.show_rent), len(row.doc_ids), ','.join(str(i) for i in row.doc_ids),
-                        ';'.join(sel.flags)))
+                        ';'.join(sel.flags), source_key,
+                        km.suite if km else None, km.occupant if km else None,
+                        km.basis if km else 'no rent roll given'))
         # rent steps: the same chain and parsers the derivation used
         if kept_docs:
             cite = _Cite(kept_docs)
             text = ' '.join(_flat('\n'.join(pg)).strip() for _, pg in kept_docs)
             rel = parse_rent_schedule(text)
             bounds = [(a, b) for a, b, _, _ in cite.spans]
-            _anchor(rel, row.commencement, row.expiration_lease, text, bounds)
+            # placed exactly as the rent derivation places them: a rent roll's
+            # start is the CURRENT term's start, not the original lease's
+            _anchor(rel, row.commencement, row.expiration_lease, text, bounds,
+                    row.commencement_source == 'rent_roll',
+                    row.expiration if row.expiration_source == 'rent_roll' else None, as_of)
             dated = parse_dated_rows(text)
-            anchor = (f'counted from commencement {row.commencement.isoformat()} '
-                      f'({row.commencement_source or "source not recorded"})') if row.commencement else \
-                'counted from a commencement the paper does not date'
+            comm_txt = (f'commencement {row.commencement.isoformat()} '
+                        f'({row.commencement_source or "source not recorded"})') if row.commencement else \
+                'a commencement the paper does not date'
+
+            def anchor_of(label, row=row, comm_txt=comm_txt):
+                """What a relative row was counted from, by the anchor the derivation used."""
+                if '[stated]' in label:
+                    return "counted from the table's own stated start"
+                if '[instrument]' in label:
+                    return "counted from its instrument's own stated start"
+                if '[expiration]' in label:
+                    return 'back-dated from the expiration ' + (
+                        row.expiration_lease.isoformat() if row.expiration_lease else '(undated)')
+                if '[term start' in label:
+                    return "counted from the rent roll's current-term start " + (
+                        row.commencement.isoformat() if row.commencement else '')
+                return 'counted from ' + comm_txt
+            seen_steps = set()      # one row per (period, amount): a table read twice is one schedule
             for x in dated:
+                sk = (x.start, x.end, round(x.monthly or 0, 2))
+                if sk in seen_steps:
+                    continue
+                seen_steps.add(sk)
                 step_id += 1
                 d, p = cite.at(x.pos)
-                c = _cite_amount(pages_by_doc.get(d, []), x.monthly, x.annual, p)
+                c = cite_reads(d, _cite_amount, x.monthly, x.annual, p)
                 t_step.append((step_id, lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
                                x.annual, 'dated', 0, d, c.page or p)
                               + _cite_cols(c, d, doc_sha, doc_method, 'printed', 'amount'))
             for x in rel:
                 opt = int(_is_option_table(text, x.pos))
                 d, p = cite.at(x.pos)
-                c = _cite_amount(pages_by_doc.get(d, []), x.monthly, x.annual, p)
+                c = cite_reads(d, _cite_amount, x.monthly, x.annual, p)
                 if x.start and x.end:
+                    sk = (x.start, x.end, round(x.monthly or 0, 2))
+                    if sk in seen_steps:
+                        continue
+                    seen_steps.add(sk)
                     step_id += 1
+                    if not opt and row.expiration_lease and x.start > row.expiration_lease:
+                        # counted past the lease's own expiration: the anchor is wrong, so
+                        # the period is left blank and says why (flag, don't fabricate)
+                        t_step.append((step_id, lease_id, None, None, x.monthly, x.annual, x.label, opt, d,
+                                       c.page or p)
+                                      + _cite_cols(c, d, doc_sha, doc_method,
+                                                   f'unplaced: {x.label} {anchor_of(x.label)} would start '
+                                                   f'{x.start.isoformat()}, after the lease expires '
+                                                   f'{row.expiration_lease.isoformat()}', 'amount'))
+                        continue
                     t_step.append((step_id, lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
                                    x.annual, x.label, opt, d, c.page or p)
-                                  + _cite_cols(c, d, doc_sha, doc_method, f'computed: {x.label} {anchor}',
+                                  + _cite_cols(c, d, doc_sha, doc_method, f'computed: {x.label} {anchor_of(x.label)}',
                                                'amount'))
                 elif opt:
                     opt_id += 1
@@ -359,9 +482,9 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
             if r[0] not in lease_doc_ids:
                 continue
             prov_id += 1
-            c = _cite_term(pages_by_doc.get(r[0], []), r[3], r[4], r[6], r[9])
+            c = cite_reads(r[0], _cite_term, r[3], r[4], r[6], r[9])
             t_prov.append((prov_id, doc_lease[r[0]], r[0], 'term', r[1], r[2], r[3], r[4], r[5],
-                           r[6], r[7], r[8], c.page or r[9], r[10])
+                           r[6], r[7], r[8], c.page or r[9], r[10], None)
                           + _cite_cols(c, r[0], doc_sha, doc_method, None, 'value'))
             if r[1] in ('renewal_options', 'renewal_option'):
                 opt_id += 1
@@ -380,21 +503,45 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
             pg = pages_by_doc.get(r[0], [])
             c = _cite_heading(pg, r[3] or '', r[2] or '', r[5])
             t_prov.append((prov_id, doc_lease[r[0]], r[0], 'clause', r[1], r[3], r[4], None, None,
-                           None, None, r[2], c.page or r[5], r[6])
+                           None, None, r[2], c.page or r[5], r[6], None)
                           + _cite_cols(c, r[0], doc_sha, doc_method, None, 'heading'))
     except sqlite3.Error:
         pass
     conn.close()
 
+    # depth: every article of every instrument verbatim (layer A) and the
+    # category sweep (layer B), each cited to the file pages it is on
+    for d in docs:
+        if d['id'] not in lease_doc_ids or fam_by_doc.get(d['id']) != 'instrument':
+            continue
+        pg = pages_by_doc.get(d['id'], [])
+        lid = doc_lease[d['id']]
+        for a in split_articles(pg):
+            prov_id += 1
+            q = _opening(pg, a)
+            c = Cite(a.page_from, q, 'printed') if q else Cite(None, '', 'not_found')
+            t_prov.append((prov_id, lid, d['id'], 'article', f'article {a.ordinal}', a.title or None, a.body,
+                           None, None, None, None, a.heading or f'(boundary at Section 1, {a.style})',
+                           a.page_from, None, a.page_to)
+                          + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'article'))
+        for h in sweep(pg):
+            prov_id += 1
+            c = Cite(h.page, h.excerpt, 'printed')
+            t_prov.append((prov_id, lid, d['id'], 'sweep', h.category, None, h.excerpt, None, None, None, None,
+                           None, h.page, None, h.page)
+                          + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'excerpt'))
+
     return {
         'cap_document': (['doc_id', 'filename', 'sha256', 'pages', 'document_type', 'method', 'ocr_confidence',
                           'family', 'archived_hint', 'review_status', 'processed_at'], t_doc),
-        'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text'], t_page),
+        'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read',
+                           'read_agreement'], t_page),
         'cap_lease_lease': (['lease_id', 'tenant_key', 'trade_name', 'legal_names', 'status', 'sf',
                              'commencement', 'commencement_source', 'expiration', 'expiration_source',
                              'expiration_paper', 'base_rent_monthly', 'rent_method', 'rent_confidence',
                              'rent_flags', 'rent_detail', 'needs', 'show_unreviewed', 'n_documents',
-                             'source_doc_ids', 'chain_flags'], t_lease),
+                             'source_doc_ids', 'chain_flags', 'source_tenant_key', 'roll_suite',
+                             'roll_occupant', 'key_basis'], t_lease),
         'cap_lease_chain': (['lease_id', 'seq', 'doc_id', 'filename', 'role', 'archived_hint',
                              'instrument_start'], t_chain),
         'cap_lease_rent_step': (['step_id', 'lease_id', 'period_from', 'period_to', 'monthly_amount',
@@ -402,7 +549,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
                                  'source_page'] + CITE_COLS, t_step),
         'cap_lease_provision': (['prov_id', 'lease_id', 'doc_id', 'kind', 'category', 'label', 'value_raw',
                                  'value_numeric', 'unit', 'effective_date', 'expiration_date',
-                                 'section_ref', 'source_page', 'confidence'] + CITE_COLS, t_prov),
+                                 'section_ref', 'source_page', 'confidence', 'source_page_to'] + CITE_COLS,
+                                t_prov),
         'cap_lease_option': (['opt_id', 'lease_id', 'kind', 'detail', 'monthly_amount', 'annual_amount',
                               'source_page_hint', 'source_doc_id', 'source_page'] + CITE_COLS, t_opt),
         'cap_lease_fact': (['fact_id', 'lease_id', 'field', 'value', 'value_source', 'source_doc_id',
@@ -509,7 +657,8 @@ def snapshot():
 
 def publish_property_door(db_path: str, out_dir: str, package: str, property_id=None,
                           as_of: date | None = None, publisher: str = PUBLISHER,
-                          property_label: str = '') -> dict:
+                          property_label: str = '', reads_db: str | None = None,
+                          tenant_keys: tuple | None = None) -> dict:
     """Write the package into out_dir: the generation database, HANDOFF.txt,
     SOURCE_PATH.txt, BOUNDARY_CONTRACT.md, door/_cap_door.py and, LAST,
     PUBLISH_MANIFEST.json. Returns the manifest."""
@@ -518,7 +667,7 @@ def publish_property_door(db_path: str, out_dir: str, package: str, property_id=
     man_path = os.path.join(out_dir, 'PUBLISH_MANIFEST.json')
     if os.path.exists(man_path):
         os.remove(man_path)                      # consumers now see a publish under way
-    tables = build_door_tables(db_path, property_id, as_of)
+    tables = build_door_tables(db_path, property_id, as_of, reads_db=reads_db, tenant_keys=tenant_keys)
     gen = uuid.uuid4().hex
     db_name = f'{PREFIX}_{package.lower()}_{gen}.db'
     db_out = os.path.join(out_dir, db_name)

@@ -118,6 +118,80 @@ def _text(conn, doc_id, limit=None):
     return t[:limit] if limit else t
 
 
+_FILING_WORDS = ('fullyexecutedleaseagreement', 'leasedocuments', 'archivedscans', 'scannedlease', 'old',
+                 'scanned', 'executed', 'lease', 'fid', 'copy')
+
+
+def _label_core(label: str) -> str:
+    """A file-name label without spacing or filing words ("leasedocuments
+    harborviewdance" and "harborviewdance scannedlease" ->
+    "harborviewdance")."""
+    out = []
+    for tok in (label or '').lower().split():
+        if tok in _FILING_WORDS:
+            continue
+        for w in _FILING_WORDS:          # a filing word glued to the name ("redkitepizzascannedlease")
+            if tok != w and tok.endswith(w) and len(tok) - len(w) >= 4:
+                tok = tok[:-len(w)]
+            if tok != w and tok.startswith(w) and len(tok) - len(w) >= 4:
+                tok = tok[len(w):]
+        if tok not in _FILING_WORDS and tok not in out:      # "fraser fraser" -> "fraser"
+            out.append(tok)
+    return ''.join(out)
+
+
+def _edits(a: str, b: str, cap: int) -> int:
+    """Levenshtein distance, giving up past `cap`."""
+    if abs(len(a) - len(b)) > cap:
+        return cap + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > cap:
+            return cap + 1
+        prev = cur
+    return prev[-1]
+
+
+def _same_label(a: str, b: str, same_tenant: bool = False) -> bool:
+    """One name filed two ways. With same_tenant (both files name the same
+    legal tenant) a label that is the start of the other also counts
+    ("red kite" / "redkitepizza")."""
+    ca, cb = _label_core(a), _label_core(b)
+    if len(ca) < 5 or len(cb) < 5:
+        return False
+    if ca == cb:
+        return True
+    short, long_ = sorted((ca, cb), key=len)
+    if same_tenant and len(short) >= 5 and long_.startswith(short):
+        return True
+    return len(short) >= 8 and _edits(ca, cb, 2) <= (1 if len(short) < 12 else 2)
+
+
+def _merge_label_variants(groups: dict):
+    """Merge 'fn:' groups whose labels are one name (see _same_label) and
+    whose legal names do not conflict (they share one, or one has none)."""
+    keys = sorted((k for k in groups if k.startswith('fn:')), key=lambda k: -len(groups[k].doc_ids))
+    for i, k in enumerate(keys):
+        if k not in groups:
+            continue
+        for k2 in keys[i + 1:]:
+            if k2 not in groups:
+                continue
+            a, b = groups[k], groups[k2]
+            ka, kb = {_key(x) for x in a.aliases}, {_key(x) for x in b.aliases}
+            if not _same_label(a.label, b.label, same_tenant=bool(ka & kb)):
+                continue
+            if ka and kb and not ka & kb:
+                continue                 # two legal tenants: two leases under one name
+            a.doc_ids.extend(b.doc_ids)
+            a.filenames.extend(b.filenames)
+            a.aliases.extend(x for x in b.aliases if x not in a.aliases)
+            del groups[k2]
+
+
 def _pages(conn, doc_id) -> list:
     """A document's page texts, one entry per page of the FILE: entry n-1 is
     page n. Pages with no stored text (blank, or OCR found nothing) are ''
@@ -256,6 +330,13 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             tgt.filenames.extend(row.filenames)
             tgt.aliases.extend(a for a in row.aliases if a not in tgt.aliases)
             del groups[k]
+
+    # 2c. one tenancy filed under label variants ("maplecrest" /
+    #     "maple crest", "pinewoodbakery" / "pinewoodbakery fid", a typo'd
+    #     "ostradner") is one tenancy: merge file-name groups whose labels
+    #     are the same name once spacing and filing words are set aside,
+    #     unless their documents name different legal tenants
+    _merge_label_variants(groups)
 
     rent_roll = _rent_roll(conn, property_id, groups, unassigned_only) if use_rent_roll else {}
 
