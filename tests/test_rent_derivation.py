@@ -764,6 +764,30 @@ def test_rent_roll_start_dates_the_current_instrument_table_when_its_end_agrees(
     assert r.monthly == 1550.00 and r.confidence == 'high', r
 
 
+def test_prose_periods_with_written_dates_take_their_own_sentence_amounts():
+    # "Beginning on <date> and continuing through <date>" and "During the
+    # Second Lease Year period from <date> through <date>": each period's
+    # amounts are in its own sentence; the previous sentence's "... per month;
+    # and" amount must not be taken (that was one escalation step off)
+    t1 = ("Minimum rent. Beginning on March 1, 2011 and continuing through February 28, 2013, the fixed annual "
+          "minimum rent shall be twelve thousand and no/100 dollars ($12,000.00) per year, payable monthly at one "
+          "thousand and no/100 dollars ($1,000.00) per month; and Beginning on March 1, 2013 and continuing "
+          "through February 28, 2015, the fixed annual minimum rent shall be twelve thousand six hundred and "
+          "no/100 dollars ($12,600.00) per year, payable monthly at one thousand fifty and no/100 dollars "
+          "($1,050.00) per month; and")
+    t2 = ("Rent. During the First Lease Year period from June 1, 2016 through May 31, 2017, Tenant shall be "
+          "required to pay to the Landlord fixed annual minimum rent in the sum of Eighteen Thousand and no/100 "
+          "dollars ($18,000.00), payable monthly at the rate of One Thousand Five Hundred and no/100 dollars "
+          "($1,500.00) per month; and During the Second Lease Year period from June 1, 2017 through May 31, 2018, "
+          "Tenant shall be required to pay to the Landlord fixed annual minimum rent in the sum of Eighteen "
+          "Thousand Five Hundred Forty and no/100 dollars ($18,540.00), payable monthly at the rate of One "
+          "Thousand Five Hundred Forty-five and no/100 dollars ($1,545.00) per month;")
+    r1 = [(r.start, r.end, r.monthly) for r in parse_dated_rows(t1)]
+    assert r1 == [(date(2011, 3, 1), date(2013, 2, 28), 1000.0), (date(2013, 3, 1), date(2015, 2, 28), 1050.0)], r1
+    r2 = [(r.start, r.monthly) for r in parse_dated_rows(t2)]
+    assert r2 == [(date(2016, 6, 1), 1500.0), (date(2017, 6, 1), 1545.0)], r2
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

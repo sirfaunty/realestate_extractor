@@ -45,6 +45,7 @@ from ..extractors.rent_derivation import (
     _anchor, _instrument_start, _is_option_table, parse_dated_rows, parse_rent_schedule)
 from ..extractors.articles import split_articles, sweep
 from ..extractors.citation import Cite, cite_date, cite_number, cite_text
+from ..extractors.ner_sheet import parse_ner
 from ..extractors.second_read import in_read, load_reads
 from ..lease_roster import _pages, build_roster
 from .tenant_keys import match_tenant_keys
@@ -63,6 +64,8 @@ TABLES = {
     'cap_lease_rent_step': ('step_id', 'every rent row placed in time from the instruments: period, monthly, annual, basis, option flag; cited'),
     'cap_lease_provision': ('prov_id', 'every extracted term and segmented clause with its page and confidence'),
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
+    'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
+    'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line"),
     'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
 }
 
@@ -509,6 +512,32 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         pass
     conn.close()
 
+    # NER deal sheets: every printed field with the line it is on, every cost
+    # line, and the tie of the cost lines to the sheet's printed total
+    t_ner, t_ner_cost = [], []
+    ner_id = 0
+    for d in docs:
+        for pno, page in enumerate(pages_by_doc.get(d['id'], []), 1):
+            ns = parse_ner(page)
+            if not ns:
+                continue
+            ner_id += 1
+            tot = ns.printed_total_landlord_expense
+            c = Cite(pno, tot.line, 'printed') if tot.line else Cite(None, '', 'not_found')
+            t_ner.append((ner_id, doc_lease.get(d['id']), d['id'], pno, ns.version_date.value, ns.deal_type.value,
+                          ns.tenant.value, ns.use.value, ns.space.value, ns.sqft.value, ns.term_years.value,
+                          ns.total_contract_rent.value, ns.allowance_total.value, ns.leasing_fee.value,
+                          ns.cobroker_fee.value, tot.value, ns.cost_sum, ns.tie, ns.tie_note,
+                          ns.total_effective_contract_rent.value, ns.avg_annual_effective_rent.value,
+                          ns.avg_psf_effective_rent.value,
+                          '; '.join(f'{x[0]}: {x[2]}' for x in ns.ladder) or None)
+                         + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'total landlord expense',
+                                      missing_value=tot.value is None and not tot.line))
+            for seq, cl in enumerate(ns.cost_lines, 1):
+                cc = Cite(pno, cl.line, 'printed')
+                t_ner_cost.append((ner_id, seq, cl.label, cl.amount, cl.budgeted, d['id'], pno)
+                                  + _cite_cols(cc, d['id'], doc_sha, doc_method, None, 'cost line'))
+
     # depth: every article of every instrument verbatim (layer A) and the
     # category sweep (layer B), each cited to the file pages it is on
     for d in docs:
@@ -555,6 +584,13 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                               'source_page_hint', 'source_doc_id', 'source_page'] + CITE_COLS, t_opt),
         'cap_lease_fact': (['fact_id', 'lease_id', 'field', 'value', 'value_source', 'source_doc_id',
                             'source_page'] + CITE_COLS, t_fact),
+        'cap_ner_deal': (['ner_id', 'lease_id', 'source_doc_id', 'source_page', 'version_date', 'deal_type', 'tenant',
+                          'use', 'space', 'sqft', 'term_years', 'total_contract_rent', 'allowance_total',
+                          'leasing_fee', 'cobroker_fee', 'printed_total_landlord_expense', 'cost_lines_sum',
+                          'tie_status', 'tie_note', 'total_effective_contract_rent', 'avg_annual_effective_rent',
+                          'avg_psf_effective_rent', 'rent_ladder'] + CITE_COLS, t_ner),
+        'cap_ner_cost_line': (['ner_id', 'seq', 'label', 'proposed', 'budgeted', 'source_doc_id', 'source_page']
+                              + CITE_COLS, t_ner_cost),
     }
 
 

@@ -497,6 +497,7 @@ _D = (r'(?:(?:January|February|March|April|May|June|July|August|September|'
 _RANGE = re.compile(
     r'(' + _D + r')\s*\)?\s*(?:through|thru|to|until|-|–|—|'
     r'and\s+(?:ending|expiring|terminating)(?:\s+on)?|'
+    r'and\s+continuing\s+(?:through|thru|until|to)|'    # "Beginning on X and continuing through Y"
     r'10(?=\d{1,2}/))'                       # OCR: "to" read as "10" ("1/1/20261012/31/2026")
     r'\s*(' + _D + r')', re.I)
 
@@ -695,6 +696,11 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
         am_b = _amounts(seg_before, keep_zero=True)
         gap_a = _gap(seg_after[:am_a[0][0]]) if am_a else 10 ** 6
         gap_b = _gap(seg_before[am_b[-1][1]:]) if am_b else 10 ** 6
+        # prose: an amount on the far side of a sentence break ("... per
+        # month; and During the Third Lease Year period from ...") closes the
+        # PREVIOUS period's sentence; it is never this range's rent
+        if am_b and am_a and re.search(r';|\.\s+[A-Z]', seg_before[am_b[-1][1]:]):
+            gap_b = 10 ** 6
         if gap_a == gap_b == 10 ** 6:
             continue
         before = gap_b < gap_a
