@@ -19,6 +19,13 @@ Tables (prefix `cap_`):
   cap_lease_rent_step every placed rent row on paper: period, amount, basis
   cap_lease_provision every extracted term and clause, with its page
   cap_lease_option    renewal-option statements and option rent tables
+  cap_lease_fact      each tenancy value (SF, commencement, expiration, rent) with its words
+
+Every fact row carries the citation columns (CITE_COLS): the document's
+sha256, the file's page, a VERBATIM quote of that page around the value
+(extractors/citation.py), the method that read the page, the basis of the
+value ('printed' or 'computed: <inputs>') and, when the paper prints nothing
+for it, null_reason instead of a quote.
 
     from realestate_extractor.modules.module_door import publish_property_door
     publish_property_door('org.db', property_id=1, out_dir='doors/plaza', package='PLAZA')
@@ -36,6 +43,7 @@ from datetime import date, datetime
 from ..extractors.document_family import archived_hint, assemble_rent_chain, rent_chain_family
 from ..extractors.rent_derivation import (
     _anchor, _instrument_start, _is_option_table, parse_dated_rows, parse_rent_schedule)
+from ..extractors.citation import Cite, cite_date, cite_number, cite_text
 from ..lease_roster import _pages, build_roster
 
 PREFIX = 'cap'
@@ -52,7 +60,103 @@ TABLES = {
     'cap_lease_rent_step': ('step_id', 'every rent row placed in time from the instruments: period, monthly, annual, basis, option flag; cited'),
     'cap_lease_provision': ('prov_id', 'every extracted term and segmented clause with its page and confidence'),
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
+    'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
 }
+
+CITE_COLS = ['source_sha256', 'quote', 'quote_page_method', 'value_basis', 'period_basis', 'null_reason']
+
+
+def _cite_cols(c: Cite, doc_id, doc_sha: dict, doc_method: dict, period_basis, what: str,
+               missing_value: bool = False) -> tuple:
+    """The citation columns for one row."""
+    if missing_value:
+        return (None, None, None, None, period_basis, 'the paper states no value for this field')
+    if c.page is None:
+        return (doc_sha.get(doc_id), None, None, None, period_basis,
+                f'{what} not found printed on any page of the document')
+    return (doc_sha.get(doc_id), c.quote, doc_method.get(doc_id), c.basis, period_basis, None)
+
+
+def _cite_amount(pages: list, monthly, annual, page_hint) -> Cite:
+    """A rent amount: the monthly figure where printed, else the annual one
+    it is computed from (or the reverse)."""
+    if monthly is not None:
+        return cite_number(pages, monthly, page_hint,
+                           also=[(annual, 'annual / 12') if annual is not None else (None, '')]
+                           + ([(round(monthly * 12, 2), 'monthly x 12 printed as annual')] if annual is None else []))
+    return cite_number(pages, annual, page_hint)
+
+
+def _cite_heading(pages: list, label: str, section_ref: str, page_hint) -> Cite:
+    """A segmented clause: the label is '<Section N>: <Heading>' as the
+    segmenter names it; the page prints the heading (and maybe its number).
+    A preamble has no heading: its opening line is the quote."""
+    head = label.split(':', 1)[1].strip() if ':' in label else label
+    if head.startswith('(') or not head:
+        hint = page_hint if page_hint and 1 <= page_hint <= len(pages) else 1
+        for p in [hint] + [i for i in range(1, len(pages) + 1) if i != hint]:
+            line = next((ln.strip() for ln in (pages[p - 1] or '').splitlines() if len(ln.strip()) >= 4), '')
+            if line:
+                return Cite(p, line[:140], 'printed' if p == page_hint else 'moved')
+        return Cite(None, '', 'not_found')
+    c = cite_text(pages, head, page_hint)
+    if c.page is None and section_ref and not section_ref.lower().startswith(('section', 'preamble')):
+        c = cite_text(pages, section_ref, page_hint)
+    return c
+
+
+_MDY = re.compile(r'^\s*(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}|\d{4})\s*$')
+
+
+def _iso(raw) -> str | None:
+    """'10/01/2025' / '2025-10-01' -> '2025-10-01'; anything else None."""
+    s = str(raw or '')
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', s[:10]):
+        return s[:10]
+    m = _MDY.match(s)
+    if m:
+        y = int(m.group(3))
+        y = y + (2000 if y < 50 else 1900) if y < 100 else y
+        try:
+            return date(y, int(m.group(1)), int(m.group(2))).isoformat()
+        except ValueError:
+            return None
+    return None
+
+
+def _cite_term(pages: list, raw, numeric, eff_date, page_hint) -> Cite:
+    """An extracted term: its number, its date, else its raw words."""
+    if numeric is not None:
+        c = cite_number(pages, numeric, page_hint)
+        if c.page is not None:
+            return c
+    if eff_date:
+        c = cite_date(pages, eff_date, page_hint)
+        if c.page is not None:
+            return c
+    if raw:
+        iso = _iso(raw)
+        c = cite_date(pages, iso, page_hint) if iso else Cite(None, '', 'not_found')
+        if c.page is None:
+            c = cite_text(pages, str(raw)[:120], page_hint)
+        return c
+    return Cite(None, '', 'not_found')
+
+
+def _cite_in_docs(docs: list, value, kind: str):
+    """(doc_id, Cite) for a tenancy value: the latest instrument that prints it."""
+    if value is None:
+        return None, Cite(None, '', 'not_found')
+    for doc_id, pages in docs:
+        if kind == 'date':
+            c = cite_date(pages, value)
+        elif kind == 'amount':
+            c = cite_number(pages, value, also=[(round(float(value) * 12, 2), 'annual / 12')])
+        else:
+            c = cite_number(pages, value)
+        if c.page is not None:
+            return doc_id, c
+    return (docs[0][0] if docs else None), Cite(None, '', 'not_found')
 
 
 def _slug(name: str) -> str:
@@ -165,8 +269,10 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
     # the roster = the lease rows
     rows = build_roster(conn, property_id, as_of=as_of,
                         confirmed_commencements=_confirmations(conn, property_id))
-    t_lease, t_chain, t_step, t_opt = [], [], [], []
-    step_id = opt_id = 0
+    t_lease, t_chain, t_step, t_opt, t_fact = [], [], [], [], []
+    step_id = opt_id = fact_id = 0
+    doc_sha = {d['id']: d.get('file_hash') for d in docs}
+    doc_method = {d['id']: ('ocr' if d.get('is_scanned') else 'text') for d in docs}
     for row in rows:
         lease_id = row.key or _slug(row.tenant)
         tenant_key = _slug(row.tenant.split(' / ')[0])
@@ -201,22 +307,44 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
             bounds = [(a, b) for a, b, _, _ in cite.spans]
             _anchor(rel, row.commencement, row.expiration_lease, text, bounds)
             dated = parse_dated_rows(text)
+            anchor = (f'counted from commencement {row.commencement.isoformat()} '
+                      f'({row.commencement_source or "source not recorded"})') if row.commencement else \
+                'counted from a commencement the paper does not date'
             for x in dated:
                 step_id += 1
                 d, p = cite.at(x.pos)
+                c = _cite_amount(pages_by_doc.get(d, []), x.monthly, x.annual, p)
                 t_step.append((step_id, lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
-                               x.annual, 'dated', 0, d, p))
+                               x.annual, 'dated', 0, d, c.page or p)
+                              + _cite_cols(c, d, doc_sha, doc_method, 'printed', 'amount'))
             for x in rel:
                 opt = int(_is_option_table(text, x.pos))
                 d, p = cite.at(x.pos)
+                c = _cite_amount(pages_by_doc.get(d, []), x.monthly, x.annual, p)
                 if x.start and x.end:
                     step_id += 1
                     t_step.append((step_id, lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
-                                   x.annual, x.label, opt, d, p))
+                                   x.annual, x.label, opt, d, c.page or p)
+                                  + _cite_cols(c, d, doc_sha, doc_method, f'computed: {x.label} {anchor}',
+                                               'amount'))
                 elif opt:
                     opt_id += 1
                     t_opt.append((opt_id, lease_id, 'option_rent_table', x.label, x.monthly, x.annual,
-                                  None, d, p))
+                                  None, d, c.page or p)
+                                 + _cite_cols(c, d, doc_sha, doc_method, None, 'amount'))
+        # tenancy facts: each value the lease row states, with the words it came from
+        search_docs = list(reversed(kept_docs)) or list(reversed(doc_list))
+        for field, value, kind in (('sf', row.square_feet, 'number'),
+                                   ('commencement', row.commencement, 'date'),
+                                   ('expiration', row.expiration_lease, 'date'),
+                                   ('base_rent_monthly', row.monthly_rent, 'amount')):
+            fact_id += 1
+            d, c = _cite_in_docs(search_docs, value, kind)
+            note = {'sf': None, 'commencement': row.commencement_source,
+                    'expiration': None, 'base_rent_monthly': row.rent_method}[field]
+            t_fact.append((fact_id, lease_id, field, value.isoformat() if hasattr(value, 'isoformat') else value,
+                           note, d, c.page)
+                          + _cite_cols(c, d, doc_sha, doc_method, None, field, missing_value=value is None))
 
     # provisions: extracted terms + segmented clauses of the roster's documents
     t_prov = []
@@ -231,12 +359,15 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
             if r[0] not in lease_doc_ids:
                 continue
             prov_id += 1
+            c = _cite_term(pages_by_doc.get(r[0], []), r[3], r[4], r[6], r[9])
             t_prov.append((prov_id, doc_lease[r[0]], r[0], 'term', r[1], r[2], r[3], r[4], r[5],
-                           r[6], r[7], r[8], r[9], r[10]))
+                           r[6], r[7], r[8], c.page or r[9], r[10])
+                          + _cite_cols(c, r[0], doc_sha, doc_method, None, 'value'))
             if r[1] in ('renewal_options', 'renewal_option'):
                 opt_id += 1
                 t_opt.append((opt_id, doc_lease[r[0]], 'renewal_option_statement', r[3], None, None,
-                              r[9], r[0], r[9]))
+                              r[9], r[0], c.page or r[9])
+                             + _cite_cols(c, r[0], doc_sha, doc_method, None, 'value'))
     except sqlite3.Error:
         pass
     try:
@@ -246,8 +377,11 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
             if r[0] not in lease_doc_ids:
                 continue
             prov_id += 1
+            pg = pages_by_doc.get(r[0], [])
+            c = _cite_heading(pg, r[3] or '', r[2] or '', r[5])
             t_prov.append((prov_id, doc_lease[r[0]], r[0], 'clause', r[1], r[3], r[4], None, None,
-                           None, None, r[2], r[5], r[6]))
+                           None, None, r[2], c.page or r[5], r[6])
+                          + _cite_cols(c, r[0], doc_sha, doc_method, None, 'heading'))
     except sqlite3.Error:
         pass
     conn.close()
@@ -265,12 +399,14 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None)
                              'instrument_start'], t_chain),
         'cap_lease_rent_step': (['step_id', 'lease_id', 'period_from', 'period_to', 'monthly_amount',
                                  'annual_amount', 'basis', 'is_option_period', 'source_doc_id',
-                                 'source_page'], t_step),
+                                 'source_page'] + CITE_COLS, t_step),
         'cap_lease_provision': (['prov_id', 'lease_id', 'doc_id', 'kind', 'category', 'label', 'value_raw',
                                  'value_numeric', 'unit', 'effective_date', 'expiration_date',
-                                 'section_ref', 'source_page', 'confidence'], t_prov),
+                                 'section_ref', 'source_page', 'confidence'] + CITE_COLS, t_prov),
         'cap_lease_option': (['opt_id', 'lease_id', 'kind', 'detail', 'monthly_amount', 'annual_amount',
-                              'source_page_hint', 'source_doc_id', 'source_page'], t_opt),
+                              'source_page_hint', 'source_doc_id', 'source_page'] + CITE_COLS, t_opt),
+        'cap_lease_fact': (['fact_id', 'lease_id', 'field', 'value', 'value_source', 'source_doc_id',
+                            'source_page'] + CITE_COLS, t_fact),
     }
 
 

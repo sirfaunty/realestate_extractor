@@ -89,7 +89,7 @@ def main():
     test('manifest names the generation db and every table',
          os.path.exists(os.path.join(out, man['database'])) and set(man['tables']) == {
              'cap_document', 'cap_page_text', 'cap_lease_lease', 'cap_lease_chain', 'cap_lease_rent_step',
-             'cap_lease_provision', 'cap_lease_option'})
+             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact'})
     test('HANDOFF, SOURCE_PATH, BOUNDARY_CONTRACT and the door reader are in the package',
          all(os.path.exists(os.path.join(out, f)) for f in
              ('HANDOFF.txt', 'SOURCE_PATH.txt', 'BOUNDARY_CONTRACT.md', 'door/_cap_door.py')))
@@ -134,6 +134,35 @@ def main():
     test('the amendment table counts from its own effective date',
          any(s_['period_from'] == '2026-07-01' and s_['monthly_amount'] == 2500.0 for s_ in steps))
     test('a table not declared in HANDOFF.txt is refused', refused)
+
+    print('\nCitations')
+    import sqlite3  # noqa: E402
+    cc = sqlite3.connect(os.path.join(out, man['database']))
+    cc.row_factory = sqlite3.Row
+    page = {(r['doc_id'], r['page_no']): r['text'] for r in cc.execute('SELECT * FROM cap_page_text')}
+    norm = lambda t: ' '.join((t or '').split()).lower()  # noqa: E731
+    steps_c = cc.execute('SELECT * FROM cap_lease_rent_step').fetchall()
+    test('every rent step quotes its page verbatim, and the quote prints its amount',
+         steps_c and all(s_['quote'] and norm(s_['quote']) in norm(page[(s_['source_doc_id'], s_['source_page'])])
+                         and f"{s_['monthly_amount']:,.2f}" in s_['quote'] for s_ in steps_c))
+    test('every step carries the document sha256',
+         all(s_['source_sha256'] == 'f' * 64 for s_ in steps_c))
+    lease_year = [s_ for s_ in steps_c if s_['period_from'] == '2022-07-01']
+    test('a Lease Year period is computed and names the commencement it was counted from',
+         lease_year and lease_year[0]['period_basis'].startswith('computed:')
+         and '2022-07-01' in lease_year[0]['period_basis'] and lease_year[0]['value_basis'] == 'printed')
+    facts = {(f['lease_id'], f['field']): f for f in cc.execute('SELECT * FROM cap_lease_fact')}
+    sf = next(f for (lid, fld), f in facts.items() if fld == 'sf' and f['value'] == 2400)
+    test('the tenancy SF is quoted from the lease ("2,400" on page 1)',
+         sf['quote'] == '2,400' and sf['source_page'] == 1)
+    com = next(f for (lid, fld), f in facts.items() if fld == 'commencement' and f['value'] == '2022-07-01')
+    test('the commencement is quoted where it is printed ("July 1, 2022")', 'July 1, 2022' in com['quote'])
+    empty = [f for f in facts.values() if f['value'] is None]
+    test('a field the paper does not state has no quote and says why',
+         empty and all(f['quote'] is None and f['null_reason'] for f in empty))
+    term = cc.execute("SELECT * FROM cap_lease_provision WHERE category='base_rent'").fetchone()
+    test('an extracted term quotes the words its value came from', '2,000.00' in term['quote'])
+    cc.close()
 
     print('\nTorn publish')
     os.remove(os.path.join(out, 'PUBLISH_MANIFEST.json'))
