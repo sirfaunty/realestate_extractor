@@ -78,6 +78,7 @@ class Hit:
     category: str
     page: int
     excerpt: str            # verbatim slice of the page
+    quote: str = ''         # the matched words with a few either side, on one line (a short verbatim slice)
 
 
 def _is_toc(page: str) -> bool:
@@ -226,5 +227,14 @@ def sweep(pages: list) -> list[Hit]:
                 a += 1
             while b < len(page) and not page[b].isspace() and b > m.end():
                 b -= 1
-            out.append(Hit(name, n, page[a:b].strip()))
+            ls = page.rfind(chr(10), 0, m.start()) + 1
+            le = page.find(chr(10), m.end())
+            le = len(page) if le < 0 else le
+            qa, qb = m.start(), m.end()
+            for _ in range(3):                       # up to three words either side, same line
+                k = page.rfind(' ', ls, max(ls, qa - 1))
+                qa = ls if k < 0 else k + 1
+                k = page.find(' ', min(le, qb + 1), le)
+                qb = le if k < 0 else k
+            out.append(Hit(name, n, page[a:b].strip(), page[qa:qb].strip()))
     return out

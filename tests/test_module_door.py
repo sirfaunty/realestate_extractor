@@ -89,7 +89,7 @@ def main():
     test('manifest names the generation db and every table',
          os.path.exists(os.path.join(out, man['database'])) and set(man['tables']) == {
              'cap_document', 'cap_page_text', 'cap_lease_lease', 'cap_lease_chain', 'cap_lease_rent_step',
-             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact', 'cap_ner_deal', 'cap_ner_cost_line'})
+             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact', 'cap_ner_deal', 'cap_ner_cost_line', 'cap_lease_event'})
     test('HANDOFF, SOURCE_PATH, BOUNDARY_CONTRACT and the door reader are in the package',
          all(os.path.exists(os.path.join(out, f)) for f in
              ('HANDOFF.txt', 'SOURCE_PATH.txt', 'BOUNDARY_CONTRACT.md', 'door/_cap_door.py')))

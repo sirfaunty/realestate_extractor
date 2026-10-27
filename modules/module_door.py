@@ -45,6 +45,7 @@ from ..extractors.rent_derivation import (
     _anchor, _instrument_start, _is_option_table, parse_dated_rows, parse_rent_schedule)
 from ..extractors.articles import split_articles, sweep
 from ..extractors.citation import Cite, cite_date, cite_number, cite_text
+from ..extractors.instruments import split_instruments
 from ..extractors.ner_sheet import parse_ner
 from ..extractors.second_read import in_read, load_reads
 from ..lease_roster import _pages, build_roster
@@ -64,6 +65,7 @@ TABLES = {
     'cap_lease_rent_step': ('step_id', 'every rent row placed in time from the instruments: period, monthly, annual, basis, option flag; cited'),
     'cap_lease_provision': ('prov_id', 'every extracted term and segmented clause with its page and confidence'),
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
+    'cap_lease_event': ('event_id', "every instrument of every tenancy (lease, amendment, assignment, guaranty, estoppel, ...), typed, dated by its own date with the words it was read from, its recited dates kept apart"),
     'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
     'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line"),
     'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
@@ -233,8 +235,9 @@ def _file_pages(doc: dict, pages: list) -> list:
 
 
 def _opening(pages: list, a) -> str:
-    """An article's quote: its opening words as they stand on its first page
-    (a slice of that page, up to 200 characters, never across a page)."""
+    """An article's quote: its heading line as it stands on its first page
+    (a short slice of that page, up to 80 characters, never across a page):
+    short so another reading of the page still prints it."""
     if not a.page_from or a.page_from > len(pages):
         return ''
     page = pages[a.page_from - 1] or ''
@@ -244,7 +247,13 @@ def _opening(pages: list, a) -> str:
         i = page.find(a.body[:20]) if len(a.body) >= 20 else -1
     if i < 0:
         return ''
-    return page[i:i + 200].rsplit(' ', 1)[0].strip() if len(page) - i > 200 else page[i:].strip()
+    end = page.find(chr(10), i)
+    end = len(page) if end < 0 else end
+    if end - i < 12:                       # a bare "ARTICLE 3": take its title line too
+        nxt = page.find(chr(10), end + 1)
+        end = len(page) if nxt < 0 else nxt
+    q = page[i:min(end, i + 80)]
+    return (q.rsplit(' ', 1)[0] if end > i + 80 and ' ' in q else q).strip()
 
 
 def _read_agreement(conn, reads_db) -> dict:
@@ -512,6 +521,25 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         pass
     conn.close()
 
+    # events: every instrument of every tenancy document, typed, dated by its
+    # OWN date (never a date it recites), cited to the words it was read from
+    t_event = []
+    event_id = 0
+    for row in rows:
+        lid = row.key or _slug(row.tenant)
+        seq = 0
+        for i in row.doc_ids:
+            for ins in split_instruments(pages_by_doc.get(i, [])):
+                seq += 1
+                event_id += 1
+                c = Cite(ins.date_page, ins.date_quote, 'printed') if ins.date else Cite(None, '', 'not_found')
+                cols = _cite_cols(c, i, doc_sha, doc_method, ins.date_basis or None, 'instrument date')
+                if not ins.date:
+                    cols = cols[:5] + (ins.date_null_reason,)
+                t_event.append((event_id, lid, seq, i, ins.event_type, ins.ordinal, ins.title or None,
+                                ins.page_from, ins.page_to, ins.date, ins.date_page,
+                                '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols)
+
     # NER deal sheets: every printed field with the line it is on, every cost
     # line, and the tie of the cost lines to the sheet's printed total
     t_ner, t_ner_cost = [], []
@@ -555,7 +583,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                           + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'article'))
         for h in sweep(pg):
             prov_id += 1
-            c = Cite(h.page, h.excerpt, 'printed')
+            c = Cite(h.page, h.quote or h.excerpt, 'printed')
             t_prov.append((prov_id, lid, d['id'], 'sweep', h.category, None, h.excerpt, None, None, None, None,
                            None, h.page, None, h.page)
                           + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'excerpt'))
@@ -584,6 +612,9 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                               'source_page_hint', 'source_doc_id', 'source_page'] + CITE_COLS, t_opt),
         'cap_lease_fact': (['fact_id', 'lease_id', 'field', 'value', 'value_source', 'source_doc_id',
                             'source_page'] + CITE_COLS, t_fact),
+        'cap_lease_event': (['event_id', 'lease_id', 'seq', 'source_doc_id', 'event_type', 'ordinal', 'title',
+                             'page_from', 'page_to', 'event_date', 'source_page', 'recited_dates'] + CITE_COLS,
+                            t_event),
         'cap_ner_deal': (['ner_id', 'lease_id', 'source_doc_id', 'source_page', 'version_date', 'deal_type', 'tenant',
                           'use', 'space', 'sqft', 'term_years', 'total_contract_rent', 'allowance_total',
                           'leasing_fee', 'cobroker_fee', 'printed_total_landlord_expense', 'cost_lines_sum',
