@@ -1179,6 +1179,37 @@ def derive_current_rent(*, as_of: date,
     #    28-year-old Year 1 x 1.10^28, seven times the rent its extension
     #    table ended at -- the amount the rent roll still bills)
     placed = list(dated) + [r for r in rows if r.start and r.end]
+    # 2c. every placed row has ended, but the rent roll's lease runs on (its
+    #     end is still ahead): the latest lease-year table on paper is the
+    #     current term's, counted from the wrong start (an amendment's table
+    #     dated from the original commencement). Its last row ends the term:
+    #     date it back from the roll's lease end -- medium, flagged
+    if placed and max(r.end for r in placed) < as_of and term_end and term_end > as_of:
+        rel_tables = sorted({x.table for x in rows if not x.label.startswith('term ')
+                             and not _is_option_table(flat, x.pos)}, key=lambda t: max(x.pos for x in rows if x.table == t))
+        if rel_tables:
+            t = rel_tables[-1]
+            trs = [x for x in rows if x.table == t]
+
+            def off(x):              # offsets by the row's own label, without a dating tag
+                return _offsets(ScheduleRow(x.monthly, x.annual, label=x.label.split(' [')[0]))
+            try:
+                span = max(off(x)[1] for x in trs)
+            except (ValueError, IndexError):
+                span = None
+            if span:
+                a = add_months(term_end + timedelta(days=1), -span)
+                cov = []
+                for x in trs:
+                    s0, e0 = off(x)
+                    st, en = add_months(a, s0), add_months(a, e0) - timedelta(days=1)
+                    if st <= as_of <= en:
+                        cov.append((x, st, en))
+                if cov:
+                    x, st, en = max(cov, key=lambda c: (c[1], c[0].pos))
+                    return RentResult(x.monthly, 'schedule', 'medium', flags + ['dated_back_from_roll_end'],
+                                      f'{len(trs)}-row schedule dated back from the rent roll\'s lease end '
+                                      f'{term_end}, row {x.label.split(" [")[0]} ({st}..{en})')
     if placed and max(r.end for r in placed) < as_of:
         last = max(placed, key=lambda x: (x.end, x.pos))
         return RentResult(last.monthly, 'last_scheduled', 'low', flags + ['after_schedule_end'],

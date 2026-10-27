@@ -808,6 +808,22 @@ def test_payment_start_after_free_months_dates_the_first_paid_row():
     assert all(r.anchor == date(2023, 5, 1) for r in parse_rent_schedule(t2))
 
 
+
+def test_table_ended_before_today_is_dated_back_from_the_roll_lease_end():
+    # an amendment's lease-year table counted from the original 2010
+    # commencement ends in 2015; the rent roll's lease runs to 2027-08-31, so
+    # the table is the current term's: dated back, Year 3 covers mid-2026
+    t = ("Minimum Rent. Tenant shall pay Minimum Rent as follows: PERIOD ANNUAL RENT MONTHLY RENT "
+         "Lease Year 1 $24,000.00 $2,000.00 Lease Year 2 $24,720.00 $2,060.00 Lease Year 3 $25,461.60 $2,121.80 "
+         "Lease Year 4 $26,225.45 $2,185.45 Lease Year 5 $27,012.21 $2,251.02")
+    r = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2010, 9, 1), schedule_text=t,
+                            term_end=date(2027, 8, 31))
+    assert r.monthly == 2185.45 and 'dated_back_from_roll_end' in r.flags and r.confidence == 'medium', r
+    # without a roll lease end the last scheduled rent stays the answer
+    r2 = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2010, 9, 1), schedule_text=t)
+    assert r2.method == 'last_scheduled', r2
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
