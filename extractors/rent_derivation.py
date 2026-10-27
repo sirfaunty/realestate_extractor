@@ -303,7 +303,9 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
         out = _named_term_rows(flat, sf)
     for t in {r.table for r in out}:
         trs = [r for r in out if r.table == t]
-        a = _table_anchor(flat, trs[0].pos, trs[-1].pos)
+        # free months printed as a $0.00 row just before the first paid row
+        free = bool(re.search(r'\$\s*0(?:\.00)?(?![\d,.])', flat[max(0, trs[0].pos - 80):trs[0].pos]))
+        a = _table_anchor(flat, trs[0].pos, trs[-1].pos, free)
         for r in trs:
             r.anchor = a
     return out
@@ -456,7 +458,7 @@ def _instrument_start(doc_flat: str) -> Optional[date]:
     return None
 
 
-def _table_anchor(flat: str, first: int, last: int) -> Optional[date]:
+def _table_anchor(flat: str, first: int, last: int, free: bool = False) -> Optional[date]:
     """A relative table's own start date, if the text states it.
 
     1. the Lease-Year-1 definition next to the table (usually right AFTER
@@ -477,6 +479,16 @@ def _table_anchor(flat: str, first: int, last: int) -> Optional[date]:
         e = parse_date(m.group(1))
         if e:
             return add_months(e + timedelta(days=1), -12)
+    # a table that opens with free months ("Months 1-4 $0.00"): its month 1 is
+    # the term the instrument just defined ("extended ... starting on September
+    # 1, 2021 and ending on ..."). The payment sentence after it may name the
+    # first PAID month instead, which leases draft both ways.
+    if free:
+        ms = list(re.finditer(r'(?i)(?:starting|commencing|beginning)\s+(?:on\s+)?(' + _D + r')\s*,?\s*'
+                              r'(?:and|through)\s+(?:ending|expiring|terminating|continuing)',
+                              flat[max(0, first - 1000):first]))
+        if ms:
+            return parse_date(ms[-1].group(1))
     # the payment sentence that closes an amendment table: "Monthly
     # installments ... during the Extended Term, beginning on November 1, 2017"
     m = re.search(r'(?i)installments[^.]{0,220}?\b(?:beginning|commencing|starting)'

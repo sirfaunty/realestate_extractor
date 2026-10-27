@@ -12,7 +12,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
-from realestate_extractor.extractors.instruments import classify, split_instruments  # noqa: E402
+from realestate_extractor.extractors.instruments import classify, recited_dates, split_instruments  # noqa: E402
 
 passed = failed = 0
 
@@ -64,6 +64,24 @@ test('estoppel, SNDA and commencement letters are their own types',
      and classify('COMMENCEMENT DATE AGREEMENT')[0] == 'commencement')
 test('a file with no title is one unclassified instrument',
      [i.event_type for i in split_instruments(['some text about the premises'])] == ['lease document (unclassified)'])
+
+PKT = ["FIRST AMENDMENT TO LEASE\nThis First Amendment is made as of the ___ day of ______, 2019 by Elm Partners LLC "
+       "and Bean Coffee Inc.",
+       "GUARANTY\nThe undersigned guarantees the obligations of Bean Coffee Inc under the Lease.",
+       "SECOND AMENDMENT TO LEASE\nThis Second Amendment is effective as of March 1, 2022. RECITALS: Landlord and "
+       "Tenant are parties to the Lease dated May 6, 2015, as amended by the First Amendment to Lease dated June 3, "
+       "2019, and guaranteed pursuant to the Guaranty dated May 6, 2015.",
+       "THIRD AMENDMENT TO LEASE\nThis Third Amendment is effective as of April 1, 2024. RECITALS: the Lease, as "
+       "amended by the First Amendment to Lease dated June 3, 2091 (an OCR slip for 2019)."]
+pk = split_instruments(PKT)
+rd = recited_dates([(7, pk)])
+test('an undated amendment takes the date a later instrument in the same file recites for it',
+     rd.get((7, 0), ('',))[0] == '2019-06-03' and rd[(7, 0)][3] == 7)
+test("the file's one undated guaranty takes its recited date", rd.get((7, 1), ('',))[0] == '2015-05-06')
+test('a dated instrument is never re-dated', (7, 2) not in rd and (7, 3) not in rd)
+two = split_instruments(PKT[:2] + ["GUARANTY\nThe second guarantor guarantees the Lease."] + PKT[2:])
+test('two undated guaranties stay undated (the recital cannot say which)',
+     not any(two[k].event_type == 'guaranty' for (_, k) in recited_dates([(7, two)])))
 
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

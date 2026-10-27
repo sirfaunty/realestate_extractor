@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.database import Database  # noqa: E402
-from realestate_extractor.modules.module_door import publish_property_door  # noqa: E402
+from realestate_extractor.modules.module_door import publish_property_door, verify_quotes  # noqa: E402
 
 passed = failed = 0
 
@@ -61,7 +61,9 @@ def main():
     pid = db.create_property('Elm Court', property_type='retail')
     docs = {}
     OTHER = ["LEASE AGREEMENT between Elm Partners LLC, as Landlord, and River Dental PA, as Tenant, "
-             "for Suite 220 at Elm Court, 1,800 square feet. Base Rent: $3,000.00 per month."]
+             "for Suite 220 at Elm Court, 1,800 square feet. Base Rent: $3,000.00 per month.",
+             "4. Base Rent. Tenant shall pay Base Rent as follows:\nPERIOD ANNUAL RENT MONTHLY RENT\n"
+             "Months 1-12 $36,000.00 $3,000.00\nMonths 13-24 $37,080.00 $3,090.00"]
     for name, pages in (('EC-BeanCoffee-Lease.pdf', LEASE), ('EC-BeanCoffee-1st Amendment.pdf', AMENDMENT),
                         ('EC-BeanCoffee-NERS.pdf', NER), ('EC-RiverDental-Lease.pdf', OTHER)):
         did = db.insert_document(name, os.path.join(tmp, name), 'lease', auto_create_property=False)
@@ -131,6 +133,9 @@ def main():
     test('rent steps are placed in time and cite document + page',
          len(steps) >= 5 and all(s_['source_doc_id'] and s_['source_page'] for s_ in steps)
          and any(s_['period_from'] == '2022-07-01' and s_['monthly_amount'] == 2000.0 for s_ in steps))
+    test('a table no date places is published with its printed amounts, period blank, and says why',
+         any(s_['period_from'] is None and s_['monthly_amount'] == 3090.0 and s_['lease_id'] == 'fn:riverdental'
+             and (s_['period_basis'] or '').startswith('unplaced') and s_['source_page'] == 2 for s_ in steps))
     test('the amendment table counts from its own effective date',
          any(s_['period_from'] == '2026-07-01' and s_['monthly_amount'] == 2500.0 for s_ in steps))
     test('a table not declared in HANDOFF.txt is refused', refused)
@@ -162,9 +167,11 @@ def main():
          empty and all(f['quote'] is None and f['null_reason'] for f in empty))
     terms = cc.execute('SELECT * FROM cap_lease_term').fetchall()
     lease_term = [t for t in terms if t['instrument_type'] == 'original lease']
-    test('a lease term is computed from the instrument rent rows: start, expiry, PSF, escalation',
+    test('a lease term: the start as printed, the expiry, PSF and escalation from its rent rows',
          lease_term and lease_term[0]['lease_start'] == '2022-07-01' and lease_term[0]['start_rent_psf'] == 10.0
-         and lease_term[0]['avg_escalation_pct'] == 3.0 and lease_term[0]['source_term'].startswith('computed'))
+         and lease_term[0]['avg_escalation_pct'] == 3.0 and lease_term[0]['lease_expiry'] == '2027-06-30'
+         and lease_term[0]['source_term'].startswith('printed: Commencement Date shall be July 1, 2022')
+         and 'computed from 5 rent rows' in lease_term[0]['source_term'])
     term = cc.execute("SELECT * FROM cap_lease_provision WHERE category='base_rent'").fetchone()
     test('an extracted term quotes the words its value came from', '2,000.00' in term['quote'])
     cc.close()
@@ -220,6 +227,20 @@ def main():
     test('a republish leaves exactly one generation db, the one the manifest names',
          [f for f in os.listdir(gout) if f.endswith('.db')] == [again['database']]
          and again['database'] != gman['database'])
+
+    print('\nPre-publish quote gate')
+    cols = ['row_id', 'source_doc_id', 'source_page', 'source_sha256', 'quote', 'quote_page_method',
+            'value_basis', 'period_basis', 'null_reason']
+    gated = verify_quotes({
+        'cap_document': (['doc_id', 'filename', 'sha256'], [(1, 'a.pdf', 'a' * 64)]),
+        'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read', 'read_agreement'],
+                          [(1, 1, 'ocr', 40, 'Base Rent shall be\n$2,000.00 per month', 'Base Rent $2,O00.00', None)]),
+        'cap_x': (cols, [(1, 1, 1, 'a' * 64, 'Base Rent shall be $2,000.00', 'ocr', 'printed', None, None),
+                         (2, 1, 1, 'a' * 64, '$3,000.00 per month', 'ocr', 'printed', None, None)])})['cap_x'][1]
+    test('a quote its page prints (across a line break) passes the gate',
+         gated[0][4] == 'Base Rent shall be $2,000.00' and gated[0][8] is None)
+    test('a quote its page does not print is withheld, and the row says why',
+         gated[1][4] is None and gated[1][5] is None and 'withheld' in gated[1][8])
 
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{passed} passed, {failed} failed')

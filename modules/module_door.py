@@ -40,13 +40,14 @@ import sqlite3
 import uuid
 from datetime import date, datetime
 
-from ..extractors.document_family import archived_hint, assemble_rent_chain, rent_chain_family
+from ..extractors.document_family import archived_hint, assemble_rent_chain, rent_chain_family, worksheet_page
 from ..extractors.rent_derivation import (
     _anchor, _instrument_start, _is_option_table, parse_dated_rows, parse_rent_schedule)
 from ..extractors.articles import split_articles, sweep
 from ..extractors.citation import Cite, cite_date, cite_number, cite_text
 from ..extractors.exhibits import find_exhibits
-from ..extractors.instruments import split_instruments
+from ..extractors.instrument_terms import instrument_term
+from ..extractors.instruments import recited_dates, split_instruments
 from ..extractors.ner_sheet import parse_ner
 from ..extractors.options import find_options
 from ..extractors.second_read import in_read, load_reads
@@ -69,7 +70,7 @@ TABLES = {
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
     'cap_lease_event': ('event_id', "every instrument of every tenancy (lease, amendment, assignment, guaranty, estoppel, ...), typed, dated by its own date with the words it was read from, its recited dates kept apart"),
     'cap_lease_exhibit': ('exhibit_id', 'every exhibit, rider or addendum attached to an instrument: label, title as printed, pages, the instrument it is filed in'),
-    'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry, years, SF, starting and ending rent PSF and average escalation computed from its own rent rows, with the nearest deal sheet economics'),
+    'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry and years as it prints them (else computed from its own rent rows), SF, starting and ending rent PSF and average escalation from its rent rows, with the nearest deal sheet economics'),
     'cap_option_register': ('optreg_id', 'every renewal / extension option granted or deleted in a tenancy instrument: count, years each, notice window, rent basis, cited'),
     'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
     'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line"),
@@ -91,6 +92,49 @@ def _cite_cols(c: Cite, doc_id, doc_sha: dict, doc_method: dict, period_basis, w
     return (doc_sha.get(doc_id), c.quote, method, c.basis, period_basis, None)
 
 
+def _norm(s: str) -> str:
+    return re.sub(r'\s+', ' ', s or '').strip().lower()
+
+
+def _loose(s: str) -> str:
+    return re.sub(r'[^0-9a-z]', '', (s or '').lower())
+
+
+def verify_quotes(tables: dict) -> dict:
+    """The pre-publish gate: every quote must be found again, word for word
+    (up to spacing and case; or letters and digits alone), on the page it
+    cites -- in our text of that page or its second read. A quote that is
+    not is withdrawn and the row says so: no row leaves with a quote its own
+    page does not print."""
+    pages = {}
+    for r in tables['cap_page_text'][1]:
+        pages[(r[0], r[1])] = (r[4] or '') + ' ' + (r[5] or '')
+    sha_docs = {}
+    for r in tables['cap_document'][1]:
+        sha_docs.setdefault(r[2], set()).add(r[0])
+    for name, (cols, rows) in tables.items():
+        if 'quote' not in cols or 'source_page' not in cols:
+            continue
+        ix = {c: i for i, c in enumerate(cols)}
+        for k, r in enumerate(rows):
+            q, page = r[ix['quote']], r[ix['source_page']]
+            if not q:
+                continue
+            # the cited document: the one the row names, or any copy with the cited sha256
+            docs = set(sha_docs.get(r[ix['source_sha256']], ()))
+            for c in ('source_doc_id', 'doc_id'):
+                if c in ix and r[ix[c]] is not None:
+                    docs.add(r[ix[c]])
+            texts = [pages.get((d, page), '') for d in docs]
+            if any(_norm(q) in _norm(t) or (len(_loose(q)) >= 4 and _loose(q) in _loose(t)) for t in texts):
+                continue
+            r = list(r)
+            r[ix['quote']] = r[ix['quote_page_method']] = None
+            r[ix['null_reason']] = 'quote not found again on its cited page; withheld for review'
+            rows[k] = tuple(r)
+    return tables
+
+
 def _cite_amount(pages: list, monthly, annual, page_hint) -> Cite:
     """A rent amount: the monthly figure where printed, else the annual one
     it is computed from (or the reverse)."""
@@ -105,7 +149,10 @@ def _cite_heading(pages: list, label: str, section_ref: str, page_hint) -> Cite:
     """A segmented clause: the label is '<Section N>: <Heading>' as the
     segmenter names it; the page prints the heading (and maybe its number).
     A preamble has no heading: its opening line is the quote."""
-    head = label.split(':', 1)[1].strip() if ':' in label else label
+    # 'Article 13, Section 5: <heading>', 'sublease: Section 10.1: <heading>'
+    head = re.sub(r'^\s*(?:[a-z][a-z /]{0,30}:\s*)?(?:(?:article|section)\s+[\w.]+\s*,?\s*)+:\s*', '', label, flags=re.I)
+    if head == label:
+        head = label.split(':', 1)[1].strip() if ':' in label else label
     if head.startswith('(') or not head:
         hint = page_hint if page_hint and 1 <= page_hint <= len(pages) else 1
         for p in [hint] + [i for i in range(1, len(pages) + 1) if i != hint]:
@@ -114,6 +161,14 @@ def _cite_heading(pages: list, label: str, section_ref: str, page_hint) -> Cite:
                 return Cite(p, line[:140], 'printed' if p == page_hint else 'moved')
         return Cite(None, '', 'not_found')
     c = cite_text(pages, head, page_hint)
+    # a clause named by its opening words, cut mid-word ("If TENANT fails to
+    # comply with the r"): the words before the cut, then the first six
+    # (four at least, so a stray phrase never matches)
+    toks = re.findall(r'[A-Za-z0-9]+', head)[:12]
+    for k in (len(toks) - 1, 6):
+        if c.page is not None or k < 4 or k >= len(toks):
+            continue
+        c = cite_text(pages, ' '.join(toks[:k]), page_hint)
     if c.page is None and section_ref and not section_ref.lower().startswith(('section', 'preamble')):
         c = cite_text(pages, section_ref, page_hint)
     return c
@@ -383,7 +438,10 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         tenant_key = (km.tenant_key if km and km.tenant_key else source_key)
         doc_list = [(i, pages_by_doc.get(i, [])) for i in row.doc_ids]
         sel = assemble_rent_chain([(fn, pg) for (i, pg), fn in zip(doc_list, row.filenames)])
-        kept_docs = [doc_list[i] for i in sel.kept]
+        # the derivation's own text: worksheet / summary pages stapled into an instrument
+        # are left out (blanked here, so page numbers stay the file's)
+        kept_docs = [(doc_list[i][0], ['' if worksheet_page(x) else x for x in doc_list[i][1]])
+                     for i in sel.kept]
         # chain rows: kept instruments in chain order, then what was left out
         seq = 0
         for i in sel.kept:
@@ -435,49 +493,59 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                     return "counted from the rent roll's current-term start " + (
                         row.commencement.isoformat() if row.commencement else '')
                 return 'counted from ' + comm_txt
-            seen_steps = set()      # one row per (period, amount): a table read twice is one schedule
+            # one row per (period, amount): a table read twice is one schedule, cited where
+            # the chain reads it first (an archived copy goes first; measured 2026-10-27,
+            # citing the current file instead verified fewer quotes on the KA text of record)
+            seen_steps = set()
+
+            def add_step(sk, rest):
+                nonlocal step_id
+                if sk not in seen_steps:
+                    seen_steps.add(sk)
+                    step_id += 1
+                    t_step.append((step_id,) + rest)
+
             for x in dated:
                 sk = (x.start, x.end, round(x.monthly or 0, 2))
-                if sk in seen_steps:
-                    continue
-                seen_steps.add(sk)
-                step_id += 1
                 d, p = cite.at(x.pos)
                 c = cite_reads(d, _cite_amount, x.monthly, x.annual, p)
-                t_step.append((step_id, lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
-                               x.annual, 'dated', 0, d, c.page or p)
-                              + _cite_cols(c, d, doc_sha, doc_method, 'printed', 'amount'))
+                add_step(sk, (lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
+                              x.annual, 'dated', 0, d, c.page or p)
+                         + _cite_cols(c, d, doc_sha, doc_method, 'printed', 'amount'))
             for x in rel:
                 opt = int(_is_option_table(text, x.pos))
                 d, p = cite.at(x.pos)
                 c = cite_reads(d, _cite_amount, x.monthly, x.annual, p)
                 if x.start and x.end:
                     sk = (x.start, x.end, round(x.monthly or 0, 2))
-                    if sk in seen_steps:
-                        continue
-                    seen_steps.add(sk)
-                    step_id += 1
                     if not opt and row.expiration_lease and x.start > row.expiration_lease:
                         # counted past the lease's own expiration: the anchor is wrong, so
                         # the period is left blank and says why (flag, don't fabricate)
-                        t_step.append((step_id, lease_id, None, None, x.monthly, x.annual, x.label, opt, d,
-                                       c.page or p)
-                                      + _cite_cols(c, d, doc_sha, doc_method,
-                                                   f'unplaced: {x.label} {anchor_of(x.label)} would start '
-                                                   f'{x.start.isoformat()}, after the lease expires '
-                                                   f'{row.expiration_lease.isoformat()}', 'amount'))
+                        add_step(sk, (lease_id, None, None, x.monthly, x.annual, x.label, opt, d, c.page or p)
+                                 + _cite_cols(c, d, doc_sha, doc_method,
+                                              f'unplaced: {x.label} {anchor_of(x.label)} would start '
+                                              f'{x.start.isoformat()}, after the lease expires '
+                                              f'{row.expiration_lease.isoformat()}', 'amount'))
                         continue
-                    t_step.append((step_id, lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
-                                   x.annual, x.label, opt, d, c.page or p)
-                                  + _cite_cols(c, d, doc_sha, doc_method, f'computed: {x.label} {anchor_of(x.label)}',
-                                               'amount'))
+                    add_step(sk, (lease_id, x.start.isoformat(), x.end.isoformat(), x.monthly,
+                                  x.annual, x.label, opt, d, c.page or p)
+                             + _cite_cols(c, d, doc_sha, doc_method, f'computed: {x.label} {anchor_of(x.label)}',
+                                          'amount'))
                 elif opt:
                     opt_id += 1
                     t_opt.append((opt_id, lease_id, 'option_rent_table', x.label, x.monthly, x.annual,
                                   None, d, c.page or p)
                                  + _cite_cols(c, d, doc_sha, doc_method, None, 'amount'))
+                else:
+                    # printed but not placed in time (a superseded instrument's table, or one
+                    # whose start the paper never dates): the amount stands, the period is blank
+                    add_step((x.label, round(x.monthly or 0, 2)),
+                             (lease_id, None, None, x.monthly, x.annual, x.label, opt, d, c.page or p)
+                             + _cite_cols(c, d, doc_sha, doc_method,
+                                          f'unplaced: {x.label}, no start date the paper or the roll gives '
+                                          f'for this table', 'amount'))
         # tenancy facts: each value the lease row states, with the words it came from
-        search_docs = list(reversed(kept_docs)) or list(reversed(doc_list))
+        search_docs = list(reversed([doc_list[i] for i in sel.kept])) or list(reversed(doc_list))
         for field, value, kind in (('sf', row.square_feet, 'number'),
                                    ('commencement', row.commencement, 'date'),
                                    ('expiration', row.expiration_lease, 'date'),
@@ -542,11 +610,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         # that prints no date of its own takes the date a LATER instrument
         # recites for it ("as amended by the Third Amendment dated ..."), and
         # says so; only when every recital of it agrees
-        recited_for = {}
-        for i, lst in ins_by_doc.items():
-            for ins in lst:
-                for t, o, d, q, pg in ins.recital_targets:
-                    recited_for.setdefault((t, o), []).append((d, q, pg, i))
+        recited = recited_dates(list(ins_by_doc.items()))
         for i in row.doc_ids:
             doc_ins = ins_by_doc[i]
             base = seq
@@ -556,18 +620,16 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                 t_exhibit.append((exhibit_id, lid, i, ex.label, ex.title or None, ex.page_from, ex.page_to,
                                   (base + ex.parent_seq) if ex.parent_seq else None)
                                  + _cite_cols(c, i, doc_sha, doc_method, None, 'exhibit'))
-            for ins in doc_ins:
+            for k, ins in enumerate(doc_ins):
                 seq += 1
                 event_id += 1
                 ev_date, ev_page, ev_doc = ins.date, ins.date_page, i
                 c = Cite(ins.date_page, ins.date_quote, 'printed') if ins.date else Cite(None, '', 'not_found')
                 basis = ins.date_basis or None
-                if not ins.date:
-                    cands = [x for x in recited_for.get((ins.event_type, ins.ordinal), []) if x[3] != i]
-                    if cands and len({x[0] for x in cands}) == 1 and (ins.ordinal or ins.event_type == 'original lease'):
-                        d, q, pg, src_doc = cands[0]
-                        ev_date, ev_page, ev_doc = d, pg, src_doc
-                        c, basis = Cite(pg, q, 'printed'), 'recited by a later instrument'
+                if (i, k) in recited:
+                    d, q, pg, src_doc = recited[(i, k)]
+                    ev_date, ev_page, ev_doc = d, pg, src_doc
+                    c, basis = Cite(pg, q, 'printed'), 'recited by a later instrument'
                 cols = _cite_cols(c, ev_doc, doc_sha, doc_method, basis, 'instrument date')
                 if not ev_date:
                     cols = cols[:5] + (ins.date_null_reason,)
@@ -623,7 +685,18 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                 continue
             ner_id += 1
             tot = ns.printed_total_landlord_expense
-            c = Cite(pno, tot.line, 'printed') if tot.line else Cite(None, '', 'not_found')
+            dpages = pages_by_doc.get(d['id'], [])
+
+            def on_line(value, line, pno=pno, dpages=dpages):
+                # the printed amount itself (a sheet's columns OCR differently line to
+                # line, so the bare value verifies where the whole line does not); the
+                # line when the amount is not printed on this page
+                if value is not None:
+                    cv = cite_number(dpages, value, pno)
+                    if cv.page == pno:
+                        return Cite(pno, cv.quote, 'printed')
+                return Cite(pno, line, 'printed') if line else Cite(None, '', 'not_found')
+            c = on_line(tot.value, tot.line)
             t_ner.append((ner_id, doc_lease.get(d['id']), d['id'], pno, ns.version_date.value, ns.deal_type.value,
                           ns.tenant.value, ns.use.value, ns.space.value, ns.sqft.value, ns.term_years.value,
                           ns.total_contract_rent.value, ns.allowance_total.value, ns.leasing_fee.value,
@@ -634,12 +707,13 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                          + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'total landlord expense',
                                       missing_value=tot.value is None and not tot.line))
             for seq, cl in enumerate(ns.cost_lines, 1):
-                cc = Cite(pno, cl.line, 'printed')
+                cc = on_line(cl.amount if cl.amount is not None else cl.budgeted, cl.line)
                 t_ner_cost.append((ner_id, seq, cl.label, cl.amount, cl.budgeted, d['id'], pno)
                                   + _cite_cols(cc, d['id'], doc_sha, doc_method, None, 'cost line'))
 
-    # lease terms: one row per term-setting instrument, computed from the
-    # rent rows cited to its pages; the nearest deal sheet of the tenancy
+    # lease terms: one row per term-setting instrument, its start / expiry /
+    # length as it prints them, else computed from the rent rows cited to its
+    # pages; the nearest deal sheet of the tenancy
     # (by version date) supplies allowance, commission and NER
     TERM_TYPES = ('original lease', 'amendment', 'extension / renewal exercised', 'expansion', 'license agreement',
                   'lease document (unclassified)')
@@ -660,16 +734,20 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             continue
         steps = sorted((st for st in step_by_doc.get(doc_id, []) if p_from <= (st[9] or 0) <= p_to and not st[7]),
                        key=lambda st: st[2])
-        if not steps:
+        # the term as the instrument prints it wins; its rent rows fill what it leaves out
+        pt = instrument_term(pages_by_doc.get(doc_id, []), p_from, p_to)
+        if not steps and not (pt.start or pt.end):
             continue
         term_id += 1
-        start, end = steps[0][2], max(st[3] for st in steps)
-        years = round((date.fromisoformat(end) - date.fromisoformat(start)).days / 365.25, 1)
+        start = pt.start or (steps[0][2] if steps else None)
+        end = pt.end or (max(st[3] for st in steps) if steps else None)
+        years = (round(pt.months / 12, 1) if pt.months else
+                 round((date.fromisoformat(end) - date.fromisoformat(start)).days / 365.25, 1) if start and end else None)
         sf = sf_of.get(lid)
         psf = (lambda m: round(m * 12 / sf, 2) if sf else None)
-        p0, p1 = psf(steps[0][4]), psf(steps[-1][4])
+        p0, p1 = (psf(steps[0][4]), psf(steps[-1][4])) if steps else (None, None)
         esc = None
-        if len(steps) > 1 and steps[0][4] and steps[-1][4] and years >= 1:
+        if len(steps) > 1 and steps[0][4] and steps[-1][4] and (years or 0) >= 1:
             esc = round(((steps[-1][4] / steps[0][4]) ** (1 / max(1, len(steps) - 1)) - 1) * 100, 2)
         ner = None
         if ner_by_lease.get(lid):
@@ -680,13 +758,27 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                 except (TypeError, ValueError):
                     return 10 ** 6
             ner = min(ner_by_lease[lid], key=gap)
-        c = Cite(steps[0][9], steps[0][13] or '', 'printed') if steps[0][13] else Cite(None, '', 'not_found')
+        printed = [x for x in ((pt.start, pt.start_quote, pt.start_page), (pt.end, pt.end_quote, pt.end_page),
+                               (pt.months, pt.months_quote, pt.months_page)) if x[0]]
+        rows_txt = f'{len(steps)} rent rows of this instrument, pages {p_from}-{p_to}'
+        if printed:
+            quotes = list(dict.fromkeys(q for _, q, _ in printed))
+            src_term = 'printed: ' + ' | '.join(quotes) + (
+                f'; computed from {rows_txt}: ' + ', '.join(
+                    w for w, have in (('start', pt.start), ('expiry', pt.end)) if not have)
+                if steps and not (pt.start and pt.end) else '')
+            c = Cite(printed[0][2], printed[0][1], 'printed')
+            basis = 'printed by the instrument' if pt.start and pt.end else 'printed in part; the rest from its rent rows'
+        else:
+            src_term = f'computed: {rows_txt}'
+            c = Cite(steps[0][9], steps[0][11], 'printed') if steps[0][11] else Cite(None, '', 'not_found')
+            basis = 'computed: first and last placed rent rows'
         t_term.append((term_id, lid, seq, doc_id, etype, title, ev_date, start, end, years, sf, p0, p1, esc,
                        ner[12] if ner else None, ner[13] if ner else None, ner[14] if ner else None,
                        ner[21] if ner else None, ner[5] if ner else None, ner[0] if ner else None,
-                       f'computed: {len(steps)} rent rows of this instrument, pages {p_from}-{p_to}',
-                       'computed: monthly x 12 / tenancy SF' if sf else 'SF not known')
-                      + _cite_cols(c, doc_id, doc_sha, doc_method, 'computed: first and last placed rent rows', 'term'))
+                       src_term,
+                       ('computed: monthly x 12 / tenancy SF' if sf else 'SF not known') if steps else 'no rent rows')
+                      + _cite_cols(c, doc_id, doc_sha, doc_method, basis, 'term'))
 
     # depth: every article of every instrument verbatim (layer A) and the
     # category sweep (layer B), each cited to the file pages it is on
@@ -710,7 +802,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                            None, h.page, None, h.page)
                           + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'excerpt'))
 
-    return {
+    tables = {
         'cap_document': (['doc_id', 'filename', 'sha256', 'pages', 'document_type', 'method', 'ocr_confidence',
                           'family', 'archived_hint', 'review_status', 'processed_at'], t_doc),
         'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read',
@@ -754,6 +846,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         'cap_ner_cost_line': (['ner_id', 'seq', 'label', 'proposed', 'budgeted', 'source_doc_id', 'source_page']
                               + CITE_COLS, t_ner_cost),
     }
+    return verify_quotes(tables)
 
 
 DOOR_READER = '''"""_cap_door.py -- the one door to a Capactive module package. Stdlib only.

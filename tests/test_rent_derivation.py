@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.extractors.rent_derivation import (  # noqa: E402
-    derive_current_rent, parse_dated_rows, parse_rent_schedule)
+    _anchor, derive_current_rent, parse_dated_rows, parse_rent_schedule)
 
 AS_OF = date(2026, 6, 30)
 
@@ -786,6 +786,26 @@ def test_prose_periods_with_written_dates_take_their_own_sentence_amounts():
     assert r1 == [(date(2011, 3, 1), date(2013, 2, 28), 1000.0), (date(2013, 3, 1), date(2015, 2, 28), 1050.0)], r1
     r2 = [(r.start, r.monthly) for r in parse_dated_rows(t2)]
     assert r2 == [(date(2016, 6, 1), 1500.0), (date(2017, 6, 1), 1545.0)], r2
+
+
+
+def test_payment_start_after_free_months_dates_the_first_paid_row():
+    # "Months 1-3 $0.00" is no rent row; payments begin with Months 4-15, so
+    # the table's month 1 is three months before the payment start
+    t = ("2. Extended Term: The term is hereby extended starting on May 1, 2023 and ending on July 31, 2027. "
+         "3. Base Rent: During the Extended Term, Tenant shall pay annual Base Rent as follows: "
+         "EXTENDED TERM ANNUAL MONTHLY Months 1-3 $0.00 $0.00 Months 4-15 $30,000.00 $2,500.00 "
+         "Months 16-27 $30,900.00 $2,575.00 Monthly installments of Base Rent shall be paid on the first day "
+         "of each month during the Extended Term, beginning on August 1, 2023.")
+    rows = parse_rent_schedule(t)
+    assert [r.monthly for r in rows] == [2500.0, 2575.0], rows
+    assert all(r.anchor == date(2023, 5, 1) for r in rows), [r.anchor for r in rows]
+    _anchor(rows, None, None, t)
+    assert [(r.start, r.end) for r in rows] == [(date(2023, 8, 1), date(2024, 7, 31)),
+                                                (date(2024, 8, 1), date(2025, 7, 31))], rows
+    # drafted the other way: the payment sentence names the term's start, free months included
+    t2 = t.replace('beginning on August 1, 2023', 'beginning on May 1, 2023')
+    assert all(r.anchor == date(2023, 5, 1) for r in parse_rent_schedule(t2))
 
 
 if __name__ == '__main__':

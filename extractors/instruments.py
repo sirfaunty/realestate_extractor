@@ -195,6 +195,43 @@ def _own_date(pages: list, p_from: int, p_to: int):
     return None, '', None, '', recited
 
 
+def recited_dates(groups: list) -> dict:
+    """The date a LATER instrument recites for one that prints none ("as
+    amended by the Third Amendment dated ..."), across a tenancy's documents
+    and between the instruments filed inside one document.
+
+    groups: [(doc_id, [Instrument])]. Returns {(doc_id, k): (iso, quote,
+    page, source_doc_id)}, k = the instrument's index in its document.
+    Only when every recital of it agrees on one date, and never from its own
+    pages. An instrument with an ordinal (Third Amendment) is matched by it;
+    one without (a guaranty, an assignment) only when it is the tenancy's ONE
+    undated instrument of its type -- two undated guaranties stay undated."""
+    recited_for = {}
+    latest = f'{date.today().year + 1}-12-31'     # an instrument recited as made later is an OCR slip
+    for doc_id, lst in groups:
+        for ins in lst:
+            for t, o, d, q, pg in ins.recital_targets:
+                if d <= latest:
+                    recited_for.setdefault((t, o), []).append((d, q, pg, doc_id))
+    undated = {}
+    for doc_id, lst in groups:
+        for ins in lst:
+            if not ins.date:
+                undated[ins.event_type] = undated.get(ins.event_type, 0) + 1
+    out = {}
+    for doc_id, lst in groups:
+        for k, ins in enumerate(lst):
+            if ins.date:
+                continue
+            if not (ins.ordinal or ins.event_type == 'original lease' or undated[ins.event_type] == 1):
+                continue
+            cands = [x for x in recited_for.get((ins.event_type, ins.ordinal), [])
+                     if not (x[3] == doc_id and ins.page_from <= x[2] <= ins.page_to)]
+            if cands and len({x[0] for x in cands}) == 1:
+                out[(doc_id, k)] = cands[0]
+    return out
+
+
 def split_instruments(pages: list) -> list[Instrument]:
     starts = []
     for n, page in enumerate(pages, 1):
