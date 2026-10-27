@@ -89,7 +89,7 @@ def main():
     test('manifest names the generation db and every table',
          os.path.exists(os.path.join(out, man['database'])) and set(man['tables']) == {
              'cap_document', 'cap_page_text', 'cap_lease_lease', 'cap_lease_chain', 'cap_lease_rent_step',
-             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact', 'cap_ner_deal', 'cap_ner_cost_line', 'cap_lease_event'})
+             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact', 'cap_ner_deal', 'cap_ner_cost_line', 'cap_lease_event', 'cap_option_register', 'cap_lease_term'})
     test('HANDOFF, SOURCE_PATH, BOUNDARY_CONTRACT and the door reader are in the package',
          all(os.path.exists(os.path.join(out, f)) for f in
              ('HANDOFF.txt', 'SOURCE_PATH.txt', 'BOUNDARY_CONTRACT.md', 'door/_cap_door.py')))
@@ -160,6 +160,11 @@ def main():
     empty = [f for f in facts.values() if f['value'] is None]
     test('a field the paper does not state has no quote and says why',
          empty and all(f['quote'] is None and f['null_reason'] for f in empty))
+    terms = cc.execute('SELECT * FROM cap_lease_term').fetchall()
+    lease_term = [t for t in terms if t['instrument_type'] == 'original lease']
+    test('a lease term is computed from the instrument rent rows: start, expiry, PSF, escalation',
+         lease_term and lease_term[0]['lease_start'] == '2022-07-01' and lease_term[0]['start_rent_psf'] == 10.0
+         and lease_term[0]['avg_escalation_pct'] == 3.0 and lease_term[0]['source_term'].startswith('computed'))
     term = cc.execute("SELECT * FROM cap_lease_provision WHERE category='base_rent'").fetchone()
     test('an extracted term quotes the words its value came from', '2,000.00' in term['quote'])
     cc.close()

@@ -47,6 +47,7 @@ from ..extractors.articles import split_articles, sweep
 from ..extractors.citation import Cite, cite_date, cite_number, cite_text
 from ..extractors.instruments import split_instruments
 from ..extractors.ner_sheet import parse_ner
+from ..extractors.options import find_options
 from ..extractors.second_read import in_read, load_reads
 from ..lease_roster import _pages, build_roster
 from .tenant_keys import match_tenant_keys
@@ -66,6 +67,8 @@ TABLES = {
     'cap_lease_provision': ('prov_id', 'every extracted term and segmented clause with its page and confidence'),
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
     'cap_lease_event': ('event_id', "every instrument of every tenancy (lease, amendment, assignment, guaranty, estoppel, ...), typed, dated by its own date with the words it was read from, its recited dates kept apart"),
+    'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry, years, SF, starting and ending rent PSF and average escalation computed from its own rent rows, with the nearest deal sheet economics'),
+    'cap_option_register': ('optreg_id', 'every renewal / extension option granted or deleted in a tenancy instrument: count, years each, notice window, rent basis, cited'),
     'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
     'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line"),
     'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
@@ -540,6 +543,22 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                                 ins.page_from, ins.page_to, ins.date, ins.date_page,
                                 '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols)
 
+    # option register: every renewal / extension option granted (or deleted)
+    # in a tenancy's instruments, with count, length, notice window, rent basis
+    t_optreg = []
+    optreg_id = 0
+    for row in rows:
+        lid = row.key or _slug(row.tenant)
+        for i in row.doc_ids:
+            if fam_by_doc.get(i) != 'instrument':
+                continue
+            for o in find_options(pages_by_doc.get(i, [])):
+                optreg_id += 1
+                c = Cite(o.page, o.quote, 'printed')
+                t_optreg.append((optreg_id, lid, i, o.page, o.status, o.n_options, o.option_years, o.notice_window,
+                                 o.notice_min_days, o.notice_max_days, o.rent_basis, o.rent_quote or None)
+                                + _cite_cols(c, i, doc_sha, doc_method, None, 'option'))
+
     # NER deal sheets: every printed field with the line it is on, every cost
     # line, and the tie of the cost lines to the sheet's printed total
     t_ner, t_ner_cost = [], []
@@ -565,6 +584,52 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                 cc = Cite(pno, cl.line, 'printed')
                 t_ner_cost.append((ner_id, seq, cl.label, cl.amount, cl.budgeted, d['id'], pno)
                                   + _cite_cols(cc, d['id'], doc_sha, doc_method, None, 'cost line'))
+
+    # lease terms: one row per term-setting instrument, computed from the
+    # rent rows cited to its pages; the nearest deal sheet of the tenancy
+    # (by version date) supplies allowance, commission and NER
+    TERM_TYPES = ('original lease', 'amendment', 'extension / renewal exercised', 'expansion', 'license agreement',
+                  'lease document (unclassified)')
+    sf_of = {(row.key or _slug(row.tenant)): row.square_feet for row in rows}
+    step_by_doc = {}
+    for st in t_step:
+        if st[2] and st[4]:                       # placed periods with an amount
+            step_by_doc.setdefault(st[8], []).append(st)
+    ner_by_lease = {}
+    for nr in t_ner:
+        if nr[1]:
+            ner_by_lease.setdefault(nr[1], []).append(nr)
+    t_term = []
+    term_id = 0
+    for ev in t_event:
+        _, lid, seq, doc_id, etype, _, title, p_from, p_to, ev_date = ev[:10]
+        if etype not in TERM_TYPES:
+            continue
+        steps = sorted((st for st in step_by_doc.get(doc_id, []) if p_from <= (st[9] or 0) <= p_to and not st[7]),
+                       key=lambda st: st[2])
+        if not steps:
+            continue
+        term_id += 1
+        start, end = steps[0][2], max(st[3] for st in steps)
+        years = round((date.fromisoformat(end) - date.fromisoformat(start)).days / 365.25, 1)
+        sf = sf_of.get(lid)
+        psf = (lambda m: round(m * 12 / sf, 2) if sf else None)
+        p0, p1 = psf(steps[0][4]), psf(steps[-1][4])
+        esc = None
+        if len(steps) > 1 and steps[0][4] and steps[-1][4] and years >= 1:
+            esc = round(((steps[-1][4] / steps[0][4]) ** (1 / max(1, len(steps) - 1)) - 1) * 100, 2)
+        ner = None
+        if ner_by_lease.get(lid):
+            ref = ev_date or start
+            ner = min(ner_by_lease[lid], key=lambda nr: abs((date.fromisoformat(nr[4]) - date.fromisoformat(ref)).days)
+                      if nr[4] else 10 ** 6)
+        c = Cite(steps[0][9], steps[0][13] or '', 'printed') if steps[0][13] else Cite(None, '', 'not_found')
+        t_term.append((term_id, lid, seq, doc_id, etype, title, ev_date, start, end, years, sf, p0, p1, esc,
+                       ner[12] if ner else None, ner[13] if ner else None, ner[14] if ner else None,
+                       ner[21] if ner else None, ner[5] if ner else None, ner[0] if ner else None,
+                       f'computed: {len(steps)} rent rows of this instrument, pages {p_from}-{p_to}',
+                       'computed: monthly x 12 / tenancy SF' if sf else 'SF not known')
+                      + _cite_cols(c, doc_id, doc_sha, doc_method, 'computed: first and last placed rent rows', 'term'))
 
     # depth: every article of every instrument verbatim (layer A) and the
     # category sweep (layer B), each cited to the file pages it is on
@@ -615,6 +680,13 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         'cap_lease_event': (['event_id', 'lease_id', 'seq', 'source_doc_id', 'event_type', 'ordinal', 'title',
                              'page_from', 'page_to', 'event_date', 'source_page', 'recited_dates'] + CITE_COLS,
                             t_event),
+        'cap_lease_term': (['term_id', 'lease_id', 'event_seq', 'source_doc_id', 'instrument_type', 'instrument_title',
+                            'instrument_date', 'lease_start', 'lease_expiry', 'term_years', 'sf', 'start_rent_psf',
+                            'end_rent_psf', 'avg_escalation_pct', 'ti_total', 'lc_total', 'cobroker_total', 'ner_psf',
+                            'deal_type', 'ner_id', 'source_term', 'source_rent'] + CITE_COLS, t_term),
+        'cap_option_register': (['optreg_id', 'lease_id', 'source_doc_id', 'source_page', 'status', 'n_options',
+                                 'option_years', 'notice_window', 'notice_min_days', 'notice_max_days', 'rent_basis',
+                                 'rent_basis_words'] + CITE_COLS, t_optreg),
         'cap_ner_deal': (['ner_id', 'lease_id', 'source_doc_id', 'source_page', 'version_date', 'deal_type', 'tenant',
                           'use', 'space', 'sqft', 'term_years', 'total_contract_rent', 'allowance_total',
                           'leasing_fee', 'cobroker_fee', 'printed_total_landlord_expense', 'cost_lines_sum',

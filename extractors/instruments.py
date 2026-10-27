@@ -66,7 +66,8 @@ TYPES = [
     ('amendment', r'\bAMENDMENT\b|\bMODIFICATION\b'),
     ('consent / approval', r'\bCONSENT\b'),
     ('original lease', r'^\s*(?:SHOPPING\s+CENTER\s+|RETAIL\s+|OFFICE\s+|STANDARD\s+|COMMERCIAL\s+|INDUSTRIAL\s+)?'
-                       r'LEASE(?:\s+AGREEMENT)?\s*$|^\s*(?:THIS\s+)?LEASE\s+(?:AGREEMENT\s+)?(?:IS\s+)?MADE'),
+                       r'LEASE(?:\s+AGREEMENT)?\s*$|^\s*(?:THIS\s+)?LEASE\s+(?:AGREEMENT\s+)?(?:IS\s+)?MADE|'
+                       r'^\s*LEASE\s+AGREEMENT\s+(?:between|by\s+and\s+between|dated|made)\b'),
 ]
 _TYPES = [(t, re.compile(rx, re.I | re.M)) for t, rx in TYPES]
 TITLE_LINES = 6           # an instrument's title sits in the first lines of its first page
