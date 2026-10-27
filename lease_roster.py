@@ -60,7 +60,7 @@ class RosterRow:
     grouped_by: str = 'identity'    # filename | identity | unassigned
     label: str = ''                 # the file-name tenancy words ("bean coffee")
     aliases: list = field(default_factory=list)   # legal names across assignments
-    kind: str = 'tenancy'           # tenancy | expired | other_agreement
+    kind: str = 'tenancy'           # tenancy | expired | other_agreement | other_document
     flags: list = field(default_factory=list)     # data-quality notes (SF rejected, ...)
     key: str = ''                   # stable tenancy id for confirmations ("fn:bean coffee")
     commencement_source: str = ''   # confirmed | rent_roll | lease | '' (unknown)
@@ -534,7 +534,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             row.flags.append('sf_repeated_across_tenants')
             row.square_feet = None
 
-    order = {'tenancy': 0, 'expired': 1, 'other_agreement': 2}
+    order = {'tenancy': 0, 'expired': 1, 'other_agreement': 2, 'other_document': 3}
     out.sort(key=lambda x: (order.get(x.kind, 3), x.grouped_by == 'unassigned', x.tenant.lower()))
     return out
 
@@ -821,6 +821,10 @@ _OTHER_AGREEMENT = re.compile(
     r'(?i)\b(?:license agreement|easement|billboard|outdoor advertising|right of entry|'
     r'access agreement|telecommunications (?:license|easement|agreement)|antenna|'
     r'reciprocal easement|declaration of)\b')
+_NOT_LEASE_FILE = re.compile(
+    r'(?i)\b(?:defaults?|site ?plans?|service contracts?|environmental|budgets?|onedrive|'
+    r'certificates? of insurance|coi|w-?9|invoices?|surveys?|title (?:commitment|policy)|appraisals?|'
+    r'property tax|tax statements?|loan|closing|management agreement)\b')
 _CARRIERS = re.compile(
     r'(?i)\b(?:charter communications|comcast|centurylink|century link|mediacom|'
     r'clear channel|sprint spectrum|at&t|verizon wireless|tds telecommunications)\b')
@@ -828,7 +832,8 @@ _CARRIERS = re.compile(
 
 def _kind(row: RosterRow, text: str, as_of: date) -> str:
     """tenancy | other_agreement (telecom / billboard / easement / license —
-    not an occupancy) | expired (paper ends > 90 days ago and no schedule
+    not an occupancy) | other_document (no lease: a default letter, a site
+    plan, a service contract) | expired (paper ends > 90 days ago and no schedule
     covers today — a former tenant, or a renewal not in the file)."""
     # uploads keep their file names as given: "Tower_License_Agreement.pdf"
     files = re.sub(r'[_\s]+', ' ', ' '.join(row.filenames))
@@ -836,6 +841,12 @@ def _kind(row: RosterRow, text: str, as_of: date) -> str:
     if _CARRIERS.search(names) or _OTHER_AGREEMENT.search(text[:600]) \
             or _OTHER_AGREEMENT.search(files):
         return 'other_agreement'
+    # papers filed in the property folder that are no lease at all (a default
+    # letter, a site plan, a service contract, an environmental report): no
+    # rent, area or date read from them, and every file named as such
+    if (not row.monthly_rent and not row.square_feet and not row.commencement and not row.expiration
+            and row.filenames and all(_NOT_LEASE_FILE.search(re.sub(r'[_\s]+', ' ', f)) for f in row.filenames)):
+        return 'other_document'
     if (row.expiration and (as_of - row.expiration).days > 90
             and row.rent_method != 'schedule'):
         return 'expired'
@@ -843,7 +854,7 @@ def _kind(row: RosterRow, text: str, as_of: date) -> str:
 
 
 def _needs(row: RosterRow) -> str:
-    if row.kind == 'other_agreement':
+    if row.kind in ('other_agreement', 'other_document'):
         return ''
     if row.kind == 'expired':
         return 'expired on paper — still occupying? add the renewal, or mark vacated'
