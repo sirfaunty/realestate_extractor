@@ -84,5 +84,11 @@ test('a file name that misspells the roll name by a letter still matches (near)'
      files['f2'].tenant_key == 'marigold_tailoring' and files['f2'].basis == 'near')
 test('a file name about something else never matches', files['f3'].tenant_key is None)
 
+abbr = match_tenant_keys([('a1', ['Quillon Claims Management Services, Inc.']), ('a2', ['Juniper Lamps'])],
+                         [{'suite': '1', 'occupant': 'Quillon Claims Mgt Svc Inc.', 'tenant_key': 'quillon'},
+                          {'suite': '2', 'occupant': 'Juniper Lamp MN', 'tenant_key': 'juniper'}])
+test("a roll's abbreviations (Mgt, Svc) are the long words", abbr['a1'].tenant_key == 'quillon')
+test('a plural and its singular are one word', abbr['a2'].tenant_key == 'juniper')
+
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

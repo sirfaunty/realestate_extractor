@@ -697,8 +697,29 @@ _DOC_WORDS = {
 }
 
 
+_FOLDER_WORDS = {'source', 'sources', 'documents', 'document', 'deliverables', 'scans', 'archived', 'summaries',
+                 'summary', 'ners', 'files', 'file', 'misc', 'miscellaneous', 'supporting', 'harvest', 'part',
+                 'module', 'zip', 'pdfs', 'scan', 'leasedocuments', 'leasefiles', 'leasing', 'checklists'}
+
+
+def _drop_generic_folders(filename: str) -> str:
+    """An imported file keeps its folder path joined by '__'
+    ("05_source_documents__Elm Court - Rosa's Tacos Lease.pdf"). A leading
+    folder that names no tenant (a numbered staging folder, "Scanned
+    Leases", "Lease Summaries") is dropped; a folder that is the tenant
+    ("LeaseDocuments__RosasTacos__...") stays."""
+    parts = (filename or '').split('__')
+    while len(parts) > 1:
+        ws = [w.lower() for w in re.split(r'[^A-Za-z]+', parts[0]) if w]
+        if re.match(r'^\d{1,3}[_\s-]', parts[0]) or all(w in _DOC_WORDS or w in _FOLDER_WORDS for w in ws):
+            parts = parts[1:]
+        else:
+            break
+    return '__'.join(parts)
+
+
 def _fn_words(filename: str) -> list[str]:
-    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', filename or '')
+    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(filename))
     return [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', base))
             if len(w) >= 3 and w not in _DOC_WORDS]
 

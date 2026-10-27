@@ -30,6 +30,19 @@ FILES = [
 ]
 
 
+def test_generic_folder_never_becomes_the_tenancy():
+    # imported files keep their folder path ('__'); a numbered staging folder
+    # names no tenant, a folder named for the tenant does
+    files = ['05_source_documents__Willow Plaza - Rosa Tacos Scanned Lease.pdf',
+             '05_source_documents__Willow Plaza - Fern Dental Scanned Lease.pdf',
+             'Scanned Leases__Willow Plaza - Juniper Florist Lease.pdf',
+             'LeaseDocuments__QuinceBakery__Checklist.pdf']
+    common = _common_filename_words(files[:3])
+    stems = [_filename_stem(f, common) for f in files]
+    assert stems[0] != stems[1] and 'rosa' in stems[0] and 'fern' in stems[1] and 'juniper' in stems[2], stems
+    assert 'quincebakery' in stems[3], stems
+
+
 def test_property_prefix_is_common():
     common = _common_filename_words(FILES)
     assert 'okp' in common and 'harbor' not in common, common

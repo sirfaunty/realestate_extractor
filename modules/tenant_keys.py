@@ -46,17 +46,30 @@ class KeyMatch:
     score: float
 
 
+# the short forms a rent roll prints for long names ("Quillon Claims Mgt Svc")
+ABBREV = {'svc': 'services', 'svcs': 'services', 'srvc': 'services', 'mgt': 'management', 'mgmt': 'management',
+          'intl': 'international', 'natl': 'national', 'ctr': 'center', 'cntr': 'center', 'dept': 'department',
+          'assn': 'association', 'assoc': 'associates', 'bros': 'brothers', 'fc': 'force', 'nav': 'navy',
+          'univ': 'university', 'med': 'medical', 'hosp': 'hospital', 'mfg': 'manufacturing', 'tech': 'technologies'}
+
+
 def norm(name: str) -> str:
-    """Lower case, '&' -> 'and', punctuation out, one space between words."""
+    """Lower case, '&' -> 'and', punctuation out, one space between words,
+    roll abbreviations written out."""
     s = (name or '').lower().replace('&', ' and ')
     s = re.sub(r"[’']", '', s)
     s = re.sub(r'[^a-z0-9]+', ' ', s)
-    return re.sub(r'\s+', ' ', s).strip()
+    return ' '.join(ABBREV.get(w, w) for w in s.split())
+
+
+def _stem(w: str) -> str:
+    """A plural and its singular are one word ("Vapors" / "Vapor")."""
+    return w[:-1] if len(w) > 4 and w.endswith('s') and not w.endswith('ss') else w
 
 
 def words(name: str) -> set:
     """Distinctive words: no legal suffixes, no store numbers or codes."""
-    return {w for w in norm(name).split() if w not in LEGAL and len(w) >= 3 and not re.search(r'\d', w)}
+    return {_stem(w) for w in norm(name).split() if w not in LEGAL and len(w) >= 3 and not re.search(r'\d', w)}
 
 
 def core(name: str) -> str:
