@@ -47,6 +47,15 @@ test('title-case labels and an apostrophe', ('Lease Date', 'May 1, 2020') in got
      and ("Tenant's Address", '12 Oak St') in got)
 test('a clock time, a URL and a sentence colon are not labels',
      not any(lbl in ('9', 'https', 'The Tenant agrees as follows') for lbl, _ in got) and len(got) == 10)
+form = [(x.label, x.value) for x in find_labels(
+    "SECURITY DEPOSIT: $0.00 Received ADVANCE RENT PAID: $0.00\n"
+    "SHOPPING CENTER: Elm Court SEND RENT STATEMENTS TO\n"
+    "GUARANTOR: N/A    12 Elm Court Drive\n"
+    "SECTION 9.01 - CONTINUANCE: ....................... 14")]
+test("a value ends before the next column's upper-case label and at a wide gap",
+     ('SECURITY DEPOSIT', '$0.00 Received') in form and ('SHOPPING CENTER', 'Elm Court') in form
+     and ('GUARANTOR', 'N/A') in form)
+test('a dot leader to a page number is no value', not any('CONTINUANCE' in lbl for lbl, _ in form))
 test('the line number is the page line', [x.line_no for x in find_labels(PAGE) if x.label == 'SF'] == [4])
 
 print(f'\n{passed} passed, {failed} failed')

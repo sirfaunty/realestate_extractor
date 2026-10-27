@@ -945,7 +945,11 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                 prov_id += 1
                 amt = re.fullmatch(r'\$?\s*([\d,]+(?:\.\d+)?)', lv.value)
                 num = _num_or_none(amt.group(1).replace(',', '')) if amt else None
-                c = Cite(pno, lv.value, 'printed')
+                # the quote is the value's first amount or first four words: a long
+                # value runs across a form line another read may break (the whole
+                # value stays in value_raw)
+                head = (re.match(r'\$?[\d,]+(?:\.\d+)?', lv.value) or re.match(r'\S+(?:\s+\S+){0,3}', lv.value))
+                c = Cite(pno, head.group(0) if head else lv.value, 'printed')
                 t_prov.append((prov_id, lid, d['id'], 'label', f'Label: {lv.label}', lv.label, lv.value, num,
                                None, None, None, None, pno, None, pno)
                               + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'label value')

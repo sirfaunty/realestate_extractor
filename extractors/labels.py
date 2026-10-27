@@ -74,8 +74,23 @@ def find_labels(page: str) -> list[LabelValue]:
             value = line[end_colon:end].strip(' \t;,|')
             if k + 1 < len(hits) and not value:
                 continue          # "PROPOSED TENANT:" heading over the next pair, nothing printed
-            pairs.append((lbl, value[:MAX_VALUE]))
+            pairs.append((lbl, _own_value(value)[:MAX_VALUE]))
         for lbl, value in pairs:
-            if value and re.search(r'[A-Za-z0-9$]', value):
+            if len(re.findall(r'[A-Za-z0-9]', value)) >= 1 and re.search(r'[A-Za-z0-9$]', value) \
+                    and not re.fullmatch(r'[\s.·_\-]{3,}\d{0,4}', value):    # a dot leader to a page number
                 out.append(LabelValue(lbl, value, n))
     return out
+
+
+def _own_value(value: str) -> str:
+    """The value without the next column of the form: it ends at a wide gap
+    or a tab, and before a run of two or more upper-case words that follows
+    it (the next column's label printed without its colon: "Elm Court
+    SEND RENT STATEMENTS TO" -> "Elm Court")."""
+    value = re.split(r'\t| {3,}', value, 1)[0].strip()
+    words = value.split()
+    for i in range(1, len(words) - 1):
+        if all(len(re.sub(r'[^A-Za-z]', '', w)) >= 2 and _caps(w) for w in words[i:i + 2]) \
+                and not all(_caps(w) for w in words[:i]):
+            return ' '.join(words[:i])
+    return value
