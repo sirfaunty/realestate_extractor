@@ -73,6 +73,7 @@ TABLES = {
     'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry and years as it prints them (else computed from its own rent rows), SF, starting and ending rent PSF and average escalation from its rent rows, with the nearest deal sheet economics'),
     'cap_option_register': ('optreg_id', 'every renewal / extension option granted or deleted in a tenancy instrument: count, years each, notice window, rent basis, cited'),
     'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
+    'cap_roll_reconciliation': ('recon_id', "every rent-roll tenancy given, field by field (SF, base rent, expiration): the roll's value, the paper's value with the words it is printed in, TIE / DIFFERS / NOT_ON_PAPER / NO_LEASE, and what explains a difference"),
     'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line; memo says why a printed line is not counted in the sum"),
     'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
 }
@@ -121,7 +122,7 @@ def verify_quotes(tables: dict, consumer_text=None) -> dict:
     def printed(q, t):
         return _norm(q) in _norm(t) or (len(_loose(q)) >= 4 and _loose(q) in _loose(t))
     for name, (cols, rows) in tables.items():
-        if 'quote' not in cols or 'source_page' not in cols:
+        if not set(CITE_COLS) <= set(cols) or 'source_page' not in cols:
             continue
         ix = {c: i for i, c in enumerate(cols)}
         for k, r in enumerate(rows):
@@ -252,6 +253,81 @@ def _slug(name: str) -> str:
     words = [re.sub(r'[^a-z]', '', w.lower()) for w in re.split(r'[^A-Za-z]+', name or '')]
     words = [w for w in words if len(w) >= 3 and w not in GENERIC]
     return '_'.join(words[:2]) or re.sub(r'[^a-z]', '', (name or '').lower()) or 'unknown'
+
+
+def _num_or_none(v):
+    try:
+        return float(v) if v not in (None, '') else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs: list,
+                         pages_by_doc: dict) -> list:
+    """One row per rent-roll tenancy and field (sf / base rent / expiration):
+    the roll's value, the paper's value with the words it is printed in,
+    whether they tie (SF exact, rent within 2%, expiration the same day) and,
+    when not, what explains it. A roll tenancy no lease row matched gets one
+    'lease' row saying whether any document names it at all.
+
+    roll rows: {'suite', 'occupant', 'tenant_key', 'sf', 'base_rent_monthly',
+    'expiration'} (the last three optional)."""
+    if not roll:
+        return []
+    by_key = {m.tenant_key: lid for lid, m in keyed.items() if m.tenant_key}
+    row_of = {(r.key or _slug(r.tenant)): r for r in rows}
+    facts = {(f[1], f[2]): f for f in t_fact}
+    out = []
+    for rr in roll:
+        lid = by_key.get(rr.get('tenant_key'))
+        base = (rr.get('suite'), rr.get('occupant'), rr.get('tenant_key'))
+        if not lid:
+            words = [w for w in re.findall(r'[a-z]{4,}', (rr.get('occupant') or '').lower()) if w not in GENERIC]
+            hits = [d['filename'] for d in docs if words and (
+                all(w in (d.get('filename') or '').lower() for w in words[:2]) or
+                all(w in ' '.join(pages_by_doc.get(d['id'], [])[:3]).lower() for w in words[:2]))]
+            why = (f'no lease row: {len(hits)} document(s) name this occupant but do not form a tenancy '
+                   f'({"; ".join(h[-60:] for h in hits[:3])})' if hits else
+                   'no lease row: no document in the files received names this occupant')
+            out.append(base + ('lease', None, None, None, 'NO_LEASE', why, None, None, None))
+            continue
+        row = row_of.get(lid)
+        for field, roll_v, ours in (
+                ('sf', _num_or_none(rr.get('sf')), row.square_feet if row else None),
+                ('base_rent_monthly', _num_or_none(rr.get('base_rent_monthly')), row.monthly_rent if row else None),
+                ('expiration', rr.get('expiration') or None,
+                 row.expiration_lease.isoformat() if row and row.expiration_lease else None)):
+            f = facts.get((lid, field))
+            doc, page, quote = (f[5], f[6], f[8]) if f else (None, None, None)
+            if roll_v is None:
+                state, why = 'NO_ROLL_VALUE', 'the roll prints no value for this field'
+            elif ours is None:
+                state = 'NOT_ON_PAPER'
+                why = {'sf': 'the paper in the files states no square footage for this tenancy',
+                       'base_rent_monthly': 'no current base rent read from the instruments' + (
+                           f' ({row.rent_detail})' if row and row.rent_detail else ''),
+                       'expiration': 'the paper in the files prints no expiration for this tenancy'}[field]
+            else:
+                if field == 'sf':
+                    tie = abs(float(ours) - roll_v) <= 0.5
+                elif field == 'base_rent_monthly':
+                    tie = roll_v > 0 and abs(float(ours) - roll_v) / roll_v <= 0.02
+                else:
+                    tie = str(ours) == str(roll_v)[:10]
+                state = 'TIE' if tie else 'DIFFERS'
+                where = f' (document {doc} p{page}: "{(quote or "")[:80]}")' if page else ''
+                if tie:
+                    why = 'ties'
+                elif field == 'expiration' and str(ours) < str(roll_v)[:10]:
+                    why = (f'the paper ends the term {ours}{where}; the roll runs to {roll_v}: a renewal or '
+                           f'extension not in the files would explain it')
+                elif field == 'base_rent_monthly':
+                    why = (f'the instruments give {ours:,.2f} a month ({row.rent_method}, {row.rent_confidence}'
+                           f'{"; " + ";".join(row.rent_flags) if row.rent_flags else ""}); the roll says {roll_v:,.2f}')
+                else:
+                    why = f'the paper prints {ours}{where}; the roll says {roll_v}'
+            out.append(base + (field, roll_v, ours, lid, state, why, doc, page, quote))
+    return [(i,) + r for i, r in enumerate(out, 1)]
 
 
 def _sha(path: str) -> str:
@@ -575,6 +651,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                            note, d, c.page)
                           + _cite_cols(c, d, doc_sha, doc_method, None, field, missing_value=value is None))
 
+    t_recon = _roll_reconciliation(tenant_keys[0] if tenant_keys else [], keyed, rows, t_fact, docs, pages_by_doc)
+
     # provisions: extracted terms + segmented clauses of the roster's documents
     t_prov = []
     prov_id = 0
@@ -864,6 +942,9 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                           'leasing_fee', 'cobroker_fee', 'printed_total_landlord_expense', 'cost_lines_sum',
                           'tie_status', 'tie_note', 'total_effective_contract_rent', 'avg_annual_effective_rent',
                           'avg_psf_effective_rent', 'rent_ladder'] + CITE_COLS, t_ner),
+        'cap_roll_reconciliation': (['recon_id', 'roll_suite', 'roll_occupant', 'tenant_key', 'field', 'roll_value',
+                                     'paper_value', 'lease_id', 'state', 'explanation', 'source_doc_id', 'source_page',
+                                     'paper_quote'], t_recon),
         'cap_ner_cost_line': (['ner_id', 'seq', 'label', 'proposed', 'budgeted', 'memo', 'source_doc_id', 'source_page']
                               + CITE_COLS, t_ner_cost),
     }

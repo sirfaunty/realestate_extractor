@@ -120,6 +120,11 @@ def _text(conn, doc_id, limit=None):
 
 _FILING_WORDS = ('fullyexecutedleaseagreement', 'leasedocuments', 'archivedscans', 'scannedlease', 'old',
                  'scanned', 'executed', 'lease', 'fid', 'copy')
+# words that name no tenant in particular (legal forms, filing and document words)
+_SF_NAME_NOISE = {'inc', 'llc', 'corp', 'corporation', 'company', 'limited', 'incorporated', 'partnership',
+                  'lease', 'leases', 'leasedocuments', 'scanned', 'scannedlease', 'archived', 'archivedscans',
+                  'documents', 'agreement', 'amendment', 'unassigned', 'known', 'store', 'stores', 'minnesota',
+                  'group', 'services', 'center', 'shop', 'enterprises', 'holdings', 'properties'}
 
 
 def _label_core(label: str) -> str:
@@ -502,12 +507,28 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         row.needs = _needs(row)
         out.append(row)
 
-    # the same SF on 3+ tenancies is a boilerplate number (e.g. "within 500
-    # feet" radius clauses), not their areas
-    counts = {}
+    # the same SF on 3+ DIFFERENT tenants is a boilerplate number (e.g.
+    # "within 500 feet" radius clauses), not their areas. One tenant's rows
+    # (its current lease, an expired one, an archived copy) share their SF
+    # and count once: rows are one tenant when their names share a word.
+    def _name_words(row):
+        names = [row.tenant, row.label or ''] + list(row.aliases)
+        return {w for n in names for w in re.findall(r'[a-z]{4,}', (n or '').lower())
+                if w not in _SF_NAME_NOISE}
+    by_sf = {}
     for row in out:
         if row.square_feet:
-            counts[row.square_feet] = counts.get(row.square_feet, 0) + 1
+            by_sf.setdefault(row.square_feet, []).append(_name_words(row))
+    counts = {}
+    for sf, groups in by_sf.items():
+        tenants = []                       # merged word sets, one per distinct tenant
+        for ws in groups:
+            hit = [t for t in tenants if t & ws] if ws else []
+            if hit:
+                hit[0] |= ws
+            else:
+                tenants.append(set(ws))
+        counts[sf] = len(tenants)
     for row in out:
         if row.square_feet and counts[row.square_feet] >= 3:
             row.flags.append('sf_repeated_across_tenants')

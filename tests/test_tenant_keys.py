@@ -73,5 +73,16 @@ test("spacing in a name does not matter (\"O' Malley\" vs \"O'Malley\")",
                                                         'tenant_key': 'o_malley_hardware'}])['a'].tenant_key
      == 'o_malley_hardware')
 
+files = match_tenant_keys([('f1', ['LeaseDocuments BirchBakery']), ('f2', ['2010-MarigoldTaloringScannedLease']),
+                           ('f3', ['Contact List'])],
+                          [{'suite': '1', 'occupant': 'Birch Bakery', 'tenant_key': 'birch_bakery'},
+                           {'suite': '2', 'occupant': 'Marigold Tailoring', 'tenant_key': 'marigold_tailoring'},
+                           {'suite': '3', 'occupant': 'Fennel Deli', 'tenant_key': 'fennel_deli'}])
+test('a roll name run together inside a file-name tenancy matches (within)',
+     files['f1'].tenant_key == 'birch_bakery' and files['f1'].basis == 'within')
+test('a file name that misspells the roll name by a letter still matches (near)',
+     files['f2'].tenant_key == 'marigold_tailoring' and files['f2'].basis == 'near')
+test('a file name about something else never matches', files['f3'].tenant_key is None)
+
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

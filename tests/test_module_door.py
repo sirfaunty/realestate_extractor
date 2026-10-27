@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from realestate_extractor.database import Database  # noqa: E402
-from realestate_extractor.modules.module_door import publish_property_door, verify_quotes  # noqa: E402
+from realestate_extractor.modules.module_door import build_door_tables, publish_property_door, verify_quotes  # noqa: E402
 
 passed = failed = 0
 
@@ -91,7 +91,7 @@ def main():
     test('manifest names the generation db and every table',
          os.path.exists(os.path.join(out, man['database'])) and set(man['tables']) == {
              'cap_document', 'cap_page_text', 'cap_lease_lease', 'cap_lease_chain', 'cap_lease_rent_step',
-             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact', 'cap_ner_deal', 'cap_ner_cost_line', 'cap_lease_event', 'cap_option_register', 'cap_lease_term', 'cap_lease_exhibit'})
+             'cap_lease_provision', 'cap_lease_option', 'cap_lease_fact', 'cap_ner_deal', 'cap_ner_cost_line', 'cap_lease_event', 'cap_option_register', 'cap_lease_term', 'cap_lease_exhibit', 'cap_roll_reconciliation'})
     test('HANDOFF, SOURCE_PATH, BOUNDARY_CONTRACT and the door reader are in the package',
          all(os.path.exists(os.path.join(out, f)) for f in
              ('HANDOFF.txt', 'SOURCE_PATH.txt', 'BOUNDARY_CONTRACT.md', 'door/_cap_door.py')))
@@ -227,6 +227,29 @@ def main():
     test('a republish leaves exactly one generation db, the one the manifest names',
          [f for f in os.listdir(gout) if f.endswith('.db')] == [again['database']]
          and again['database'] != gman['database'])
+
+    print('\nRent-roll reconciliation')
+    roll = [{'suite': '216', 'occupant': 'Bean Coffee', 'tenant_key': 'bean_coffee', 'sf': '2400',
+             'base_rent_monthly': '2500.00', 'expiration': ''},
+            {'suite': '220', 'occupant': 'River Dental', 'tenant_key': 'river_dental', 'sf': '1950',
+             'base_rent_monthly': '', 'expiration': ''},
+            {'suite': '230', 'occupant': 'Quince Bakery', 'tenant_key': 'quince_bakery', 'sf': '900'}]
+    rt = build_door_tables(db_path, pid, date(2026, 9, 1), tenant_keys=(roll, {}))
+    rcols, rrows = rt['cap_roll_reconciliation']
+    rec = {(r[rcols.index('tenant_key')], r[rcols.index('field')]): dict(zip(rcols, r)) for r in rrows}
+    test('a roll tenancy whose SF and rent the paper prints ties, field by field, citing the page',
+         rec[('bean_coffee', 'sf')]['state'] == 'TIE' and rec[('bean_coffee', 'base_rent_monthly')]['state'] == 'TIE'
+         and rec[('bean_coffee', 'sf')]['source_page'] == 1)
+    test('a field the paper does not state is NOT_ON_PAPER, and says so',
+         rec[('river_dental', 'sf')]['state'] == 'NOT_ON_PAPER' and 'no square footage' in rec[('river_dental', 'sf')]['explanation'])
+    roll[0]['base_rent_monthly'] = '2650.00'
+    rt2 = build_door_tables(db_path, pid, date(2026, 9, 1), tenant_keys=(roll, {}))['cap_roll_reconciliation']
+    diff = [dict(zip(rt2[0], r)) for r in rt2[1] if r[3] == 'bean_coffee' and r[4] == 'base_rent_monthly'][0]
+    test('a rent more than 2% from the roll DIFFERS, and says what the instruments give',
+         diff['state'] == 'DIFFERS' and '2,500.00' in diff['explanation'] and '2,650.00' in diff['explanation'])
+    test('a roll tenancy no document names is NO_LEASE, and says so',
+         rec[('quince_bakery', 'lease')]['state'] == 'NO_LEASE'
+         and 'no document' in rec[('quince_bakery', 'lease')]['explanation'])
 
     print('\nPre-publish quote gate')
     cols = ['row_id', 'source_doc_id', 'source_page', 'source_sha256', 'quote', 'quote_page_method',
