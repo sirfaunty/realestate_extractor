@@ -231,10 +231,21 @@ def sweep(pages: list) -> list[Hit]:
             le = page.find(chr(10), m.end())
             le = len(page) if le < 0 else le
             qa, qb = m.start(), m.end()
-            for _ in range(3):                       # up to three words either side, same line
+            # up to three words either side, same line; never into the next column of a
+            # form (an amount, a number, or a wide gap): another read keeps columns apart
+            for _ in range(3):
                 k = page.rfind(' ', ls, max(ls, qa - 1))
-                qa = ls if k < 0 else k + 1
+                na = ls if k < 0 else k + 1
+                word = page[na:qa].strip()
+                if not word or re.search(r'[\d$]', word) or page[max(ls, na - 2):na] == '  ':
+                    break
+                qa = na
+            for _ in range(3):
                 k = page.find(' ', min(le, qb + 1), le)
-                qb = le if k < 0 else k
+                nb = le if k < 0 else k
+                word = page[qb:nb].strip()
+                if not word or re.search(r'[\d$]', word) or page[qb:qb + 2] == '  ':
+                    break
+                qb = nb
             out.append(Hit(name, n, page[a:b].strip(), page[qa:qb].strip()))
     return out

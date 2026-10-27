@@ -83,5 +83,14 @@ two = split_instruments(PKT[:2] + ["GUARANTY\nThe second guarantor guarantees th
 test('two undated guaranties stay undated (the recital cannot say which)',
      not any(two[k].event_type == 'guaranty' for (_, k) in recited_dates([(7, two)])))
 
+memo = split_instruments(["MEMORANDUM OF LEASE\nCapitalized terms have the meanings in the Master Lease and Security "
+                          "Agreement, dated as of June 3, 2011 (as amended)."])[0]
+test("'the Master Lease ... Agreement, dated as of' is a recital, never the memorandum's own date",
+     memo.date is None and [d for d, _ in memo.recited] == ['2011-06-03'])
+est = split_instruments(["TENANT ESTOPPEL CERTIFICATE\nTHIS CERTIFICATE, dated June 14, 1996, made by Example Books, "
+                         "Inc. WHEREAS, the Lessee entered into a lease agreement dated as of October 31, 1995."])[0]
+test("'THIS CERTIFICATE, dated' is its own date; 'a lease agreement dated' is recited",
+     est.date == '1996-06-14' and [d for d, _ in est.recited] == ['1995-10-31'])
+
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

@@ -241,6 +241,20 @@ def main():
          gated[0][4] == 'Base Rent shall be $2,000.00' and gated[0][8] is None)
     test('a quote its page does not print is withheld, and the row says why',
          gated[1][4] is None and gated[1][5] is None and 'withheld' in gated[1][8])
+    rv5 = verify_quotes({
+        'cap_document': (['doc_id', 'filename', 'sha256'], [(1, 'a.pdf', 'a' * 64)]),
+        'cap_x': (cols, [(1, 1, 1, 'a' * 64, '$2,000.00', 'ocr_uncorroborated', 'printed', None, None),
+                         (2, 1, 1, 'a' * 64, '$2,000.00', 'ocr_corroborated', 'printed', None, None),
+                         (3, 1, 2, 'a' * 64, 'Base Rent', 'ocr_uncorroborated', 'printed', None, None),
+                         (4, 1, 3, 'a' * 64, 'Base Rent', 'ocr_uncorroborated', 'printed', None, None)]),
+        'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read', 'read_agreement'],
+                          [(1, 1, 'ocr', 20, 'Base Rent $2,000.00', '', None),
+                           (1, 2, 'ocr', 9, 'Base Rent', '', None), (1, 3, 'ocr', 9, 'Base Rent', '', None)])},
+        consumer_text=lambda sha, page: {1: '', 2: 'Base Rent $2,000', 3: 'Basc Rcnt'}[page])['cap_x'][1]
+    test("an uncorroborated OCR quote on a page the consumer cannot read is withheld; a corroborated one stands",
+         rv5[0][4] is None and 'RV5' in rv5[0][8] and 'empty' in rv5[0][8] and rv5[1][4] == '$2,000.00')
+    test("an uncorroborated OCR quote stands where the consumer's read prints it, and is withheld where it does not",
+         rv5[2][4] == 'Base Rent' and rv5[3][4] is None and 'prints otherwise' in rv5[3][8])
 
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{passed} passed, {failed} failed')

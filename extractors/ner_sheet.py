@@ -47,6 +47,17 @@ class CostLine:
     amount: float | None        # the line's printed (proposed) dollar total; None when printed '-' / blank
     line: str
     budgeted: float | None = None
+    memo: str = ''              # why the line is printed but not a cost (left out of cost_sum); '' = counted
+
+
+# a line the sheet prints beside the costs that is not itself a cost: an
+# amortization restates the improvements as rent; an annual / PSF line is a rate
+_MEMO = [(re.compile(r'AMORTIZED', re.I), 'amortized in base rent: restates the improvement cost as rent'),
+         (re.compile(r'\bANNUAL\s+PSF\b|\bPSF\s*,?\s*ANN', re.I), 'an annual PSF rate, not a dollar cost')]
+
+
+def _memo(line: str) -> str:
+    return next((why for rx, why in _MEMO if rx.search(line)), '')
 
 
 @dataclass
@@ -70,7 +81,7 @@ class NerSheet:
     avg_annual_effective_rent: Field = field(default_factory=Field)
     avg_psf_effective_rent: Field = field(default_factory=Field)
     cost_sum: float = 0.0
-    tie: str = ''                                          # TIE | BREAK | NO_TOTAL
+    tie: str = ''                                          # TIE | BREAK | NO_TOTAL | NO_PRINTED_TOTAL
     tie_note: str = ''
 
 
@@ -206,13 +217,10 @@ def parse_ner(text: str) -> NerSheet | None:
             continue
         label = re.split(r'[:@$]', ln, 1)[0].strip(' .-')
         amount = _last_amount(ln)
-        if re.search(r'AMORTIZED', ln, re.I):
-            amount_for_sum = None          # an amortization restates LHI as rent; it is not an extra cost
-        else:
-            amount_for_sum = amount
-        s.cost_lines.append(CostLine(label, amount, ln.strip()))
-        if amount_for_sum:
-            s.cost_sum += amount_for_sum
+        memo = _memo(ln)
+        s.cost_lines.append(CostLine(label, amount, ln.strip(), memo=memo))
+        if amount and not memo:
+            s.cost_sum += amount
         if re.search(r'CO-?\s*BROKER', ln, re.I):
             s.cobroker_fee = Field(amount, ln.strip())
         elif re.search(r'LEASING\s+FEE', ln, re.I):
@@ -234,7 +242,7 @@ def parse_ner(text: str) -> NerSheet | None:
     elif total is None and s.cost_sum == 0:
         s.tie, s.tie_note = 'TIE', 'no costs printed and the total is printed blank'
     elif total is None:
-        s.tie, s.tie_note = 'BREAK', f'cost lines sum {s.cost_sum:,.2f}; the total is printed blank or unreadable'
+        s.tie, s.tie_note = 'NO_PRINTED_TOTAL', f'cost lines sum {s.cost_sum:,.2f}; the total is printed blank or unreadable'
     elif abs(total - s.cost_sum) <= TIE_TOLERANCE:
         s.tie, s.tie_note = 'TIE', f'cost lines sum {s.cost_sum:,.2f} = printed {total:,.2f}'
     else:
@@ -250,7 +258,7 @@ def _tie(s: NerSheet, has_total: bool):
     elif total is None and s.cost_sum == 0:
         s.tie, s.tie_note = 'TIE', 'no costs printed and the total is printed blank'
     elif total is None:
-        s.tie, s.tie_note = 'BREAK', f'cost lines sum {s.cost_sum:,.2f}; the total is printed blank or unreadable'
+        s.tie, s.tie_note = 'NO_PRINTED_TOTAL', f'cost lines sum {s.cost_sum:,.2f}; the total is printed blank or unreadable'
     elif abs(total - s.cost_sum) <= TIE_TOLERANCE:
         s.tie, s.tie_note = 'TIE', f'cost lines sum {s.cost_sum:,.2f} = printed {total:,.2f}'
     else:
@@ -337,8 +345,9 @@ def _parse_columns(lines: list) -> NerSheet:
             proposed, budgeted = am[1], None
         else:
             proposed, budgeted = am[0], am[1]
-        s.cost_lines.append(CostLine(label, proposed, ln.strip(), budgeted))
-        if proposed:
+        memo = _memo(ln)
+        s.cost_lines.append(CostLine(label, proposed, ln.strip(), budgeted, memo))
+        if proposed and not memo:
             s.cost_sum += proposed
         if re.search(r'CO-?\s*BROKER', ln, re.I):
             s.cobroker_fee = Field(proposed, ln.strip())

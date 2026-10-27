@@ -68,12 +68,12 @@ TABLES = {
     'cap_lease_rent_step': ('step_id', 'every rent row placed in time from the instruments: period, monthly, annual, basis, option flag; cited'),
     'cap_lease_provision': ('prov_id', 'every extracted term and segmented clause with its page and confidence'),
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
-    'cap_lease_event': ('event_id', "every instrument of every tenancy (lease, amendment, assignment, guaranty, estoppel, ...), typed, dated by its own date with the words it was read from, its recited dates kept apart"),
+    'cap_lease_event': ('event_id', "every instrument of every tenancy (lease, amendment, assignment, guaranty, estoppel, ...), typed, dated by its own date with the words it was read from, its recited dates kept apart; a date a LATER instrument recites for it in recited_by_later_* (never as its own)"),
     'cap_lease_exhibit': ('exhibit_id', 'every exhibit, rider or addendum attached to an instrument: label, title as printed, pages, the instrument it is filed in'),
     'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry and years as it prints them (else computed from its own rent rows), SF, starting and ending rent PSF and average escalation from its rent rows, with the nearest deal sheet economics'),
     'cap_option_register': ('optreg_id', 'every renewal / extension option granted or deleted in a tenancy instrument: count, years each, notice window, rent basis, cited'),
     'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
-    'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line"),
+    'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line; memo says why a printed line is not counted in the sum"),
     'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
 }
 
@@ -100,18 +100,26 @@ def _loose(s: str) -> str:
     return re.sub(r'[^0-9a-z]', '', (s or '').lower())
 
 
-def verify_quotes(tables: dict) -> dict:
+def verify_quotes(tables: dict, consumer_text=None) -> dict:
     """The pre-publish gate: every quote must be found again, word for word
     (up to spacing and case; or letters and digits alone), on the page it
     cites -- in our text of that page or its second read. A quote that is
     not is withdrawn and the row says so: no row leaves with a quote its own
-    page does not print."""
+    page does not print.
+
+    consumer_text(sha256, page) -> the consumer's own text of that page ('' =
+    a page it cannot read; None = a page it does not hold). An OCR quote our
+    second read does not corroborate stands only on a second read that
+    agrees: the consumer's (R2), never on our one read alone (RV5)."""
     pages = {}
     for r in tables['cap_page_text'][1]:
         pages[(r[0], r[1])] = (r[4] or '') + ' ' + (r[5] or '')
     sha_docs = {}
     for r in tables['cap_document'][1]:
         sha_docs.setdefault(r[2], set()).add(r[0])
+
+    def printed(q, t):
+        return _norm(q) in _norm(t) or (len(_loose(q)) >= 4 and _loose(q) in _loose(t))
     for name, (cols, rows) in tables.items():
         if 'quote' not in cols or 'source_page' not in cols:
             continue
@@ -125,12 +133,20 @@ def verify_quotes(tables: dict) -> dict:
             for c in ('source_doc_id', 'doc_id'):
                 if c in ix and r[ix[c]] is not None:
                     docs.add(r[ix[c]])
-            texts = [pages.get((d, page), '') for d in docs]
-            if any(_norm(q) in _norm(t) or (len(_loose(q)) >= 4 and _loose(q) in _loose(t)) for t in texts):
+            if not any(printed(q, pages.get((d, page), '')) for d in docs):
+                why = 'quote not found again on its cited page; withheld for review'
+            elif consumer_text and r[ix['quote_page_method']] in ('ocr_uncorroborated', 'ocr'):
+                theirs = consumer_text((r[ix['source_sha256']] or '').lower(), page)
+                if theirs is None or (theirs.strip() and printed(q, theirs)):
+                    continue
+                why = ('an OCR quote only our first read prints: our second read does not agree and '
+                       + ('your text of this page is empty' if not theirs.strip() else 'your text of this page prints otherwise')
+                       + '; withheld (RV5)')
+            else:
                 continue
             r = list(r)
             r[ix['quote']] = r[ix['quote_page_method']] = None
-            r[ix['null_reason']] = 'quote not found again on its cited page; withheld for review'
+            r[ix['null_reason']] = why
             rows[k] = tuple(r)
     return tables
 
@@ -355,7 +371,8 @@ def _confirmations(conn, property_id):
 
 
 def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
-                      reads_db: str | None = None, tenant_keys: tuple | None = None) -> dict:
+                      reads_db: str | None = None, tenant_keys: tuple | None = None,
+                      consumer_text=None) -> dict:
     """Read a property's extraction DB and return {table: (columns, rows)}.
     Second OCR reads (extractors/second_read.py) come from the DB's own
     page_reads table and, when given, reads_db. tenant_keys = (roll rows,
@@ -623,19 +640,21 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             for k, ins in enumerate(doc_ins):
                 seq += 1
                 event_id += 1
-                ev_date, ev_page, ev_doc = ins.date, ins.date_page, i
+                # event_date is the instrument's OWN date only (ELP LD rules); a date a
+                # later instrument recites for it is kept apart, with its own citation
+                ev_date, ev_page = ins.date, ins.date_page
                 c = Cite(ins.date_page, ins.date_quote, 'printed') if ins.date else Cite(None, '', 'not_found')
-                basis = ins.date_basis or None
-                if (i, k) in recited:
-                    d, q, pg, src_doc = recited[(i, k)]
-                    ev_date, ev_page, ev_doc = d, pg, src_doc
-                    c, basis = Cite(pg, q, 'printed'), 'recited by a later instrument'
-                cols = _cite_cols(c, ev_doc, doc_sha, doc_method, basis, 'instrument date')
+                cols = _cite_cols(c, i, doc_sha, doc_method, ins.date_basis or None, 'instrument date')
+                later = recited.get((i, k)) or (None, None, None, None)
                 if not ev_date:
-                    cols = cols[:5] + (ins.date_null_reason,)
+                    why = ins.date_null_reason
+                    if later[0]:
+                        why += f'; a later instrument recites it as {later[0]}'
+                    cols = cols[:5] + (why,)
                 t_event.append((event_id, lid, seq, i, ins.event_type, ins.ordinal, ins.title or None,
                                 ins.page_from, ins.page_to, ev_date, ev_page,
-                                '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols)
+                                '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols
+                               + (later[0], later[3], later[2], later[1]))
 
     # possible duplicates: two tenancies whose documents name the same legal
     # tenant under different file names. FLAGGED for review, never merged:
@@ -708,7 +727,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                                       missing_value=tot.value is None and not tot.line))
             for seq, cl in enumerate(ns.cost_lines, 1):
                 cc = on_line(cl.amount if cl.amount is not None else cl.budgeted, cl.line)
-                t_ner_cost.append((ner_id, seq, cl.label, cl.amount, cl.budgeted, d['id'], pno)
+                t_ner_cost.append((ner_id, seq, cl.label, cl.amount, cl.budgeted, cl.memo or None, d['id'], pno)
                                   + _cite_cols(cc, d['id'], doc_sha, doc_method, None, 'cost line'))
 
     # lease terms: one row per term-setting instrument, its start / expiry /
@@ -777,7 +796,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                        ner[12] if ner else None, ner[13] if ner else None, ner[14] if ner else None,
                        ner[21] if ner else None, ner[5] if ner else None, ner[0] if ner else None,
                        src_term,
-                       ('computed: monthly x 12 / tenancy SF' if sf else 'SF not known') if steps else 'no rent rows')
+                       ('computed: monthly x 12 / tenancy SF' if sf else 'SF not known') if steps else 'no rent rows',
+                       c.page)
                       + _cite_cols(c, doc_id, doc_sha, doc_method, basis, 'term'))
 
     # depth: every article of every instrument verbatim (layer A) and the
@@ -827,14 +847,15 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         'cap_lease_fact': (['fact_id', 'lease_id', 'field', 'value', 'value_source', 'source_doc_id',
                             'source_page'] + CITE_COLS, t_fact),
         'cap_lease_event': (['event_id', 'lease_id', 'seq', 'source_doc_id', 'event_type', 'ordinal', 'title',
-                             'page_from', 'page_to', 'event_date', 'source_page', 'recited_dates'] + CITE_COLS,
-                            t_event),
+                             'page_from', 'page_to', 'event_date', 'source_page', 'recited_dates'] + CITE_COLS
+                            + ['recited_by_later_date', 'recited_by_later_doc_id', 'recited_by_later_page',
+                               'recited_by_later_quote'], t_event),
         'cap_lease_exhibit': (['exhibit_id', 'lease_id', 'source_doc_id', 'exhibit', 'title_as_printed', 'page_from',
                                'page_to', 'parent_event_seq'] + CITE_COLS, t_exhibit),
         'cap_lease_term': (['term_id', 'lease_id', 'event_seq', 'source_doc_id', 'instrument_type', 'instrument_title',
                             'instrument_date', 'lease_start', 'lease_expiry', 'term_years', 'sf', 'start_rent_psf',
                             'end_rent_psf', 'avg_escalation_pct', 'ti_total', 'lc_total', 'cobroker_total', 'ner_psf',
-                            'deal_type', 'ner_id', 'source_term', 'source_rent'] + CITE_COLS, t_term),
+                            'deal_type', 'ner_id', 'source_term', 'source_rent', 'source_page'] + CITE_COLS, t_term),
         'cap_option_register': (['optreg_id', 'lease_id', 'source_doc_id', 'source_page', 'status', 'n_options',
                                  'option_years', 'notice_window', 'notice_min_days', 'notice_max_days', 'rent_basis',
                                  'rent_basis_words'] + CITE_COLS, t_optreg),
@@ -843,10 +864,10 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                           'leasing_fee', 'cobroker_fee', 'printed_total_landlord_expense', 'cost_lines_sum',
                           'tie_status', 'tie_note', 'total_effective_contract_rent', 'avg_annual_effective_rent',
                           'avg_psf_effective_rent', 'rent_ladder'] + CITE_COLS, t_ner),
-        'cap_ner_cost_line': (['ner_id', 'seq', 'label', 'proposed', 'budgeted', 'source_doc_id', 'source_page']
+        'cap_ner_cost_line': (['ner_id', 'seq', 'label', 'proposed', 'budgeted', 'memo', 'source_doc_id', 'source_page']
                               + CITE_COLS, t_ner_cost),
     }
-    return verify_quotes(tables)
+    return verify_quotes(tables, consumer_text)
 
 
 DOOR_READER = '''"""_cap_door.py -- the one door to a Capactive module package. Stdlib only.
@@ -949,7 +970,7 @@ def snapshot():
 def publish_property_door(db_path: str, out_dir: str, package: str, property_id=None,
                           as_of: date | None = None, publisher: str = PUBLISHER,
                           property_label: str = '', reads_db: str | None = None,
-                          tenant_keys: tuple | None = None) -> dict:
+                          tenant_keys: tuple | None = None, consumer_text=None) -> dict:
     """Write the package into out_dir: the generation database, HANDOFF.txt,
     SOURCE_PATH.txt, BOUNDARY_CONTRACT.md, door/_cap_door.py and, LAST,
     PUBLISH_MANIFEST.json. Returns the manifest."""
@@ -958,7 +979,8 @@ def publish_property_door(db_path: str, out_dir: str, package: str, property_id=
     man_path = os.path.join(out_dir, 'PUBLISH_MANIFEST.json')
     if os.path.exists(man_path):
         os.remove(man_path)                      # consumers now see a publish under way
-    tables = build_door_tables(db_path, property_id, as_of, reads_db=reads_db, tenant_keys=tenant_keys)
+    tables = build_door_tables(db_path, property_id, as_of, reads_db=reads_db, tenant_keys=tenant_keys,
+                               consumer_text=consumer_text)
     gen = uuid.uuid4().hex
     db_name = f'{PREFIX}_{package.lower()}_{gen}.db'
     db_out = os.path.join(out_dir, db_name)

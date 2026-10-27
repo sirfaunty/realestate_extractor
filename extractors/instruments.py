@@ -77,7 +77,7 @@ TITLE_LINES = 6           # an instrument's title sits in the first lines of its
 # only as "This <instrument> ... dated")
 _OWN = [re.compile(r'(?:made|entered\s+into|executed)\s+(?:and\s+entered\s+into\s+)?(?:as\s+of\s+|effective\s+)?'
                    r'(?:the\s+|this\s+)?(' + DATE + ')', re.I),
-        re.compile(r'\bthis\s+(?:[\w-]+\s+){1,4}?dated\s+(?:as\s+of\s+)?(?:the\s+)?(' + DATE + ')', re.I),
+        re.compile(r'\bthis\s+(?:[\w-]+\s+){0,3}?[\w-]+\s*,?\s+dated\s+(?:as\s+of\s+)?(?:the\s+)?(' + DATE + ')', re.I),
         re.compile(r'(?:effective|as\s+of)\s+(?:the\s+|this\s+)?(' + DATE + ')', re.I),
         re.compile(r'\bthis\s+(' + DATE + ')', re.I)]
 # a signing date: written beside signature words
@@ -85,8 +85,9 @@ _DAY_OF = (r'(?:\d{1,2}(?:st|nd|rd|th)?|' + _ORDW + r')\s+day\s+of\s+' + _MON + 
 _SIGNED = re.compile(r'(?:\bDated?\s*:|\bDate\s+(?:signed|executed)\s*:?|\bSigned\s+on|\bExecuted\s+on)\s*'
                      r'(?:the\s+)?(' + DATE + r')|\b(?:on\s+)?this\s+(' + _DAY_OF + ')', re.I)
 # a RECITED date: the earlier instrument's ("the Lease dated June 1, 2009")
-_RECITED = re.compile(r'\b(?:that\s+certain|the|said|original|such)\s+(?:\w+\s+){0,3}?'
-                      r'(?:lease|amendment|agreement|guaranty)\s+(?:\w+\s+){0,3}?(?:dated|made|executed|entered\s+into)'
+# ("a lease agreement dated as of ...", "the Master Lease and Security Agreement, dated as of ...")
+_RECITED = re.compile(r'\b(?:that\s+certain|the|said|original|such|an?)\s+(?:\w+\s+){0,4}?'
+                      r'(?:lease|amendment|agreement|guaranty)\s*,?\s+(?:\w+\s+){0,3}?(?:dated|made|executed|entered\s+into)'
                       r'\s+(?:as\s+of\s+)?(?:the\s+)?$', re.I)     # never "THIS Lease ... made as of"
 
 

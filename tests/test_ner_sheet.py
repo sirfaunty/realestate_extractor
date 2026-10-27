@@ -88,6 +88,11 @@ test('each value carries its verbatim line', s.printed_total_landlord_expense.li
 b = parse_ner(TYPED.replace('$ 24,000.00', '$ 25,000.00'))
 test('lines that do not add up are a BREAK, with the sum and the printed total', b.tie == 'BREAK'
      and '24,000.00' in b.tie_note and '25,000.00' in b.tie_note)
+test('an amortization line is kept as a memo line, out of the sum, and says why',
+     [x.memo for x in s.cost_lines if 'AMORTIZED' in x.line][0].startswith('amortized')
+     and all(not x.memo for x in s.cost_lines if 'AMORTIZED' not in x.line))
+blank = parse_ner(TYPED.replace('TOTAL LANDLORD EXPENSES: $ 24,000.00', 'TOTAL LANDLORD EXPENSES: $'))
+test('a total printed blank is NO_PRINTED_TOTAL, never a BREAK', blank.tie == 'NO_PRINTED_TOTAL')
 
 print('\nSpreadsheet form')
 c = parse_ner(COLUMNS)
