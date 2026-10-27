@@ -533,8 +533,18 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
     for row in rows:
         lid = row.key or _slug(row.tenant)
         seq = 0
+        ins_by_doc = {i: split_instruments(pages_by_doc.get(i, [])) for i in row.doc_ids}
+        # what the tenancy's instruments recite about each other: an instrument
+        # that prints no date of its own takes the date a LATER instrument
+        # recites for it ("as amended by the Third Amendment dated ..."), and
+        # says so; only when every recital of it agrees
+        recited_for = {}
+        for i, lst in ins_by_doc.items():
+            for ins in lst:
+                for t, o, d, q, pg in ins.recital_targets:
+                    recited_for.setdefault((t, o), []).append((d, q, pg, i))
         for i in row.doc_ids:
-            doc_ins = split_instruments(pages_by_doc.get(i, []))
+            doc_ins = ins_by_doc[i]
             base = seq
             for ex in find_exhibits(pages_by_doc.get(i, []), doc_ins):
                 exhibit_id += 1
@@ -545,12 +555,20 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             for ins in doc_ins:
                 seq += 1
                 event_id += 1
+                ev_date, ev_page, ev_doc = ins.date, ins.date_page, i
                 c = Cite(ins.date_page, ins.date_quote, 'printed') if ins.date else Cite(None, '', 'not_found')
-                cols = _cite_cols(c, i, doc_sha, doc_method, ins.date_basis or None, 'instrument date')
+                basis = ins.date_basis or None
                 if not ins.date:
+                    cands = [x for x in recited_for.get((ins.event_type, ins.ordinal), []) if x[3] != i]
+                    if cands and len({x[0] for x in cands}) == 1 and (ins.ordinal or ins.event_type == 'original lease'):
+                        d, q, pg, src_doc = cands[0]
+                        ev_date, ev_page, ev_doc = d, pg, src_doc
+                        c, basis = Cite(pg, q, 'printed'), 'recited by a later instrument'
+                cols = _cite_cols(c, ev_doc, doc_sha, doc_method, basis, 'instrument date')
+                if not ev_date:
                     cols = cols[:5] + (ins.date_null_reason,)
                 t_event.append((event_id, lid, seq, i, ins.event_type, ins.ordinal, ins.title or None,
-                                ins.page_from, ins.page_to, ins.date, ins.date_page,
+                                ins.page_from, ins.page_to, ev_date, ev_page,
                                 '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols)
 
     # option register: every renewal / extension option granted (or deleted)
@@ -631,8 +649,12 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         ner = None
         if ner_by_lease.get(lid):
             ref = ev_date or start
-            ner = min(ner_by_lease[lid], key=lambda nr: abs((date.fromisoformat(nr[4]) - date.fromisoformat(ref)).days)
-                      if nr[4] else 10 ** 6)
+            def gap(nr, ref=ref):
+                try:
+                    return abs((date.fromisoformat(nr[4]) - date.fromisoformat(ref)).days)
+                except (TypeError, ValueError):
+                    return 10 ** 6
+            ner = min(ner_by_lease[lid], key=gap)
         c = Cite(steps[0][9], steps[0][13] or '', 'printed') if steps[0][13] else Cite(None, '', 'not_found')
         t_term.append((term_id, lid, seq, doc_id, etype, title, ev_date, start, end, years, sf, p0, p1, esc,
                        ner[12] if ner else None, ner[13] if ner else None, ner[14] if ner else None,

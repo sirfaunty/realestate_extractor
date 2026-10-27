@@ -103,6 +103,7 @@ class Instrument:
     date_basis: str = ''         # 'opening' | 'signature block' | '' (null)
     date_null_reason: str = ''
     recited: list = field(default_factory=list)    # [(iso, quote)] dates it recites
+    recital_targets: list = field(default_factory=list)   # [(event type, ordinal, iso, quote, page)] what each names
 
 
 def _iso(s: str) -> str | None:
@@ -143,6 +144,22 @@ def _ordinal(title: str) -> int | None:
         return _ORDINALS[m.group(1).lower()]
     m = re.search(r'(?i)\b(\d{1,2})(?:st|nd|rd|th)\s+(?:amendment|modification)', title or '')
     return int(m.group(1)) if m else None
+
+
+def _recital_target(quote: str) -> tuple:
+    """(event type, ordinal) a recital names: "the Third Amendment to Lease
+    dated ..." -> ('amendment', 3); "the Lease dated ..." -> ('original lease', None)."""
+    cut = [m.start() for m in re.finditer(r'(?i)\bdated\b|\bmade\b|\bexecuted\b|\bentered\s+into\b', quote)]
+    before = quote[:cut[-1]][-45:] if cut else quote[-45:]      # the words naming the instrument just before its date
+    m = re.search(r'(?i)\b(' + '|'.join(_ORDINALS) + r')\s+(?:amendment|modification)', before)
+    if m:
+        return 'amendment', _ORDINALS[m.group(1).lower()]
+    for t, rx in (('assignment / assumption', r'assignment'), ('guaranty', r'guarant'),
+                  ('extension / renewal exercised', r'extension|renewal'), ('amendment', r'amendment'),
+                  ('original lease', r'\blease\b')):
+        if re.search(rx, before, re.I):
+            return t, None
+    return None, None
 
 
 def _own_date(pages: list, p_from: int, p_to: int):
@@ -190,7 +207,9 @@ def split_instruments(pages: list) -> list[Instrument]:
     for k, (n, t, title) in enumerate(starts):
         end = (starts[k + 1][0] - 1) if k + 1 < len(starts) else len(pages)
         iso, quote, dpage, basis, recited = _own_date(pages, n, end)
+        targets = [_recital_target(q) + (d, q, n) for d, q in recited]
         out.append(Instrument(t, _ordinal(title) if t in ('amendment', 'extension / renewal exercised') else None,
                               title, n, end, iso, quote, dpage, basis,
-                              '' if iso else 'no date printed in its opening or signature block', recited))
+                              '' if iso else 'no date printed in its opening or signature block', recited,
+                              [x for x in targets if x[0]]))
     return out

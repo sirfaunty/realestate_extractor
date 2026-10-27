@@ -74,6 +74,15 @@ class NerSheet:
     tie_note: str = ''
 
 
+def _valid(y: int, mo: int, d: int) -> str | None:
+    """An ISO date only when the calendar has that day (a sheet can print 4/31)."""
+    from datetime import date as _date
+    try:
+        return _date(y, mo, d).isoformat()
+    except ValueError:
+        return None
+
+
 def _num(s: str) -> float | None:
     s = re.sub(r'\s', '', s or '')
     if not s or not re.search(r'\d', s):
@@ -135,8 +144,9 @@ def parse_ner(text: str) -> NerSheet | None:
         if m:
             mo, d, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
             y = y + (2000 if y < 50 else 1900) if y < 100 else y
-            if 1 <= mo <= 12 and 1 <= d <= 31:
-                s.version_date = Field(f'{y:04d}-{mo:02d}-{d:02d}', ln.strip())
+            iso = _valid(y, mo, d)
+            if iso:
+                s.version_date = Field(iso, ln.strip())
                 break
 
     # a deal-type box is ticked when a mark sits right before its label
@@ -265,7 +275,9 @@ def _parse_columns(lines: list) -> NerSheet:
     if m:
         mo, dd, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
         y = y + (2000 if y < 50 else 1900) if y < 100 else y
-        s.version_date = Field(f'{y:04d}-{mo:02d}-{dd:02d}', d.line)
+        iso = _valid(y, mo, dd)
+        if iso:
+            s.version_date = Field(iso, d.line)
     s.tenant = after(r'NAME\s*/\s*DBA')
     s.use = after(r'DESCRIPTION')
     s.property = after(r'^\s*NAME')
