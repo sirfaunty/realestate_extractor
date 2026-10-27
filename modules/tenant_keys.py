@@ -34,6 +34,7 @@ MIN_PREFIX = 8      # shortest normalised name a prefix match may rest on
 MIN_WITHIN = 6      # shortest roll name found inside a run-together file name
 MIN_NEAR = 9        # shortest roll name matched with a misspelling
 NEAR = 0.88         # share of the roll name's letters the file name must carry, in order
+FILE_WEIGHT = 0.9   # a match on a document's file name, against one on a name the paper gives
 
 
 @dataclass
@@ -101,25 +102,34 @@ def _span(m) -> int:
 
 
 def match_tenant_keys(tenancies: list, roll: list, alias: dict | None = None) -> dict:
+    """tenancies[i] = (lease_id, names) or (lease_id, names, file_names, rank):
+    a match on a file name scores FILE_WEIGHT of the same match on a name the
+    paper gives; on a tie the lower rank wins (the tenancy that holds the
+    lease before one that holds only letters)."""
     alias = alias or {}
     occupied = [r for r in roll if r.get('tenant_key')]
-    out = {lid: KeyMatch(None, None, None, 'not on roll', 0.0) for lid, _ in tenancies}
+    out = {t[0]: KeyMatch(None, None, None, 'not on roll', 0.0) for t in tenancies}
     # alias first: a name the owner's table already resolves
     by_key = {}
     for r in occupied:
         by_key.setdefault(r['tenant_key'], r)
     cands = []
-    for lid, names in tenancies:
-        for n in names:
+    for t in tenancies:
+        lid, names = t[0], list(t[1])
+        files = list(t[2]) if len(t) > 2 else []
+        rank = t[3] if len(t) > 3 else 0
+        for n in names + files:
             k = alias.get(norm(n)) or alias.get(norm(n)[:27])
             if k and k in by_key:
-                cands.append((1.1, lid, k, 'alias'))
+                cands.append((1.1 * (FILE_WEIGHT if n in files and n not in names else 1), rank, lid, k, 'alias'))
         for r in occupied:
-            best = max((_score(n, r.get('occupant') or '') for n in names), default=(0.0, ''))
+            occ = r.get('occupant') or ''
+            best = max([_score(n, occ) for n in names]
+                       + [(sc * FILE_WEIGHT, bs) for sc, bs in (_score(f, occ) for f in files)], default=(0.0, ''))
             if best[0] > 0:
-                cands.append((best[0], lid, r['tenant_key'], best[1]))
+                cands.append((best[0], rank, lid, r['tenant_key'], best[1]))
     taken_lease, taken_key = set(), set()
-    for score, lid, key, basis in sorted(cands, key=lambda c: -c[0]):
+    for score, _, lid, key, basis in sorted(cands, key=lambda c: (-c[0], c[1])):
         if lid in taken_lease or key in taken_key:
             continue
         r = by_key[key]

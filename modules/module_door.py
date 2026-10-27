@@ -48,6 +48,7 @@ from ..extractors.citation import Cite, cite_date, cite_number, cite_text
 from ..extractors.exhibits import find_exhibits
 from ..extractors.instrument_terms import instrument_term
 from ..extractors.instruments import recited_dates, split_instruments
+from ..extractors.labels import find_labels
 from ..extractors.ner_sheet import parse_ner
 from ..extractors.options import find_options
 from ..extractors.second_read import in_read, load_reads
@@ -253,6 +254,30 @@ def _slug(name: str) -> str:
     words = [re.sub(r'[^a-z]', '', w.lower()) for w in re.split(r'[^A-Za-z]+', name or '')]
     words = [w for w in words if len(w) >= 3 and w not in GENERIC]
     return '_'.join(words[:2]) or re.sub(r'[^a-z]', '', (name or '').lower()) or 'unknown'
+
+
+def match_names(row, property_name: str = '') -> tuple:
+    """(names, file names) a tenancy goes by, for matching it to a rent roll:
+    its parties, aliases and label; and its documents' file names without the
+    property in front of them (the label keeps two words of a file name;
+    "Elm Court Commons - Birch Bakery Scanned Lease" carries the whole trade
+    name, and "Elm Court Commons" is the property, not the tenant)."""
+    files = []
+    for f in getattr(row, 'filenames', None) or []:
+        stem = re.sub(r'\.[A-Za-z0-9]{2,4}$', '', f.replace('\\', '/').split('/')[-1].split('__')[-1])
+        if ' - ' in stem:
+            stem = stem.split(' - ', 1)[1]
+        if len(property_name or '') >= 6 and stem.lower().startswith(property_name.lower()):
+            stem = stem[len(property_name):]
+        if stem.strip(' -'):
+            files.append(stem.strip(' -'))
+    names = row.tenant.split(' / ') + list(row.aliases) + ([row.label] if row.label else [])
+    return names, list(dict.fromkeys(files))
+
+
+def match_rank(row) -> int:
+    """Lower first on a tie: a current tenancy before an expired one or another agreement."""
+    return {'tenancy': 0, 'expired': 1}.get(getattr(row, 'kind', ''), 2)
 
 
 def _num_or_none(v):
@@ -519,11 +544,16 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         return c
     # the owner's rent-roll keys, when given: (roll rows, alias table)
     keyed = {}
+    try:
+        pr = conn.execute('SELECT name FROM properties' + (' WHERE id = ?' if property_id else ' ORDER BY id LIMIT 1'),
+                          (property_id,) if property_id else ()).fetchone()
+    except sqlite3.Error:
+        pr = None
+    property_name = (pr[0] if pr else '') or ''
     if tenant_keys:
         keyed = match_tenant_keys(
-            [(row.key or _slug(row.tenant), [n for n in row.tenant.split(' / ')] + list(row.aliases)
-              + ([row.label] if row.label else []))
-             for row in rows], tenant_keys[0], tenant_keys[1] if len(tenant_keys) > 1 else None)
+            [(row.key or _slug(row.tenant), *match_names(row, property_name), match_rank(row)) for row in rows],
+            tenant_keys[0], tenant_keys[1] if len(tenant_keys) > 1 else None)
     for row in rows:
         lease_id = row.key or _slug(row.tenant)
         source_key = _slug(row.tenant.split(' / ')[0])
@@ -900,6 +930,28 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                            None, h.page, None, h.page)
                           + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'excerpt'))
 
+    # depth layer C: every "LABEL: value" every document of a tenancy prints
+    # (deal sheets, summaries, checklists and letters too), the value quoted
+    # in `quote` and the label in `quote_label`: a form's columns can sit
+    # apart in another read, so each is verified on its own
+    n_cols = len(t_prov[0]) if t_prov else None
+    t_prov = [r + (None,) for r in t_prov]
+    for d in docs:
+        if d['id'] not in lease_doc_ids:
+            continue
+        lid = doc_lease[d['id']]
+        for pno, page in enumerate(pages_by_doc.get(d['id'], []), 1):
+            for lv in find_labels(page):
+                prov_id += 1
+                amt = re.fullmatch(r'\$?\s*([\d,]+(?:\.\d+)?)', lv.value)
+                num = _num_or_none(amt.group(1).replace(',', '')) if amt else None
+                c = Cite(pno, lv.value, 'printed')
+                t_prov.append((prov_id, lid, d['id'], 'label', f'Label: {lv.label}', lv.label, lv.value, num,
+                               None, None, None, None, pno, None, pno)
+                              + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'label value')
+                              + (lv.label,))
+    assert n_cols is None or all(len(r) == n_cols + 1 for r in t_prov)
+
     tables = {
         'cap_document': (['doc_id', 'filename', 'sha256', 'pages', 'document_type', 'method', 'ocr_confidence',
                           'family', 'archived_hint', 'review_status', 'processed_at'], t_doc),
@@ -918,8 +970,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                                  'source_page'] + CITE_COLS, t_step),
         'cap_lease_provision': (['prov_id', 'lease_id', 'doc_id', 'kind', 'category', 'label', 'value_raw',
                                  'value_numeric', 'unit', 'effective_date', 'expiration_date',
-                                 'section_ref', 'source_page', 'confidence', 'source_page_to'] + CITE_COLS,
-                                t_prov),
+                                 'section_ref', 'source_page', 'confidence', 'source_page_to'] + CITE_COLS
+                                + ['quote_label'], t_prov),
         'cap_lease_option': (['opt_id', 'lease_id', 'kind', 'detail', 'monthly_amount', 'annual_amount',
                               'source_page_hint', 'source_doc_id', 'source_page'] + CITE_COLS, t_opt),
         'cap_lease_fact': (['fact_id', 'lease_id', 'field', 'value', 'value_source', 'source_doc_id',
