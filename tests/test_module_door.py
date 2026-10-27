@@ -169,6 +169,9 @@ def main():
     test('an extracted term quotes the words its value came from', '2,000.00' in term['quote'])
     cc.close()
 
+    gl = [L for L in leases if L.get('possible_same_lease_as')]
+    test('two tenancies of one lease are flagged, never merged, when their names differ only by filing',
+         all(L['tenant_key'] != 'bean_coffee' for L in gl))
     print('\nTorn publish')
     os.remove(os.path.join(out, 'PUBLISH_MANIFEST.json'))
     try:

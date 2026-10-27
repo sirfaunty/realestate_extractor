@@ -173,6 +173,10 @@ def _cite_in_docs(docs: list, value, kind: str):
     return (docs[0][0] if docs else None), Cite(None, '', 'not_found')
 
 
+_GENERIC_LEGAL = {'tobedetermined', 'statementsnotices', 'international', 'corporation', 'incorporated',
+                  'limitedliabilitycompany', 'minnesotacorporation', 'specific', 'tenantname', 'landlord', 'tenant'}
+
+
 def _slug(name: str) -> str:
     words = [re.sub(r'[^a-z]', '', w.lower()) for w in re.split(r'[^A-Za-z]+', name or '')]
     words = [w for w in words if len(w) >= 3 and w not in GENERIC]
@@ -571,6 +575,27 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                                 ins.page_from, ins.page_to, ev_date, ev_page,
                                 '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols)
 
+    # possible duplicates: two tenancies whose documents name the same legal
+    # tenant under different file names. FLAGGED for review, never merged:
+    # one tenant can hold two leases (two suites on the rent roll = two leases)
+    legal = {}
+    for row in rows:
+        lid = row.key or _slug(row.tenant)
+        for a in row.aliases:
+            k = re.sub(r'[^a-z]', '', (a or '').lower())
+            if len(k) >= 8 and k not in _GENERIC_LEGAL:
+                legal.setdefault(k, set()).add(lid)
+    suite_of = {r[0]: r[22] for r in t_lease}
+    dup = {}
+    for k, lids in legal.items():
+        lids = sorted(lids)
+        for a in lids:
+            for b in lids:
+                if a == b or (suite_of.get(a) and suite_of.get(b) and suite_of[a] != suite_of[b]):
+                    continue
+                dup.setdefault(a, set()).add(b)
+    t_lease = [r + ('; '.join(sorted(dup[r[0]])) if r[0] in dup else None,) for r in t_lease]
+
     # option register: every renewal / extension option granted (or deleted)
     # in a tenancy's instruments, with count, length, notice window, rent basis
     t_optreg = []
@@ -695,7 +720,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                              'expiration_paper', 'base_rent_monthly', 'rent_method', 'rent_confidence',
                              'rent_flags', 'rent_detail', 'needs', 'show_unreviewed', 'n_documents',
                              'source_doc_ids', 'chain_flags', 'source_tenant_key', 'roll_suite',
-                             'roll_occupant', 'key_basis'], t_lease),
+                             'roll_occupant', 'key_basis', 'possible_same_lease_as'], t_lease),
         'cap_lease_chain': (['lease_id', 'seq', 'doc_id', 'filename', 'role', 'archived_hint',
                              'instrument_start'], t_chain),
         'cap_lease_rent_step': (['step_id', 'lease_id', 'period_from', 'period_to', 'monthly_amount',
