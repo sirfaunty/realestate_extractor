@@ -92,3 +92,6 @@ _compare_scorecard/
 reference_data/
 Ownership Deliverables/
 properties.json
+
+# a one-time upload key must never be committed
+.b2_upload_key*

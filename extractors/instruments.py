@@ -127,6 +127,10 @@ def classify(title_block: str) -> tuple[str | None, str]:
     for ln in lines:
         if len(ln) > 120:
             continue
+        # a page headed "EXHIBIT D" is an attachment of the instrument it is filed in,
+        # even when its title names a form ("COMMENCEMENT DATE CERTIFICATE")
+        if re.match(r'(?i)\s*(?:EXHIBIT|RIDER|ATTACHMENT)\s*["“]?[A-Z0-9]{1,3}\b', ln):
+            return None, ''
         for t, rx in _TYPES:
             if rx.search(ln) and (ln.isupper() or t == 'original lease' or len(ln) <= 60):
                 return t, ln

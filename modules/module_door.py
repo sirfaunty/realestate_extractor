@@ -45,6 +45,7 @@ from ..extractors.rent_derivation import (
     _anchor, _instrument_start, _is_option_table, parse_dated_rows, parse_rent_schedule)
 from ..extractors.articles import split_articles, sweep
 from ..extractors.citation import Cite, cite_date, cite_number, cite_text
+from ..extractors.exhibits import find_exhibits
 from ..extractors.instruments import split_instruments
 from ..extractors.ner_sheet import parse_ner
 from ..extractors.options import find_options
@@ -67,6 +68,7 @@ TABLES = {
     'cap_lease_provision': ('prov_id', 'every extracted term and segmented clause with its page and confidence'),
     'cap_lease_option': ('opt_id', 'renewal-option statements and option rent tables, cited'),
     'cap_lease_event': ('event_id', "every instrument of every tenancy (lease, amendment, assignment, guaranty, estoppel, ...), typed, dated by its own date with the words it was read from, its recited dates kept apart"),
+    'cap_lease_exhibit': ('exhibit_id', 'every exhibit, rider or addendum attached to an instrument: label, title as printed, pages, the instrument it is filed in'),
     'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry, years, SF, starting and ending rent PSF and average escalation computed from its own rent rows, with the nearest deal sheet economics'),
     'cap_option_register': ('optreg_id', 'every renewal / extension option granted or deleted in a tenancy instrument: count, years each, notice window, rent basis, cited'),
     'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
@@ -526,13 +528,21 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
 
     # events: every instrument of every tenancy document, typed, dated by its
     # OWN date (never a date it recites), cited to the words it was read from
-    t_event = []
-    event_id = 0
+    t_event, t_exhibit = [], []
+    event_id = exhibit_id = 0
     for row in rows:
         lid = row.key or _slug(row.tenant)
         seq = 0
         for i in row.doc_ids:
-            for ins in split_instruments(pages_by_doc.get(i, [])):
+            doc_ins = split_instruments(pages_by_doc.get(i, []))
+            base = seq
+            for ex in find_exhibits(pages_by_doc.get(i, []), doc_ins):
+                exhibit_id += 1
+                c = Cite(ex.page_from, ex.heading, 'printed')
+                t_exhibit.append((exhibit_id, lid, i, ex.label, ex.title or None, ex.page_from, ex.page_to,
+                                  (base + ex.parent_seq) if ex.parent_seq else None)
+                                 + _cite_cols(c, i, doc_sha, doc_method, None, 'exhibit'))
+            for ins in doc_ins:
                 seq += 1
                 event_id += 1
                 c = Cite(ins.date_page, ins.date_quote, 'printed') if ins.date else Cite(None, '', 'not_found')
@@ -680,6 +690,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         'cap_lease_event': (['event_id', 'lease_id', 'seq', 'source_doc_id', 'event_type', 'ordinal', 'title',
                              'page_from', 'page_to', 'event_date', 'source_page', 'recited_dates'] + CITE_COLS,
                             t_event),
+        'cap_lease_exhibit': (['exhibit_id', 'lease_id', 'source_doc_id', 'exhibit', 'title_as_printed', 'page_from',
+                               'page_to', 'parent_event_seq'] + CITE_COLS, t_exhibit),
         'cap_lease_term': (['term_id', 'lease_id', 'event_seq', 'source_doc_id', 'instrument_type', 'instrument_title',
                             'instrument_date', 'lease_start', 'lease_expiry', 'term_years', 'sf', 'start_rent_psf',
                             'end_rent_psf', 'avg_escalation_pct', 'ti_total', 'lc_total', 'cobroker_total', 'ner_psf',
