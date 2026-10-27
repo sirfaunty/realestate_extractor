@@ -287,8 +287,16 @@ def _num_or_none(v):
         return None
 
 
+_NOT_A_TENANCY = re.compile(r'(?i)\b(?:leasing\s*/?\s*(?:mgmt|management)|management\s+office|mgmt\s+office|'
+                            r'utility\s+account|vacant|model\s+unit|storage\s+only)\b')
+_OWNER_NOISE = {'company', 'companies', 'properties', 'property', 'partners', 'partnership', 'limited', 'group',
+                'holdings', 'realty', 'real', 'estate', 'management', 'development', 'investments', 'associates',
+                'bank', 'building', 'corp', 'center', 'centre', 'plaza', 'mall', 'office', 'trust', 'national', 'first',
+                'american', 'minnesota', 'services', 'financial', 'corporate'}
+
+
 def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs: list,
-                         pages_by_doc: dict) -> list:
+                         pages_by_doc: dict, landlords: list = ()) -> list:
     """One row per rent-roll tenancy and field (sf / base rent / expiration):
     the roll's value, the paper's value with the words it is printed in,
     whether they tie (SF exact, rent within 2%, expiration the same day) and,
@@ -307,7 +315,20 @@ def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs
         lid = by_key.get(rr.get('tenant_key'))
         base = (rr.get('suite'), rr.get('occupant'), rr.get('tenant_key'))
         if not lid:
-            words = [w for w in re.findall(r'[a-z]{4,}', (rr.get('occupant') or '').lower()) if w not in GENERIC]
+            occ = rr.get('occupant') or ''
+            if _NOT_A_TENANCY.search(occ):
+                out.append(base + ('lease', None, None, None, 'NOT_A_TENANCY',
+                                   'the roll line is an office, account or unit of the landlord, not a lease', None, None,
+                                   None))
+                continue
+            occ_w = {w for w in re.findall(r'[a-z]{4,}', occ.lower()) if w not in GENERIC and w not in _OWNER_NOISE}
+            owner = next((ll for ll in landlords if occ_w & {w for w in re.findall(r'[a-z]{4,}', ll.lower())}), None)
+            if owner:
+                out.append(base + ('lease', None, None, None, 'OWNER_AFFILIATE',
+                                   f"the landlord's own company (the leases name the landlord '{owner[:60]}'): an owner "
+                                   'occupancy, no lease expected unless one was signed', None, None, None))
+                continue
+            words = [w for w in re.findall(r'[a-z]{4,}', occ.lower()) if w not in GENERIC]
             hits = [d['filename'] for d in docs if words and (
                 all(w in (d.get('filename') or '').lower() for w in words[:2]) or
                 all(w in ' '.join(pages_by_doc.get(d['id'], [])[:3]).lower() for w in words[:2]))]
@@ -681,7 +702,13 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                            note, d, c.page)
                           + _cite_cols(c, d, doc_sha, doc_method, None, field, missing_value=value is None))
 
-    t_recon = _roll_reconciliation(tenant_keys[0] if tenant_keys else [], keyed, rows, t_fact, docs, pages_by_doc)
+    try:
+        landlords = sorted({r[0] for r in conn.execute(
+            "SELECT DISTINCT value_raw FROM financial_terms WHERE term_type = 'landlord_name' AND value_raw IS NOT NULL")})
+    except sqlite3.Error:
+        landlords = []
+    t_recon = _roll_reconciliation(tenant_keys[0] if tenant_keys else [], keyed, rows, t_fact, docs, pages_by_doc,
+                                   landlords)
 
     # provisions: extracted terms + segmented clauses of the roster's documents
     t_prov = []

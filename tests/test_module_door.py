@@ -77,7 +77,8 @@ def main():
     for term, raw, num, unit, page in (('tenant_identity', 'Bean Coffee Inc', None, None, 1),
                                        ('square_footage', '2,400', 2400, 'sf', 1),
                                        ('base_rent', '$2,000.00', 2000.0, 'monthly', 2),
-                                       ('lease_commencement', 'July 1, 2022', None, None, 1)):
+                                       ('lease_commencement', 'July 1, 2022', None, None, 1),
+                                       ('landlord_name', 'Birchwood Realty LLC', None, None, 1)):
         db.conn.execute("INSERT INTO financial_terms(document_id, term_type, value_raw, value_numeric, value_unit, "
                         "page_number, confidence) VALUES (?,?,?,?,?,?,?)", (lease_id, term, raw, num, unit, page, 0.9))
     db.conn.commit()
@@ -233,7 +234,9 @@ def main():
              'base_rent_monthly': '2500.00', 'expiration': ''},
             {'suite': '220', 'occupant': 'River Dental', 'tenant_key': 'river_dental', 'sf': '1950',
              'base_rent_monthly': '', 'expiration': ''},
-            {'suite': '230', 'occupant': 'Quince Bakery', 'tenant_key': 'quince_bakery', 'sf': '900'}]
+            {'suite': '230', 'occupant': 'Quince Bakery', 'tenant_key': 'quince_bakery', 'sf': '900'},
+            {'suite': '300', 'occupant': 'Birchwood Corporate Office', 'tenant_key': 'birchwood_corporate'},
+            {'suite': '001', 'occupant': 'Leasing / Mgmt Office', 'tenant_key': 'leasing_office'}]
     rt = build_door_tables(db_path, pid, date(2026, 9, 1), tenant_keys=(roll, {}))
     rcols, rrows = rt['cap_roll_reconciliation']
     rec = {(r[rcols.index('tenant_key')], r[rcols.index('field')]): dict(zip(rcols, r)) for r in rrows}
@@ -247,6 +250,10 @@ def main():
     diff = [dict(zip(rt2[0], r)) for r in rt2[1] if r[3] == 'bean_coffee' and r[4] == 'base_rent_monthly'][0]
     test('a rent more than 2% from the roll DIFFERS, and says what the instruments give',
          diff['state'] == 'DIFFERS' and '2,500.00' in diff['explanation'] and '2,650.00' in diff['explanation'])
+    test("the landlord's own company on the roll is OWNER_AFFILIATE, naming the landlord",
+         rec[('birchwood_corporate', 'lease')]['state'] == 'OWNER_AFFILIATE'
+         and 'Birchwood Realty' in rec[('birchwood_corporate', 'lease')]['explanation'])
+    test('a management office on the roll is NOT_A_TENANCY', rec[('leasing_office', 'lease')]['state'] == 'NOT_A_TENANCY')
     test('a roll tenancy no document names is NO_LEASE, and says so',
          rec[('quince_bakery', 'lease')]['state'] == 'NO_LEASE'
          and 'no document' in rec[('quince_bakery', 'lease')]['explanation'])
