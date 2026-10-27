@@ -250,6 +250,12 @@ def main():
     diff = [dict(zip(rt2[0], r)) for r in rt2[1] if r[3] == 'bean_coffee' and r[4] == 'base_rent_monthly'][0]
     test('a rent more than 2% from the roll DIFFERS, and says what the instruments give',
          diff['state'] == 'DIFFERS' and '2,500.00' in diff['explanation'] and '2,650.00' in diff['explanation'])
+    roll[1]['base_rent_monthly'] = '3090.00'
+    rt3 = build_door_tables(db_path, pid, date(2026, 9, 1), tenant_keys=(roll, {}))['cap_roll_reconciliation']
+    rd = [dict(zip(rt3[0], r)) for r in rt3[1] if r[3] == 'river_dental' and r[4] == 'base_rent_monthly'][0]
+    test("a roll rent that is a step of our own schedule says so",
+         rd['state'] == 'DIFFERS' and 'a step of the schedule we read' in rd['explanation'])
+    test('a roll rent on no page says so', 'printed on no page' in diff['explanation'])
     test("the landlord's own company on the roll is OWNER_AFFILIATE, naming the landlord",
          rec[('birchwood_corporate', 'lease')]['state'] == 'OWNER_AFFILIATE'
          and 'Birchwood Realty' in rec[('birchwood_corporate', 'lease')]['explanation'])

@@ -295,8 +295,39 @@ _OWNER_NOISE = {'company', 'companies', 'properties', 'property', 'partners', 'p
                 'american', 'minnesota', 'services', 'financial', 'corporate'}
 
 
+def _where_roll_rent(roll_v: float, lid, row, steps_by_lease: dict, pages_by_doc: dict, fam_by_doc: dict) -> str:
+    """Where the roll's rent stands in the tenancy's papers, when it differs
+    from ours: a step of our own schedule (dated otherwise), or printed on a
+    page that is no rent evidence (a management-system lease summary or a deal
+    sheet, which come from the owner's own system; a renewal-term table for
+    an option the files do not show exercised)."""
+    near = [s for s in steps_by_lease.get(lid, []) if s[4] and abs(s[4] - roll_v) / roll_v <= 0.005]
+    if near:
+        s = near[0]
+        return (f'; it is a step of the schedule we read, dated {s[2]} to {s[3]} (document {s[8]} p{s[9]})'
+                if s[2] else f'; it is a step of the schedule we read, which no date places (document {s[8]} '
+                f'p{s[9]})')
+    amt = f'{roll_v:,.2f}'
+    for d in (row.doc_ids if row else []):
+        for n, page in enumerate(pages_by_doc.get(d, []), 1):
+            i = (page or '').find(amt)
+            if i < 0:
+                continue
+            ctx = re.sub(r'\s+', ' ', page[max(0, i - 300):i]).lower()
+            fam = fam_by_doc.get(d)
+            if fam and fam != 'instrument':
+                kind = 'a deal sheet' if 'ner' in fam else 'a management-system lease summary'
+                return f'; printed in {kind} (document {d} p{n}), which is not rent evidence'
+            if re.search(r'renewal\s+term|extension\s+term|option\s+(?:term|period)', ctx):
+                return (f'; printed in a renewal-term table (document {d} p{n}) for an option the files '
+                        f'do not show exercised')
+            return f'; printed in document {d} p{n}, not read as a rent step there'
+    return '; printed on no page of the files we received (a later amendment, or a rent the roll applies on its own)'
+
+
 def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs: list,
-                         pages_by_doc: dict, landlords: list = ()) -> list:
+                         pages_by_doc: dict, landlords: list = (), steps_by_lease: dict | None = None,
+                         fam_by_doc: dict | None = None) -> list:
     """One row per rent-roll tenancy and field (sf / base rent / expiration):
     the roll's value, the paper's value with the words it is printed in,
     whether they tie (SF exact, rent within 2%, expiration the same day) and,
@@ -307,6 +338,7 @@ def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs
     'expiration'} (the last three optional)."""
     if not roll:
         return []
+    steps_by_lease, fam_by_doc = steps_by_lease or {}, fam_by_doc or {}
     by_key = {m.tenant_key: lid for lid, m in keyed.items() if m.tenant_key}
     row_of = {(r.key or _slug(r.tenant)): r for r in rows}
     facts = {(f[1], f[2]): f for f in t_fact}
@@ -369,7 +401,8 @@ def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs
                            f'extension not in the files would explain it')
                 elif field == 'base_rent_monthly':
                     why = (f'the instruments give {ours:,.2f} a month ({row.rent_method}, {row.rent_confidence}'
-                           f'{"; " + ";".join(row.rent_flags) if row.rent_flags else ""}); the roll says {roll_v:,.2f}')
+                           f'{"; " + ";".join(row.rent_flags) if row.rent_flags else ""}); the roll says {roll_v:,.2f}'
+                           + _where_roll_rent(roll_v, lid, row, steps_by_lease, pages_by_doc, fam_by_doc))
                 else:
                     why = f'the paper prints {ours}{where}; the roll says {roll_v}'
             out.append(base + (field, roll_v, ours, lid, state, why, doc, page, quote))
@@ -707,8 +740,11 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             "SELECT DISTINCT value_raw FROM financial_terms WHERE term_type = 'landlord_name' AND value_raw IS NOT NULL")})
     except sqlite3.Error:
         landlords = []
+    steps_by_lease = {}
+    for st in t_step:
+        steps_by_lease.setdefault(st[1], []).append(st)
     t_recon = _roll_reconciliation(tenant_keys[0] if tenant_keys else [], keyed, rows, t_fact, docs, pages_by_doc,
-                                   landlords)
+                                   landlords, steps_by_lease, fam_by_doc)
 
     # provisions: extracted terms + segmented clauses of the roster's documents
     t_prov = []
