@@ -824,6 +824,29 @@ def test_table_ended_before_today_is_dated_back_from_the_roll_lease_end():
     assert r2.method == 'last_scheduled', r2
 
 
+
+def test_written_out_amounts_by_month_range():
+    t = ("Base Rent. Tenant shall pay Base Rent at a monthly schedule of: Months 01 - 12 Two Thousand One Hundred "
+         "and 00/100 Dollars ($2,100.00) Months 13 - 24 Two Thousand One Hundred Sixty-Three and 00/100 Dollars "
+         "($2,163.00) Months 25 - 36 Two Thousand Two Hundred Twenty-Seven and 89/100 Dollars ($2,227.89)")
+    rows = parse_rent_schedule(t)
+    assert [(r.label, r.monthly) for r in rows] == [('months 1-12', 2100.0), ('months 13-24', 2163.0),
+                                                    ('months 25-36', 2227.89)], rows
+
+
+def test_option_rent_in_prose_follows_the_scheduled_term():
+    base = ("Minimum Rent. Tenant shall pay Minimum Rent as follows: PERIOD ANNUAL RENT MONTHLY RENT "
+            "Lease Year 1 $24,000.00 $2,000.00 Lease Year 2 $24,720.00 $2,060.00 Lease Year 3 $25,461.60 $2,121.80 "
+            "Lease Year 4 $26,225.45 $2,185.45 Lease Year 5 $27,012.21 $2,251.02 ")
+    opt = ("B. Option Rent: If this Lease is extended, Tenant promises to pay rent to Landlord according to the "
+           "following schedule: 1) During the first five (5) year option period, Tenant shall pay $2,400.00 per "
+           "month. 2) During the second five (5) year option period, Tenant shall pay $2,640.00 per month. "
+           "Tenant shall have two (2) options to extend the Term for five (5) years each.")
+    r = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2018, 7, 1), schedule_text=base + opt)
+    # "If this Lease is extended" is the option's condition, not an extension made
+    assert r.monthly == 2400.0 and r.method == 'option_period' and r.confidence == 'medium', r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

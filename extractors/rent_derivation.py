@@ -300,7 +300,12 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
     if not out:
         out = _per_month_rows(flat)
     if not out:
+        out = _written_rows(flat)
+    if not out:
         out = _named_term_rows(flat, sf)
+    # option rents written as prose sit beside whatever table the lease has
+    if not any(_is_option_table(flat, r.pos) for r in out):
+        out += _option_prose_rows(flat, max((r.table for r in out), default=0) + 1)
     for t in {r.table for r in out}:
         trs = [r for r in out if r.table == t]
         # free months printed as a $0.00 row just before the first paid row
@@ -349,6 +354,70 @@ def _per_month_rows(flat: str) -> list[ScheduleRow]:
                                 table=1, pos=m.start()))
         nxt = b + 1
     return rows if len(rows) >= 2 else []
+
+
+# rows that write the amount out: "Months 13 - 24 Two Thousand Eight Hundred
+# Forty-Three and 14/100 Dollars ($2,843.14)"
+_WRITTEN_ROW = re.compile(r'(?i)\b(years?|months?)\s*(\d{1,3})\s*(?:-|–|through|thru|to)\s*(\d{1,3})\s+'
+                          r'[A-Za-z][A-Za-z\- ,/0-9]{3,140}?dollars\s*\(\s*\$\s*([\d,]+\.\d{2})\s*\)')
+
+
+def _written_rows(flat: str) -> list[ScheduleRow]:
+    """A range-by-range schedule whose amounts are written out in words with
+    the figure in brackets; monthly or annual by the words that introduce it."""
+    rows, nxt, kind, monthly_table = [], None, None, None
+    for m in _WRITTEN_ROW.finditer(flat):
+        k = m.group(1).lower()
+        a, b, v = int(m.group(2)), int(m.group(3)), _num(m.group(4))
+        if not v or b < a:
+            continue
+        if nxt is None:
+            ctx = flat[max(0, m.start() - 300):m.start()].lower()
+            if a != 1 or 'rent' not in ctx or re.search(r'sublease|subtenant', ctx):
+                continue
+            mo, an = ctx.rfind('month'), max(ctx.rfind('annual'), ctx.rfind('per year'), ctx.rfind('yearly'))
+            monthly_table = mo > an
+            kind = k
+        elif a != nxt or k != kind:
+            break
+        monthly = v if monthly_table else round(v / 12, 2)
+        if monthly > MAX_MONTHLY:
+            break
+        rows.append(ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),
+                                label=f"{'years' if kind.startswith('year') else 'months'} {a}-{b}",
+                                table=1, pos=m.start()))
+        nxt = b + 1
+    return rows if len(rows) >= 2 else []
+
+
+_ORD_N = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5, 'sixth': 6}
+# option rent in prose: "During the first five (5) year option period, Tenant
+# shall pay $4,736.83 per month", "During the first and second five (5) year
+# option, Tenant shall pay monthly rent of $7,000.00"
+_OPTION_PROSE = re.compile(
+    r'(?i)during\s+the\s+((?:first|second|third|fourth|fifth|sixth)(?:\s*(?:,|and|&)\s*(?:first|second|third|fourth|'
+    r'fifth|sixth))*)\s+(?:[\w()\-]+\s+){0,4}?(?:option|renewal|extension)(?:\s+(?:period|term))?\b'
+    r'([^$.]{0,90}?)\$\s*([\d,]+\.\d{2})\s*(per\s+month|a\s+month|monthly|per\s+(?:lease\s+)?year|per\s+annum|annually)?')
+
+
+def _option_prose_rows(flat: str, table: int) -> list[ScheduleRow]:
+    rows = []
+    for m in _OPTION_PROSE.finditer(flat):
+        unit = ((m.group(4) or '') + ' ' + (m.group(2) or '')).lower()
+        v = _num(m.group(3))
+        if not v:
+            continue
+        monthly = v if re.search(r'month', unit) else (round(v / 12, 2) if re.search(r'year|annum|annual', unit) else None)
+        if monthly is None or monthly > MAX_MONTHLY:
+            continue
+        for w in re.findall(r'first|second|third|fourth|fifth|sixth', m.group(1).lower()):
+            rows.append(ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2), label=f'seq {_ORD_N[w]}',
+                                    table=table, pos=m.start()))
+    rows.sort(key=lambda r: int(r.label.split()[1]))
+    # one row per option, in order from the first
+    if not rows or rows[0].label != 'seq 1' or [int(r.label.split()[1]) for r in rows] != list(range(1, len(rows) + 1)):
+        return []
+    return rows
 
 
 def _single_amount_rows(flat: str) -> list[ScheduleRow]:
@@ -533,7 +602,8 @@ _SPLIT_RANGE = re.compile(r'(' + _D + r')\s*-\s*((?:\$\s*\d[\d,]*(?:\.\d{2})?\s+
 # PER SQ FT | MONTHLY | ANNUALLY")
 _RENT_HEADER = re.compile(r'(?i)per\s*sq\.?\s*(?:ft|foot)|monthly\W{0,6}annual(?:ly)?|\bp\.?\s*s\.?\s*f\.?\b')
 _OPTION_CTX = re.compile(r'\b(?:extended\s+term|extension\s+(?:term|option|period)|'
-                         r'option\s+(?:to\s+)?(?:extend|renew)|renewal\s+(?:term|option|period))\b',
+                         r'option\s+(?:to\s+)?(?:extend|renew)|renewal\s+(?:term|option|period)|'
+                         r'option\s+(?:rents?|periods?))\b',
                          re.I)
 # an amendment that actually changed the term / premises (not an unexercised
 # option): its table can supersede, even if it also says "Extended Term"
@@ -543,8 +613,11 @@ _EXECUTED_CTX = re.compile(r'\b(?:hereby\s+extended|is\s+extended|expansion|relo
 def _is_option_table(flat: str, pos: int) -> bool:
     """A renewal-option rent table: begins only after the current term ends,
     so it can't supersede a row inside that term."""
-    return bool(_OPTION_CTX.search(flat[max(0, pos - 300):pos])
-                and not _EXECUTED_CTX.search(flat[max(0, pos - 1500):pos]))
+    # "If this Lease is extended, ..." is the condition of an option, not an extension made
+    before = flat[max(0, pos - 1500):pos]
+    executed = [m for m in _EXECUTED_CTX.finditer(before)
+                if not re.search(r'(?i)\bif\s+(?:this|the)\s+lease\s+$', before[max(0, m.start() - 20):m.start()])]
+    return bool(_OPTION_CTX.search(flat[max(0, pos - 300):pos]) and not executed)
 
 
 def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = (),
