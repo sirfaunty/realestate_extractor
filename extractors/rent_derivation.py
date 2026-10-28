@@ -293,6 +293,13 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
                 last_term[table] = -1
             if k is not None:
                 last_term[table] = k
+        elif yy and not (mm or yr):
+            # "Year 7 ... Year 1" again inside one table: a PARALLEL table for
+            # another space of the same lease (an expansion premises' rent)
+            k = int(yy[-1].group(1))
+            if k <= last_term.get(table, -1):
+                split[table] = split.get(table, 0) + 1
+            last_term[table] = k
         key = (table, split.get(table, 0))
         seq[key] = seq.get(key, 0) + 1
         if mm:
@@ -307,6 +314,16 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
             row.label = f'seq {seq[key]}'
         row.table = key
         out.append(row)
+    # a run restarting with the SAME amounts is the packet filed twice, not
+    # another space: it stays in the one table (dated once, as before)
+    by_key = {}
+    for r in out:
+        by_key.setdefault(r.table, []).append(r)
+    for (t, s), trs in sorted(by_key.items()):
+        if s and [x.monthly for x in trs] == [x.monthly for x in by_key.get((t, s - 1), [])]:
+            for x in trs:
+                x.table = (t, s - 1)
+            by_key[(t, s - 1)] = by_key[(t, s - 1)] + trs
     # renumber (table, split) keys 1..n in text order
     ids = {}
     for r in out:
@@ -1227,6 +1244,61 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
     return used
 
 
+_SPACE_CTX = re.compile(r'(?i)\b(?:expansion|additional|new|existing)\s+(?:leased\s+)?(?:premises|space)\b')
+
+
+def _roll_end_table(rows: list, flat: str, term_end: date, as_of: date, undated_only: bool = False):
+    """The latest lease-year table on paper (not an option's), dated back
+    from the rent roll's lease end: its last row ends the term. Returns
+    (row covering today, start, end, rows in the table, parallel rows) or
+    None. undated_only: only a table no anchor placed. The parallel rows
+    are the same label in an adjacent table of the same instrument for
+    another space of the lease ("b. Expansion Premises ... as follows:")
+    -- the tenancy pays their sum."""
+    rel_tables = sorted({x.table for x in rows if not x.label.startswith('term ')
+                         and not _is_option_table(flat, x.pos)
+                         and (not undated_only or all(y.start is None for y in rows if y.table == x.table))},
+                        key=lambda t: max(x.pos for x in rows if x.table == t))
+    if not rel_tables:
+        return None
+    t = rel_tables[-1]
+    trs = [x for x in rows if x.table == t]
+
+    def off(x):              # offsets by the row's own label, without a dating tag
+        return _offsets(ScheduleRow(x.monthly, x.annual, label=x.label.split(' [')[0]))
+
+    def covering(trs):
+        try:
+            span = max(off(x)[1] for x in trs)
+        except (ValueError, IndexError):
+            return None
+        a = add_months(term_end + timedelta(days=1), -span)
+        cov = []
+        for x in trs:
+            s0, e0 = off(x)
+            st, en = add_months(a, s0), add_months(a, e0) - timedelta(days=1)
+            if st <= as_of <= en:
+                cov.append((x, st, en))
+        return max(cov, key=lambda c: (c[1], c[0].pos)) if cov else None
+    hit = covering(trs)
+    if not hit:
+        return None
+    x, st, en = hit
+    labels = [y.label.split(' [')[0] for y in trs]
+    par = []
+    for t2 in rel_tables[:-1]:
+        trs2 = [y for y in rows if y.table == t2]
+        if [y.label.split(' [')[0] for y in trs2] != labels:
+            continue
+        p1, p2 = min(y.pos for y in trs), min(y.pos for y in trs2)
+        if abs(p1 - p2) > 8000 or not _SPACE_CTX.search(flat[max(0, max(p1, p2) - 400):max(p1, p2)]):
+            continue
+        hit2 = covering(trs2)
+        if hit2 and hit2[0].label.split(' [')[0] == x.label.split(' [')[0]:
+            par.append(hit2[0])
+    return x, st, en, len(trs), par
+
+
 # ─── the derivation ───────────────────────────────────────────────
 
 def derive_current_rent(*, as_of: date,
@@ -1324,6 +1396,22 @@ def derive_current_rent(*, as_of: date,
     #    each table's anchor
     covering = [r for r in rows if r.start and r.end and r.start <= as_of <= r.end]
     if covering:
+        # a LATER table the paper cannot date (an amendment's term counted from
+        # an expansion date set by construction) whose span, counted back from
+        # the rent roll's lease end, covers today: the newer schedule, over an
+        # older table still running from the commencement -- medium, flagged
+        # ... only when no placed row already ends on the roll's lease end (then
+        # the placed schedule accounts for the roll's term, and stands)
+        placed_ends = [y.end for y in list(dated) + rows if y.end]
+        if t_end and t_end > as_of and not any(abs((e - t_end).days) <= 45 for e in placed_ends):
+            late = _roll_end_table(rows, flat, t_end, as_of, undated_only=True)
+            if late and late[0].pos > max(x.pos for x in covering):
+                x, st, en, n_rows, par = late
+                return RentResult(round(x.monthly + sum(p.monthly for p in par), 2), 'schedule', 'medium',
+                                  flags + ['dated_back_from_roll_end'] + (['multi_space_sum'] if par else []),
+                                  f'{n_rows}-row schedule dated back from the rent roll\'s lease end '
+                                  f'{t_end}, row {x.label.split(" [")[0]} ({st}..{en})'
+                                  + (f' + {len(par)} parallel space(s)' if par else ''))
         r = max(covering, key=lambda x: (x.start, x.pos))
         monthly = r.monthly
         # parallel named-term tables for the lease's separate spaces
@@ -1432,31 +1520,14 @@ def derive_current_rent(*, as_of: date,
     #     dated from the original commencement). Its last row ends the term:
     #     date it back from the roll's lease end -- medium, flagged
     if placed and max(r.end for r in placed) < as_of and term_end and term_end > as_of:
-        rel_tables = sorted({x.table for x in rows if not x.label.startswith('term ')
-                             and not _is_option_table(flat, x.pos)}, key=lambda t: max(x.pos for x in rows if x.table == t))
-        if rel_tables:
-            t = rel_tables[-1]
-            trs = [x for x in rows if x.table == t]
-
-            def off(x):              # offsets by the row's own label, without a dating tag
-                return _offsets(ScheduleRow(x.monthly, x.annual, label=x.label.split(' [')[0]))
-            try:
-                span = max(off(x)[1] for x in trs)
-            except (ValueError, IndexError):
-                span = None
-            if span:
-                a = add_months(term_end + timedelta(days=1), -span)
-                cov = []
-                for x in trs:
-                    s0, e0 = off(x)
-                    st, en = add_months(a, s0), add_months(a, e0) - timedelta(days=1)
-                    if st <= as_of <= en:
-                        cov.append((x, st, en))
-                if cov:
-                    x, st, en = max(cov, key=lambda c: (c[1], c[0].pos))
-                    return RentResult(x.monthly, 'schedule', 'medium', flags + ['dated_back_from_roll_end'],
-                                      f'{len(trs)}-row schedule dated back from the rent roll\'s lease end '
-                                      f'{term_end}, row {x.label.split(" [")[0]} ({st}..{en})')
+        late = _roll_end_table(rows, flat, term_end, as_of)
+        if late:
+            x, st, en, n_rows, par = late
+            return RentResult(round(x.monthly + sum(p.monthly for p in par), 2), 'schedule', 'medium',
+                              flags + ['dated_back_from_roll_end'] + (['multi_space_sum'] if par else []),
+                              f'{n_rows}-row schedule dated back from the rent roll\'s lease end '
+                              f'{term_end}, row {x.label.split(" [")[0]} ({st}..{en})'
+                              + (f' + {len(par)} parallel space(s)' if par else ''))
     if placed and max(r.end for r in placed) < as_of:
         last = max(placed, key=lambda x: (x.end, x.pos))
         return RentResult(last.monthly, 'last_scheduled', 'low', flags + ['after_schedule_end'],

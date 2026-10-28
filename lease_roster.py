@@ -709,7 +709,8 @@ _DOC_WORDS = {
 
 _FOLDER_WORDS = {'source', 'sources', 'documents', 'document', 'deliverables', 'scans', 'archived', 'summaries',
                  'summary', 'ners', 'files', 'file', 'misc', 'miscellaneous', 'supporting', 'harvest', 'part',
-                 'module', 'zip', 'pdfs', 'scan', 'leasedocuments', 'leasefiles', 'leasing', 'checklists'}
+                 'module', 'zip', 'pdfs', 'scan', 'leasedocuments', 'leasefiles', 'leasing', 'checklists',
+                 'property'}
 
 
 def _drop_generic_folders(filename: str) -> str:
@@ -794,10 +795,45 @@ def _common_filename_words(filenames: list[str]) -> set:
     return common
 
 
+_NAME_DASH = re.compile(r'\s[-–]\s')
+# words a property's own name is spelt with in a file name, beside its prefix
+# word ("Elm Court Office Centre-Building II - Bean Coffee (600)")
+_PLACE_WORDS = {'office', 'building', 'bldg', 'tower', 'park', 'square', 'station', 'village', 'crossing',
+                'north', 'south', 'east', 'west', 'i', 'ii', 'iii', 'iv', 'v', 'vi'}
+
+
+def _after_property_prefix(base: str, common: set) -> str:
+    """'Elm Court Office Centre-Building II - Bean Coffee (600)' or 'Elm
+    Court II Bean Coffee 3-2-22': a name that OPENS with the property's
+    prefix word, spelt out with place words and numerals, names the tenancy
+    after that run (and after a ' - ' that closes it). A name whose first
+    word is not the property's ('Bean Coffee - First Amendment') is left
+    alone."""
+    words = list(re.finditer(r'[A-Za-z]+', base))
+    if not words or words[0].group(0).lower() not in common:
+        return base
+    end = 0
+    for m in words:
+        w = m.group(0).lower()
+        if end and _NAME_DASH.search(base, end, m.start()):
+            break                # the ' - ' closes the property's part of the name
+        if w in common or w in _PLACE_WORDS or w in _DOC_WORDS or len(w) <= 2:
+            end = m.end()
+        else:
+            break
+    d = _NAME_DASH.match(base, end)
+    return base[d.end() if d else end:]
+
+
+
+
 def _filename_stem(filename: str, common: set) -> str:
     """The tenancy words of a file name: its first two distinctive words
     ('EC Bean Coffee - EC-BC 3rd Lease Amendment' -> 'bean coffee')."""
-    ws = [w for w in _fn_words(filename) if w not in common]
+    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(filename))
+    base = _after_property_prefix(base, common)
+    ws = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', base))
+          if len(w) >= 3 and w not in _DOC_WORDS and w not in common]
     return ' '.join(ws[:2])
 
 
@@ -834,7 +870,9 @@ _OTHER_AGREEMENT = re.compile(
 _NOT_LEASE_FILE = re.compile(
     r'(?i)\b(?:defaults?|site ?plans?|service contracts?|environmental|budgets?|onedrive|'
     r'certificates? of insurance|coi|w-?9|invoices?|surveys?|title (?:commitment|policy)|appraisals?|'
-    r'property tax|tax statements?|loan|closing|management agreement)\b')
+    r'property tax|tax statements?|loan|closing|management (?:and leasing )?agreement|'
+    r'(?:property )?condition assessments?|rules (?:and|&) reg(?:ulation)?s|square foot adjustments?|'
+    r'inspections?|blueprints?|site assessments?)\b')
 _CARRIERS = re.compile(
     r'(?i)\b(?:charter communications|comcast|centurylink|century link|mediacom|'
     r'clear channel|sprint spectrum|at&t|verizon wireless|tds telecommunications)\b')
@@ -854,8 +892,12 @@ def _kind(row: RosterRow, text: str, as_of: date) -> str:
     # papers filed in the property folder that are no lease at all (a default
     # letter, a site plan, a service contract, an environmental report): no
     # rent, area or date read from them, and every file named as such
-    if (not row.monthly_rent and not row.square_feet and not row.commencement and not row.expiration
-            and row.filenames and all(_NOT_LEASE_FILE.search(re.sub(r'[_\s]+', ' ', f)) for f in row.filenames)):
+    fnames = [re.sub(r'[_\s]+', ' ', f) for f in row.filenames]
+    if fnames and all(_NOT_LEASE_FILE.search(f) for f in fnames) and (
+            (not row.monthly_rent and not row.square_feet and not row.commencement and not row.expiration)
+            # every file is named as such and none as a lease: a figure or date read
+            # off a condition assessment or a service contract is no tenancy's
+            or not any(re.search(r'(?i)\blease\b|amendment', f) for f in fnames)):
         return 'other_document'
     if (row.expiration and (as_of - row.expiration).days > 90
             and row.rent_method != 'schedule'):

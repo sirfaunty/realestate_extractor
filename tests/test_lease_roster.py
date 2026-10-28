@@ -264,6 +264,17 @@ def test_paper_expiration_kept_without_rent_roll_end():
     assert 'expiration_differs_from_lease' not in r.flags
 
 
+def test_property_prefix_spelt_with_place_words_and_numerals_is_not_the_tenancy():
+    from realestate_extractor.lease_roster import _filename_stem
+    common = {'elm', 'court'}    # the property's own words (from its name, or the files' common prefix)
+    assert _filename_stem('NERS__Elm Court Office Centre-Building II - Bean Coffee (600).pdf', common) == 'bean coffee'
+    assert _filename_stem('NERS__Elm Court II Bean Coffee 3-2-22.pdf', common) == 'bean coffee'
+    assert _filename_stem('Scanned Leases__Elm Court Office Center II Pet Barn Lease.pdf', common) == 'pet barn'
+    # a name that does not open with the property's word is the tenancy's as before
+    assert _filename_stem('Bean Coffee - First Amendment.pdf', common) == 'bean coffee'
+    assert _filename_stem('Office Depot - Elm Court Lease.pdf', common) == 'office depot'
+
+
 def test_rent_roll_terms_from_outside_the_database_act_like_an_uploaded_roll():
     # Pet Barn is on no uploaded roll; the owner's roll, matched elsewhere,
     # gives its start and end

@@ -933,6 +933,37 @@ def test_dashed_dates_clock_times_and_split_year_labels():
     assert [r.label for r in parse_rent_schedule(split)][9:] == ['year 10', 'year 11', 'year 12']
 
 
+def test_undated_expansion_amendment_dated_back_from_the_roll_end_sums_both_spaces():
+    # the amendment's term runs from an expansion date set by construction (not
+    # on paper); the roll's lease end dates its 7-year tables back, and the
+    # existing-premises and expansion-premises tables (same labels, adjacent,
+    # "Expansion Premises ... as follows") are one rent
+    lease = ("LEASE AGREEMENT. 3. Base Rent. Tenant shall pay Landlord annual Base Rent as follows: PERIOD ANNUAL "
+             "RENT MONTHLY RENT Lease Year 1 $20,400.00 $1,700.00 Lease Year 2 $21,012.00 $1,751.00 Lease Year 3 "
+             "$21,642.36 $1,803.53 Lease Year 4 $22,291.63 $1,857.64 Lease Year 5 $22,960.38 $1,913.36")
+    amend = ("FIRST LEASE AMENDMENT AND EXPANSION AGREEMENT. " + 'recital. ' * 40 +
+             "a. Expansion Premises. Beginning on the date the Expansion Improvements are Substantially Completed "
+             "(the Expansion Date) and continuing through the Extended Term, Landlord leases the Expansion Premises "
+             "to Tenant. 3. Extended Term. The term is extended to be a period of seven (7) years commencing on the "
+             "Expansion Date. 4. Base Rent. a. Existing Leased Premises. Beginning on the Expansion Date, Tenant "
+             "shall pay annual Base Rent for the Existing Leased Premises as follows: PERIOD ANNUAL RENT MONTHLY "
+             "RENT PSF Year 1 $24,000.00 $2,000.00 $20.00 Year 2 $24,720.00 $2,060.00 $20.60 Year 3 $25,461.60 "
+             "$2,121.80 $21.22 Year 4 $26,225.45 $2,185.45 $21.85 Year 5 $27,012.21 $2,251.02 $22.51 Year 6 "
+             "$27,822.58 $2,318.55 $23.19 Year 7 $28,657.25 $2,388.10 $23.88 b. Expansion Premises. Beginning on "
+             "the Expansion Date and continuing through the Extended Term, Tenant shall pay Landlord annual Base "
+             "Rent for the Expansion Premises as follows: PERIOD ANNUAL RENT MONTHLY RENT PSF Year 1 $9,000.00 "
+             "$750.00 $10.00 Year 2 $9,180.00 $765.00 $10.20 Year 3 $9,363.60 $780.30 $10.40 Year 4 $9,550.87 "
+             "$795.91 $10.61 Year 5 $9,741.89 $811.82 $10.82 Year 6 $9,936.73 $828.06 $11.04 Year 7 $10,135.46 "
+             "$844.62 $11.26")
+    r = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2022, 5, 1), schedule_docs=[lease, amend],
+                            term_end=date(2032, 12, 31))
+    assert r.monthly == 2750.0 and 'multi_space_sum' in r.flags and 'dated_back_from_roll_end' in r.flags, r
+    assert r.confidence == 'medium'
+    # no roll end: the lease's own table, counted from the commencement, as before
+    r = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2022, 5, 1), schedule_docs=[lease, amend])
+    assert r.monthly == 1913.36 and 'later_schedule_unplaced' in r.flags, r
+
+
 def test_year1_under_two_dollars_a_foot_is_never_high():
     # a confirmed date and stated escalation would make this high; $100 a month
     # on 2,400 SF is a fee or a misread, not the rent
