@@ -1152,6 +1152,20 @@ def derive_current_rent(*, as_of: date,
     cov = [r for r in dated if r.start <= as_of <= r.end]
     if cov:
         r = max(cov, key=lambda x: (x.start, x.pos))
+        # a later instrument's lease-year table, dated by its own stated start,
+        # whose row covering today starts after the dated row's and sits after
+        # it in the chain, is the newer schedule ("... 2025-04-01 to
+        # 2027-03-31" in the lease, an amendment's "Lease Year 1" from
+        # 2026-04-01): it supersedes -- medium, flagged
+        newer = [x for x in rows if x.start and x.end and x.start <= as_of <= x.end
+                 and re.search(r'\[(?:stated|instrument)\]', x.label) and x.start > r.start and x.pos > r.pos
+                 and not _is_option_table(flat, x.pos)      # a renewal-term table is no newer schedule
+                 and not re.search(r'(?i)\b(?:renewal|extension|option)\s+(?:term|period)', flat[max(0, x.pos - 120):x.pos])]
+        if newer:
+            x = max(newer, key=lambda y: (y.start, y.pos))
+            return RentResult(x.monthly, 'schedule', 'medium', flags + ['later_stated_table'],
+                              f'row {x.label} ({x.start}..{x.end}) of a later instrument, over the dated row '
+                              f'{r.start}..{r.end}')
         if _later_unplaced(rows, flat, r.pos, dated):
             flags.append('later_schedule_unplaced')
         return RentResult(r.monthly, 'schedule', 'high' if not flags else 'medium',

@@ -847,6 +847,16 @@ def test_option_rent_in_prose_follows_the_scheduled_term():
     assert r.monthly == 2400.0 and r.method == 'option_period' and r.confidence == 'medium', r
 
 
+
+def test_later_amendment_table_with_its_own_start_beats_an_older_dated_row():
+    lease = ("Base Rent. 04/01/2020 - 03/31/2027 $36,000.00 $3,000.00 per year and month. ")
+    amend = ("FIRST AMENDMENT TO LEASE. The Effective Date of this Amendment is April 1, 2026. " + 'recital. ' * 30 +
+             "2. Base Rent. Commencing on April 1, 2026 Tenant shall pay Base Rent as follows: PERIOD ANNUAL RENT "
+             "MONTHLY RENT Year 1 $39,600.00 $3,300.00 Year 2 $40,788.00 $3,399.00")
+    r = derive_current_rent(as_of=date(2026, 6, 30), schedule_docs=[lease, amend])
+    assert r.monthly == 3300.0 and 'later_stated_table' in r.flags and r.confidence == 'medium', r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
