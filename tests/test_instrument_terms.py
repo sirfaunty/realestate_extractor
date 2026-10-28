@@ -56,5 +56,17 @@ out = instrument_term(["FIRST AMENDMENT\nterm extended starting on May 1, 2024 a
                        "THIRD PARTY CONSENT"], 2, 2)
 test('only the pages of the instrument are read', out.start is None and out.end is None)
 
+inc = instrument_term(["TERM. 2. Subject to the terms set forth herein, this Lease shall be for a term of five (5) "
+                       "years (the “Lease Term”) beginning on November 1, 2025 (the “Commencement Date”) and "
+                       "continuing thereafter to and including October 31, 2030, unless earlier terminated."], 1, 1)
+test('a defined term in brackets between the dates, "continuing thereafter to and including"',
+     inc.start == '2025-11-01' and inc.end == '2030-10-31' and inc.months == 60)
+
+ocr = instrument_term(["TERM. This Lease shall be for a term of three (3) years and two (2) months beginning on "
+                       "March |, 2024 (the “Commencement Date”) and continuing thereafter to and including "
+                       "April 30, 2027, unless earlier terminated."], 1, 1)
+test('an end "to and including" stands when the OCR broke the start date',
+     ocr.start is None and ocr.end == '2027-04-30' and ocr.months == 38)
+
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

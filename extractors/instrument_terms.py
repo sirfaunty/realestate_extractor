@@ -30,14 +30,16 @@ _N = r'([a-z\-]+)?\s*(?:\(\s*(\d{1,3})\s*\))?'
 
 # start and end in one phrase, under term words
 _RANGE = re.compile(r'(?i)(?:starting|commencing|beginning|effective|from)\s+(?:on\s+|as\s+of\s+)?(' + DATE + r')'
-                    r'\s*,?\s*(?:and\s+)?(?:ending|expiring|terminating|continuing\s+through|through|to)\s+'
-                    r'(?:on\s+)?(?:and\s+including\s+)?(' + DATE + r')')
+                    r'\s*,?\s*(?:\(\s*(?:the\s+)?["“]?[A-Za-z ]{0,40}?["”]?\s*\)\s*,?\s*)?'      # (the "Commencement Date")
+                    r'(?:and\s+)?(?:ending|expiring|terminating|continuing\s+(?:thereafter\s+)?(?:through|to|until)|'
+                    r'through|to)\s+(?:on\s+)?(?:and\s+including\s+)?(' + DATE + r')')
 _START = re.compile(r'(?i)(?:\bcommencement\s+date\b[^.$]{0,50}?(?:shall\s+be|is|means|:)\s*(?:the\s+)?'
                     r'|\bterm\b[^.$]{0,60}?(?:shall\s+)?(?:commence|begin)s?\s+on\s+(?:the\s+)?'
                     r'|\bfrom\s+and\s+after\s+)(' + DATE + r')')
 _LAST_DAY = r'last\s+day\s+of\s+(' + _MON + r')\s*,?\s*(\d{4})'
 _END = re.compile(r'(?i)(?:\bexpire[sd]?\s+on\s+(?:the\s+)?|\bexpiration\s+date\b[^.$]{0,60}?(?:shall\s+be|is|means|:)\s*(?:the\s+)?'
-                  r'|\b(?:shall\s+)?(?:end|terminate)s?\s+on\s+(?:the\s+)?|\bending\s+on\s+(?:the\s+)?)'
+                  r'|\b(?:shall\s+)?(?:end|terminate)s?\s+on\s+(?:the\s+)?|\bending\s+on\s+(?:the\s+)?'
+                  r'|\b(?:continuing\s+(?:thereafter\s+)?)?(?:to|through|until)\s+and\s+including\s+(?:the\s+)?)'
                   r'(?:(' + DATE + r')|' + _LAST_DAY + r')')
 _MONTHS = re.compile(r'(?i)\b(?:term|extended|extension|renewed)\b[^.$]{0,50}?\b(?:of|for)\s+'
                      r'(?:an?\s+(?:additional\s+|further\s+)?(?:period|term)\s+of\s+)?' + _N +

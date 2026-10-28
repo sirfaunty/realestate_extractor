@@ -30,6 +30,8 @@ from datetime import date
 from typing import Optional
 
 from .extractors.document_family import assemble_rent_chain
+from .extractors.instrument_terms import instrument_term
+from .extractors.instruments import split_instruments
 from .extractors.lease_segmenter import _full_months_end, _sf_pick, _sf_scan
 from .extractors.rent_derivation import (
     derive_current_rent, parse_date, parse_dated_rows, parse_rent_schedule, _num, _text_memo)
@@ -450,6 +452,18 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                 if s and s > as_of:
                     exps.append(s)
         exps = [e for e in exps if e]
+        if not exps:
+            # no expiration among the extracted terms: the instruments' own
+            # stated term ends ("... continuing thereafter to and including
+            # July 31, 2025", an amendment's "commencing February 1, 2022 and
+            # expiring January 31, 2027"); the latest wins, a past one is left
+            # out like a past stated date (extensions the file may not hold)
+            for d in row.doc_ids:
+                pages = _pages(conn, d)
+                for ins in split_instruments(pages):
+                    e = parse_date(instrument_term(pages, ins.page_from, ins.page_to).end)
+                    if e and e > as_of:
+                        exps.append(e)
         row.expiration_lease = max(exps) if exps else None
         row.expiration = row.expiration_lease
         row.expiration_source = 'lease' if row.expiration_lease else ''
