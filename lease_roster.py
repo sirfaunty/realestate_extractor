@@ -872,7 +872,9 @@ _NOT_LEASE_FILE = re.compile(
     r'certificates? of insurance|coi|w-?9|invoices?|surveys?|title (?:commitment|policy)|appraisals?|'
     r'property tax|tax statements?|loan|closing|management (?:and leasing )?agreement|'
     r'(?:property )?condition assessments?|rules (?:and|&) reg(?:ulation)?s|square foot adjustments?|'
-    r'inspections?|blueprints?|site assessments?)\b')
+    r'inspections?|blueprints?|site assessments?|bay master|safety (?:reports?|checklists?)|certified mail|'
+    r'listing agreement|floor plans?|plumbing|drawings?|warranty|contact info)\b')
+_PROPERTY_FOLDER = re.compile(r'(?i)(?:^|__)property (?:files?|documents?|records?|info(?:rmation)?)__')
 _CARRIERS = re.compile(
     r'(?i)\b(?:charter communications|comcast|centurylink|century link|mediacom|'
     r'clear channel|sprint spectrum|at&t|verizon wireless|tds telecommunications)\b')
@@ -893,6 +895,13 @@ def _kind(row: RosterRow, text: str, as_of: date) -> str:
     # letter, a site plan, a service contract, an environmental report): no
     # rent, area or date read from them, and every file named as such
     fnames = [re.sub(r'[_\s]+', ' ', f) for f in row.filenames]
+    # the building's own paperwork filed in a property-level folder ("Scanned
+    # Leases/Property Files/Elm Court - Watershed.pdf"): a tenancy only when a
+    # file in it is named as a lease, or a legal tenant was read off its text
+    if (row.filenames and all(_PROPERTY_FOLDER.search(f) for f in row.filenames)
+            and not any(re.search(r'(?i)\blease\b|amendment', f.split('__')[-1]) for f in row.filenames)
+            and not row.aliases):
+        return 'other_document'
     if fnames and all(_NOT_LEASE_FILE.search(f) for f in fnames) and (
             (not row.monthly_rent and not row.square_feet and not row.commencement and not row.expiration)
             # every file is named as such and none as a lease: a figure or date read

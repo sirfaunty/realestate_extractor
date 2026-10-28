@@ -275,6 +275,30 @@ def test_property_prefix_spelt_with_place_words_and_numerals_is_not_the_tenancy(
     assert _filename_stem('Office Depot - Elm Court Lease.pdf', common) == 'office depot'
 
 
+def test_property_folder_paperwork_is_no_tenancy_unless_named_as_a_lease():
+    # "Scanned Leases/Property Files/Elm Court - Watershed.pdf": the building's own
+    # paperwork, seeded from its file name; a lease filed there still counts
+    import tempfile
+    from realestate_extractor.database import Database
+    from realestate_extractor.lease_roster import build_roster
+    db = Database(os.path.join(tempfile.mkdtemp(), 'org_test.db'))
+    db.connect()
+    c = db.conn
+    c.execute("INSERT INTO properties (id, name) VALUES (1, 'Elm Court')")
+    for i, fn in ((1, 'Scanned Leases__Property Files__Elm Court - Watershed.pdf'),
+                  (2, 'Scanned Leases__Property Files__Elm Court - Sign Criteria.pdf'),
+                  (3, 'Scanned Leases__Property Files__Elm Court - Pet Barn Lease.pdf'),
+                  (4, 'Scanned Leases__Elm Court - Bean Coffee.pdf')):
+        c.execute("INSERT INTO documents (id, filename, filepath, document_type, property_id) "
+                  "VALUES (?, ?, 'x', 'lease', 1)", (i, fn))
+    c.execute("UPDATE documents SET analysis_status = 'analyzed'")
+    c.commit()
+    kinds = {r.label: r.kind for r in build_roster(c, 1, as_of=date(2026, 6, 30))}
+    db.close()
+    assert kinds == {'watershed': 'other_document', 'sign criteria': 'other_document',
+                     'pet barn': 'tenancy', 'bean coffee': 'tenancy'}, kinds
+
+
 def test_rent_roll_terms_from_outside_the_database_act_like_an_uploaded_roll():
     # Pet Barn is on no uploaded roll; the owner's roll, matched elsewhere,
     # gives its start and end
