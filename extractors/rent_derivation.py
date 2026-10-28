@@ -1019,6 +1019,21 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
                 current_table, current_how = t, 'term start+'
             elif not term_end and as_of and add_months(commencement, min(_offsets(r)[0] for r in trs)) <= as_of <= span_end:
                 current_table, current_how = t, 'term start'
+            elif term_end:
+                # the last table is not the current term's; an earlier later-than-
+                # first table whose span from the term start ends on the roll's
+                # lease end is (the current lease filed after an older paper)
+                for t2 in reversed(cands[:-1]):
+                    if t2 == tables[0]:
+                        break
+                    trs2 = [r for r in rows if r.table == t2]
+                    try:
+                        end2 = add_months(commencement, max(_offsets(r)[1] for r in trs2)) - timedelta(days=1)
+                    except (ValueError, IndexError):
+                        continue
+                    if abs((end2 - term_end).days) <= 45:
+                        current_table, current_how = t2, 'term start+'
+                        break
     ini, ext = _term_lengths(flat) if flat else (None, None)
     if not ini:
         ini = next((12 * r.years for r in rows if r.years), None)

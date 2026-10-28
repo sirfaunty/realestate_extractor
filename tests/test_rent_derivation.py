@@ -857,6 +857,24 @@ def test_later_amendment_table_with_its_own_start_beats_an_older_dated_row():
     assert r.monthly == 3300.0 and 'later_stated_table' in r.flags and r.confidence == 'medium', r
 
 
+
+def test_current_term_table_found_before_a_later_unrelated_table():
+    # the rent roll's start dates the current lease's table; the last table in
+    # the chain (a short sign license) does not end on the roll's lease end,
+    # the five-year lease table before it does
+    storage = ("STORAGE LEASE. Rent as follows: PERIOD ANNUAL RENT MONTHLY RENT Year 1 $12,000.00 $1,000.00 "
+               "Year 2 $12,360.00 $1,030.00 Year 3 $12,730.80 $1,060.90")
+    lease = ("LEASE AGREEMENT. " + 'recital. ' * 80 + "Base Rent as follows: PERIOD ANNUAL RENT MONTHLY RENT Year 1 $84,000.00 $7,000.00 "
+             "Year 2 $86,520.00 $7,210.00 Year 3 $89,115.60 $7,426.30 Year 4 $91,789.07 $7,649.09 "
+             "Year 5 $94,542.74 $7,878.56")
+    sign = ("SIGN LICENSE. " + 'recital. ' * 80 + "License fee as follows: PERIOD ANNUAL RENT MONTHLY RENT Year 1 $1,200.00 $100.00 "
+            "Year 2 $1,236.00 $103.00")
+    r = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2025, 2, 10),
+                            schedule_docs=[storage, lease, sign], commencement_is_term_start=True,
+                            term_end=date(2030, 2, 9))
+    assert r.monthly == 7210.0, r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
