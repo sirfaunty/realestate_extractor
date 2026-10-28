@@ -315,6 +315,8 @@ def _where_roll_rent(roll_v: float, lid, row, steps_by_lease: dict, pages_by_doc
                 continue
             ctx = re.sub(r'\s+', ' ', page[max(0, i - 300):i]).lower()
             fam = fam_by_doc.get(d)
+            if not fam or fam == 'instrument':
+                fam = (worksheet_page(page) or '').lower() or fam     # a sheet stapled into a lease's file
             if fam and fam != 'instrument':
                 kind = 'a deal sheet' if 'ner' in fam else 'a management-system lease summary'
                 return f'; printed in {kind} (document {d} p{n}), which is not rent evidence'

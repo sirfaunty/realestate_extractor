@@ -420,6 +420,41 @@ def _option_prose_rows(flat: str, table: int) -> list[ScheduleRow]:
     return rows
 
 
+# "... the right and option of renewing the term ... for an additional Five
+# (5) year period commencing May 1, 2024 and ending April 30, 2029 upon the
+# same terms ... except fixed rent, which shall be increased to ...
+# ($4,100.25) per month." -- an option period with its own dates and rent
+# in prose. Never current rent by itself (the option may not have been
+# taken); derive_current_rent uses it only when the rent roll's lease end is
+# the period's end.
+_RENEW_CTX = re.compile(r'(?i)\boption\b[^.]{0,80}\b(?:renew|extend)|\b(?:renew|extend)\w*\b[^.]{0,80}\boption\b')
+
+
+def _option_dated_rows(flat: str) -> list[ScheduleRow]:
+    out = []
+    for m in _RANGE.finditer(flat):
+        start, end = parse_date(m.group(1)), parse_date(m.group(2))
+        if not start or not end or end <= start:
+            continue
+        if not _RENEW_CTX.search(flat[max(0, m.start() - 300):m.start()]):
+            continue
+        after = flat[m.end():m.end() + 400]
+        cut = re.search(r'\.\s+(?:\d+\.\s+)?[A-Z]', after)      # this sentence only
+        after = after[:cut.start()] if cut else after
+        if not re.search(r'(?i)\brent\b', after):
+            continue
+        for a, b, v in _amounts(after):
+            unit = after[b:b + 25].lower()
+            monthly = v if 'month' in unit else (round(v / 12, 2) if re.search(r'year|annum|annual', unit) else None)
+            if monthly and 50 <= monthly <= MAX_MONTHLY:
+                r = ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2), start=start, end=end,
+                                label='option dates')
+                r.pos = m.start()
+                out.append(r)
+                break
+    return out
+
+
 def _single_amount_rows(flat: str) -> list[ScheduleRow]:
     for h in _SINGLE_HDR.finditer(flat):
         kind = (h.group(1) or h.group(4) or '').lower()
@@ -802,7 +837,38 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
                         start=start, end=end, label='dates')
         r.pos = m.start()
         out.append(r)
-    return out + _defined_term_rows(flat)
+    return out + _defined_term_rows(flat) + _scrambled_last_rows(flat, ranges)
+
+
+# OCR lays a row label over the row's date range: "Month 1 $0.00 $0.00
+# (6/1/2025 to 6/30/2025) (7/1/2 M 0 o 2 n 5 t hs to 2 6 /3 - 0 5 / 2027)
+# $21,600.00 $1,800.00" ("Months 2-25" over "7/1/2025 to 6/30/2027").
+# The scrambled range ends in the year the term is stated to end ("ending on
+# June 30, 2027"): the row runs from the day after the row before it to
+# that end. Only a verified annual/monthly pair, only the last row.
+_SCRAMBLED = re.compile(r'\((?=[^()]*[A-Za-z])(?=[^()]*/)[^()]{12,80}?/\s*((?:19|20)\d\d)\s*\)')
+_TERM_ENDS = re.compile(r'(?:ending|ends|expiring|expires|terminating)\s+on\s+(' + _D + r')', re.I)
+
+
+def _scrambled_last_rows(flat: str, ranges: list) -> list[ScheduleRow]:
+    out = []
+    for m in _SCRAMBLED.finditer(flat):
+        prev = [r for r in ranges if r.end() <= m.start() and m.start() - r.end() <= 40]
+        if not prev or any(r.start() > m.end() and r.start() - m.end() < 300 for r in ranges):
+            continue
+        p_end = parse_date(prev[-1].group(2))
+        ends = [parse_date(e.group(1)) for e in _TERM_ENDS.finditer(flat[max(0, m.start() - 1500):m.start()])]
+        ends = [e for e in ends if e and str(e.year) == m.group(1) and p_end and e > p_end]
+        am = [v for _, _, v in _amounts(flat[m.end():m.end() + 60])]
+        if not ends or len(am) < 2 or not _is_pair(am[0], am[1]):
+            continue
+        if not re.search(r'(?i)\brent\b', flat[max(0, m.start() - 600):m.start()]):
+            continue
+        r = ScheduleRow(monthly=am[1], annual=am[0], start=p_end + timedelta(days=1), end=ends[-1],
+                        label='dates')
+        r.pos = m.start()
+        out.append(r)
+    return out
 
 
 # "The current term of the Lease began on March 1, 2024 and ends on
@@ -1236,6 +1302,18 @@ def derive_current_rent(*, as_of: date,
     #     option table counts from the day after the scheduled term ends,
     #     the next from the day after that one -- medium, never unreviewed
     #     (whether the option was exercised is not on this paper)
+    # 2a. an option period dated in prose ("option of renewing ... commencing
+    #     May 1, 2024 and ending April 30, 2029 ... rent ... $4,100.25 per
+    #     month") whose end is the rent roll's lease end: the roll shows
+    #     that option taken -- medium, flagged
+    if t_end and schedule_text:
+        opt = [r for r in _option_dated_rows(re.sub(r'\s+', ' ', schedule_text))
+               if r.start <= as_of <= r.end and abs((r.end - t_end).days) <= 45]
+        if opt:
+            r = max(opt, key=lambda x: (x.start, x.pos))
+            return RentResult(r.monthly, 'option_period', 'medium', flags + ['option_ends_on_roll_end'],
+                              f'option period {r.start}..{r.end} stated with its rent; the rent roll lease '
+                              f'ends {t_end}')
     placed_end = max((r.end for r in list(dated) + [x for x in rows if x.start and x.end]),
                      default=None)
     if placed_end and as_of > placed_end:

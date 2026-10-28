@@ -875,6 +875,29 @@ def test_current_term_table_found_before_a_later_unrelated_table():
     assert r.monthly == 7210.0, r
 
 
+def test_option_period_in_prose_counts_only_when_it_ends_on_the_roll_lease_end():
+    text = ("12. Notices to the addresses above. 13. Tenant shall have the right and option of renewing the term of "
+            "the Lease for an additional five (5) year period commencing May 1, 2024 and ending April 30, 2029 upon "
+            "the same terms and conditions except fixed rent, which shall be increased to Four Thousand One Hundred "
+            "and 25/100 Dollars ($4,100.25) per month. Tenant shall give notice by November 1, 2023.")
+    r = derive_current_rent(as_of=date(2026, 6, 30), schedule_text=text, term_end=date(2029, 4, 30))
+    assert r.monthly == 4100.25 and 'option_ends_on_roll_end' in r.flags and r.confidence == 'medium', r
+    r = derive_current_rent(as_of=date(2026, 6, 30), schedule_text=text, term_end=date(2024, 4, 30))
+    assert r.monthly != 4100.25, r          # the roll's lease ends before the option: not taken
+    r = derive_current_rent(as_of=date(2026, 6, 30), schedule_text=text)
+    assert r.monthly != 4100.25, r          # no roll: never assumed
+
+
+def test_ocr_scrambled_last_row_runs_to_the_stated_term_end():
+    text = ("2. Extended Term. The term of the Lease is hereby extended for twenty-five (25) months starting on "
+            "June 1, 2025 and ending on June 30, 2027. 3. Base Rent. During the Extended Term, Tenant shall pay "
+            "Base Rent as follows: EXTENDED TERM ANNUAL RENT MONTHLY RENT Month I $0.00 $0.00 "
+            "(6/1/2025 to 6/30/2025) (7/1/2 M 0 o 2 n 5 t hs to 2 6 /3 - 0 5 / 2027) $21,600.00 $1,800.00 "
+            "Monthly installments shall be paid on the first day of each month.")
+    rows = parse_dated_rows(text)
+    assert [(r.monthly, r.start, r.end) for r in rows] == [(1800.0, date(2025, 7, 1), date(2027, 6, 30))], rows
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
