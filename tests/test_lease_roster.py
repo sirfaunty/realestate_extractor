@@ -299,6 +299,25 @@ def test_property_folder_paperwork_is_no_tenancy_unless_named_as_a_lease():
                      'pet barn': 'tenancy', 'bean coffee': 'tenancy'}, kinds
 
 
+def test_building_reports_named_the_other_way_round_are_no_tenancy():
+    from realestate_extractor.lease_roster import _building_report, _common_filename_words
+    common = {'elm', 'court'}
+    assert _building_report('Tenant Contact List - Elm Court Office Center II.pdf', common)
+    assert _building_report('Reports__Vacancy Detail - Elm Court.pdf', common)
+    assert not _building_report('Elm Court - Bean Coffee.pdf', common)          # a tenant's file
+    assert not _building_report('Bean Coffee - First Amendment.pdf', common)
+    # a property CODE opening 3+ files, each followed by a different name, is a prefix word
+    files = ['NERS__EC - Bean Coffee NERS_3-1-19.pdf', 'NERS__EC - Pet Barn NERS_4-2-20.pdf',
+             'NERS__EC - Quince Bakery_5-3-21.pdf', 'Scanned Leases__Elm Court - Bean Coffee Lease.pdf',
+             'Scanned Leases__Elm Court - Pet Barn Lease.pdf', 'Scanned Leases__Elm Court - River Dental.pdf',
+             'Scanned Leases__Elm Court - Quince Bakery.pdf', 'Scanned Leases__Elm Court - Marigold Tailoring.pdf',
+             'Scanned Leases__Elm Court - Birch Books.pdf', 'Scanned Leases__Elm Court - Oak Optical.pdf']
+    assert 'ec' in _common_filename_words(files)
+    # a tenant's own code is followed by its documents, not by names
+    files2 = files[3:] + ['IBM - Lease.pdf', 'IBM - First Amendment.pdf', 'IBM - Estoppel.pdf']
+    assert 'ibm' not in _common_filename_words(files2)
+
+
 def test_rent_roll_terms_from_outside_the_database_act_like_an_uploaded_roll():
     # Pet Barn is on no uploaded roll; the owner's roll, matched elsewhere,
     # gives its start and end

@@ -527,7 +527,7 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             row.rent_flags.append('not_analyzed')
             if row.rent_confidence == 'high':
                 row.rent_confidence = 'medium'
-        row.kind = _kind(row, chain_text, as_of)
+        row.kind = _kind(row, chain_text, as_of, common)
         row.needs = _needs(row)
         out.append(row)
 
@@ -806,6 +806,20 @@ def _common_filename_words(filenames: list[str]) -> set:
             break
         common.add(w)
         pos += 1
+    # a property CODE opening a good share of the files ("CPB - Bean Coffee
+    # NERS", 3+ files and 30%): the landlord's own abbreviation, not a tenant
+    codes = {}
+    for f in filenames:
+        base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(f))
+        m = re.match(r'([A-Z]{2,5})\s[-–]\s(\S+)', base)
+        if m:
+            codes.setdefault(m.group(1).lower(), []).append(m.group(2).lower())
+    for code, rest in codes.items():
+        # 3+ files, and the code is followed by different NAMES (a tenant's own
+        # code is followed by its documents: "IBM - Lease", "IBM - Estoppel")
+        names = {w for w in rest if w.strip('(),') not in _DOC_WORDS}
+        if len(rest) >= 3 and len(names) >= 2:
+            common.add(code)
     return common
 
 
@@ -887,14 +901,40 @@ _NOT_LEASE_FILE = re.compile(
     r'property tax|tax statements?|loan|closing|management (?:and leasing )?agreement|'
     r'(?:property )?condition assessments?|rules (?:and|&) reg(?:ulation)?s|square foot adjustments?|'
     r'inspections?|blueprints?|site assessments?|bay master|safety (?:reports?|checklists?)|certified mail|'
-    r'listing agreement|floor plans?|plumbing|drawings?|warranty|contact info)\b')
-_PROPERTY_FOLDER = re.compile(r'(?i)(?:^|__)property (?:files?|documents?|records?|info(?:rmation)?)__')
+    r'listing agreement|floor plans?|plumbing|drawings?|warranty|contact info|account numbers|contact list|'
+    r'lease expirations|fire sprinkler|hvac|(?:ir|infrared) (?:electrical )?scans?|right of refusal|vacancy|'
+    r'water meter|pay app|licensing|bylaws|declaration|articles|elevator|aerial site map|meeting|quotation|settlement|'
+    r'transfer of ownership|emergency (?:telephone|procedures?))\b')
+_PROPERTY_FOLDER = re.compile(r'(?i)(?:^|__)(?:property (?:files?|documents?|records?|info(?:rmation)?)|pafs?|'
+                              r'(?:\w+ - )?association documents?|service agreements?|cad)__')
 _CARRIERS = re.compile(
     r'(?i)\b(?:charter communications|comcast|centurylink|century link|mediacom|'
     r'clear channel|sprint spectrum|at&t|verizon wireless|tds telecommunications)\b')
 
 
-def _kind(row: RosterRow, text: str, as_of: date) -> str:
+def _building_report(filename: str, common: set) -> bool:
+    """'Tenant Contact List - Elm Court Office Center II': the building's own
+    report, named the other way round from a tenant's file ('Elm Court -
+    Bean Coffee'): the words AFTER the last ' - ' are the property's."""
+    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', filename.split('__')[-1])
+    parts = re.split(r'\s[-–]\s', base)
+    if len(parts) < 2:
+        return False
+    head = ' '.join(parts[:-1])
+    tail = [w.lower() for w in re.split(r'[^A-Za-z]+', parts[-1]) if w]
+    # the head names a REPORT, not a tenant ("Birch Books - Elm Court" is a deal
+    # sheet filed tenant-first)
+    hw = [w.lower() for w in re.split(r'[^A-Za-z]+', head) if w]
+    report = bool(_NOT_LEASE_FILE.search(head)) or (hw and all(w in _DOC_WORDS or w in _REPORT_WORDS for w in hw))
+    return report and bool(tail) and any(w in common for w in tail) and all(
+        w in common or w in _PLACE_WORDS or w in _DOC_WORDS or len(w) <= 2 for w in tail)
+
+
+_REPORT_WORDS = {'tenant', 'tenants', 'list', 'detail', 'details', 'summary', 'report', 'reports', 'inventory', 'riser',
+                 'notice', 'numbers', 'filter', 'grouped', 'by', 'ownership', 'entity', 'manager', 'type', 'agent'}
+
+
+def _kind(row: RosterRow, text: str, as_of: date, common: set = frozenset()) -> str:
     """tenancy | other_agreement (telecom / billboard / easement / license —
     not an occupancy) | other_document (no lease: a default letter, a site
     plan, a service contract) | expired (paper ends > 90 days ago and no schedule
@@ -912,15 +952,16 @@ def _kind(row: RosterRow, text: str, as_of: date) -> str:
     # the building's own paperwork filed in a property-level folder ("Scanned
     # Leases/Property Files/Elm Court - Watershed.pdf"): a tenancy only when a
     # file in it is named as a lease, or a legal tenant was read off its text
-    if (row.filenames and all(_PROPERTY_FOLDER.search(f) for f in row.filenames)
-            and not any(re.search(r'(?i)\blease\b|amendment', f.split('__')[-1]) for f in row.filenames)
+    if (row.filenames and all(_PROPERTY_FOLDER.search(f) or _building_report(f, common) for f in row.filenames)
+            and not any(re.search(r'(?i)\blease\b|amendment|renewal|extension', f.split('__')[-1]) for f in row.filenames)
             and not row.aliases):
         return 'other_document'
     if fnames and all(_NOT_LEASE_FILE.search(f) for f in fnames) and (
-            (not row.monthly_rent and not row.square_feet and not row.commencement and not row.expiration)
+            (not row.monthly_rent and not row.square_feet and not row.commencement and not row.expiration
+             and not any(re.search(r'(?i)renewal|extension', f) for f in fnames))
             # every file is named as such and none as a lease: a figure or date read
             # off a condition assessment or a service contract is no tenancy's
-            or not any(re.search(r'(?i)\blease\b|amendment', f) for f in fnames)):
+            or not any(re.search(r'(?i)\blease\b|amendment|renewal|extension', f) for f in fnames)):
         return 'other_document'
     if (row.expiration and (as_of - row.expiration).days > 90
             and row.rent_method != 'schedule'):
