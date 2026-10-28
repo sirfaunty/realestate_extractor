@@ -256,6 +256,13 @@ def main():
     test("a roll rent that is a step of our own schedule says so",
          rd['state'] == 'DIFFERS' and 'a step of the schedule we read' in rd['explanation'])
     test('a roll rent on no page says so', 'printed on no page' in diff['explanation'])
+    split = [dict(r, suite='216', sf='1600', base_rent_monthly='1700.00') if r['tenant_key'] == 'bean_coffee' else r
+             for r in roll[:1]] + [{'suite': '218', 'occupant': 'Bean Coffee', 'tenant_key': 'bean_coffee', 'sf': '800',
+                                    'base_rent_monthly': '800.00'}] + roll[1:]
+    rt4 = build_door_tables(db_path, pid, date(2026, 9, 1), tenant_keys=(split, {}))['cap_roll_reconciliation']
+    bc = [dict(zip(rt4[0], r)) for r in rt4[1] if r[3] == 'bean_coffee' and r[4] in ('sf', 'base_rent_monthly')]
+    test("one lease over two roll suites ties the suites' sum, and says so",
+         len(bc) == 4 and all(x['state'] == 'TIE' and 'sum of the roll' in x['explanation'] for x in bc))
     test("the landlord's own company on the roll is OWNER_AFFILIATE, naming the landlord",
          rec[('birchwood_corporate', 'lease')]['state'] == 'OWNER_AFFILIATE'
          and 'Birchwood Realty' in rec[('birchwood_corporate', 'lease')]['explanation'])

@@ -344,6 +344,12 @@ def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs
     by_key = {m.tenant_key: lid for lid, m in keyed.items() if m.tenant_key}
     row_of = {(r.key or _slug(r.tenant)): r for r in rows}
     facts = {(f[1], f[2]): f for f in t_fact}
+    # one lease over several roll suites (an expansion space billed apart): the
+    # paper's SF and rent are the whole tenancy's, so they also tie the suites' sum
+    suites_of = {}
+    for rr in roll:
+        if rr.get('tenant_key') in by_key:
+            suites_of.setdefault(rr['tenant_key'], []).append(rr)
     out = []
     for rr in roll:
         lid = by_key.get(rr.get('tenant_key'))
@@ -394,9 +400,21 @@ def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs
                     tie = roll_v > 0 and abs(float(ours) - roll_v) / roll_v <= 0.02
                 else:
                     tie = str(ours) == str(roll_v)[:10]
+                group = suites_of.get(rr.get('tenant_key'), [])
+                summed = False
+                if not tie and field in ('sf', 'base_rent_monthly') and len(group) > 1:
+                    vals = [_num_or_none(g.get(field)) for g in group]
+                    if all(v is not None for v in vals):
+                        total = sum(vals)
+                        summed = (abs(float(ours) - total) <= 0.5 if field == 'sf'
+                                  else total > 0 and abs(float(ours) - total) / total <= 0.02)
+                        tie = summed
                 state = 'TIE' if tie else 'DIFFERS'
                 where = f' (document {doc} p{page}: "{(quote or "")[:80]}")' if page else ''
-                if tie:
+                if summed:
+                    why = (f"ties the sum of the roll's {len(group)} suites for this tenancy "
+                           f"({', '.join(str(g.get('suite')) for g in group)})")
+                elif tie:
                     why = 'ties'
                 elif field == 'expiration' and str(ours) < str(roll_v)[:10]:
                     why = (f'the paper ends the term {ours}{where}; the roll runs to {roll_v}: a renewal or '

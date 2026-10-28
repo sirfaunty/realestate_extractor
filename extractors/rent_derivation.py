@@ -185,6 +185,26 @@ def lease_years_elapsed(commencement: date, as_of: date) -> int:
 
 # ─── schedule parsing ─────────────────────────────────────────────
 
+# Same-length rewrites (positions, and so page cites, stay put):
+# OCR splits a two-digit lease year ("Lease Year 1 1 $84,600.00") -> "Year 11";
+# a range of dashed dates ("7-1-26 to 6-30-27") -> slashes; a clock time before
+# a date ("from 12:01 a.m. March 1, 2023, through 11:59 p.m. ...") -> blanks.
+_SPLIT_YEAR = re.compile(r'(?i)\b(year\s+)(\d) (\d)(?=\s+\$)')
+_DASH_RANGE = re.compile(r'\b(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})(\s+(?:to|through|thru|until)\s+)(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})\b')
+_CLOCK = re.compile(r'(?i)\b\d{1,2}:\d{2}\s*[ap]\.?\s?m\.?(?=\s+(?:January|February|March|April|May|June|July|August|'
+                    r'September|October|November|December)\b)')
+
+
+def _ocr_year_labels(flat: str) -> str:
+    return _SPLIT_YEAR.sub(lambda m: f'{m.group(1)}{m.group(2)}{m.group(3)} ', flat)
+
+
+def _same_length_dates(flat: str) -> str:
+    flat = _DASH_RANGE.sub(lambda m: f'{m.group(1)}/{m.group(2)}/{m.group(3)}{m.group(4)}'
+                                     f'{m.group(5)}/{m.group(6)}/{m.group(7)}', flat)
+    return _CLOCK.sub(lambda m: ' ' * len(m.group(0)), flat)
+
+
 @_text_memo
 def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleRow]:
     """Rent-schedule rows = consecutive self-verifying annual/monthly pairs.
@@ -195,7 +215,7 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
     period marker precedes it (explicit date range, 'Months a-b',
     'Year n'); unlabelled rows are sequential lease years.
     """
-    flat = re.sub(r'\s+', ' ', text or '')
+    flat = _ocr_year_labels(re.sub(r'\s+', ' ', text or ''))
     # every money token, then test ADJACENT tokens as a pair — overlapping,
     # so a $/SF column between them ("2,400 $24.50 $58,800.00 $4,900.00")
     # can't swallow the real annual/monthly pair
@@ -611,7 +631,7 @@ _D = (r'(?:(?:January|February|March|April|May|June|July|August|September|'
       r'October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}'
       r'|\d{1,2}/\d{1,2}/\d{2,4})')
 _RANGE = re.compile(
-    r'(' + _D + r')\s*\)?\s*(?:through|thru|to|until|-|–|—|'
+    r'(' + _D + r')\s*\)?\s*(?:,\s*(?=through|thru|until))?(?:through|thru|to|until|-|–|—|'
     r'and\s+(?:ending|expiring|terminating)(?:\s+on)?|'
     r'and\s+continuing\s+(?:through|thru|until|to)|'    # "Beginning on X and continuing through Y"
     r'10(?=\d{1,2}/))'                       # OCR: "to" read as "10" ("1/1/20261012/31/2026")
@@ -743,7 +763,7 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
 
     Amounts are read AFTER the range (up to the next range); if there are
     none there, BEFORE it (back to the previous range)."""
-    flat = re.sub(r'\s+', ' ', text or '')
+    flat = _same_length_dates(re.sub(r'\s+', ' ', text or ''))
     # a wrapped period column puts the end date after the amounts: move it
     # back beside its start date (same tokens, so positions barely shift)
     flat = _SPLIT_RANGE.sub(lambda m: f'{m.group(1)} - {m.group(3)} {m.group(2).strip()} ', flat)
@@ -797,6 +817,10 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
         start, end = parse_date(m.group(1)), parse_date(m.group(2))
         if not start or not end or end <= start or (end - start).days > 366 * 25:
             continue
+        spanned = _spanned_year_rows(flat, m, start, end)
+        if spanned is not None:
+            out += spanned      # a span header over "Years 1-2 / Years 3-5" rows: never a row itself
+            continue
         if i in columnar:
             r = ScheduleRow(monthly=columnar[i], annual=round(columnar[i] * 12, 2),
                             start=start, end=end, label='dates')
@@ -838,6 +862,45 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
         r.pos = m.start()
         out.append(r)
     return out + _defined_term_rows(flat) + _scrambled_last_rows(flat, ranges)
+
+
+# "03/01/2024 - 02/28/2029* *Subject to Section 6 below Years 1-2 $96,000.00
+# $8,000.00 $24.00 Years 3-5 $101,760.00 $8,480.00 $25.44 Option Term 1 ...": the range is the whole term, the rows count
+# lease years from its start. Accepted only when the last year row ends on
+# the range's end; None = not such a header.
+_YEAR_ROW = re.compile(r'\bYears?\s+(\d{1,2})(?:\s*(?:-|to|through)\s*(\d{1,2}))?\b', re.I)
+
+
+def _spanned_year_rows(flat: str, m, start: date, end: date) -> Optional[list]:
+    if (end - start).days < 400:
+        return None
+    seg = flat[m.end():m.end() + 600]
+    first = _YEAR_ROW.search(seg[:80])
+    if not first or _amounts(seg[:first.start()]):
+        return None
+    rows, at, nxt = [], first.start(), 1
+    while True:
+        y = _YEAR_ROW.match(seg, at)
+        if not y:
+            break
+        a, b = int(y.group(1)), int(y.group(2) or y.group(1))
+        if a != nxt or b < a:
+            return None
+        am = _amounts(seg[y.end():y.end() + 80])
+        pair = next(((am[k][2], am[k + 1][2]) for k in range(len(am) - 1) if _is_pair(am[k][2], am[k + 1][2])), None)
+        if not pair:
+            return None
+        r = ScheduleRow(monthly=pair[1], annual=pair[0], start=add_months(start, 12 * (a - 1)),
+                        end=add_months(start, 12 * b) - timedelta(days=1), label='dates')
+        r.pos = m.start() + y.start()
+        rows.append(r)
+        nxt = b + 1
+        k = [x for x in am if x[2] == pair[1]][0][1]
+        rest = re.match(r'(?:\s*\$?\s*[\d.,]+)*\s*', seg[y.end() + k:])
+        at = y.end() + k + (rest.end() if rest else 0)
+    if len(rows) < 2 or abs((rows[-1].end - end).days) > 45:
+        return None
+    return rows
 
 
 # OCR lays a row label over the row's date range: "Month 1 $0.00 $0.00
@@ -1103,6 +1166,10 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
     ini, ext = _term_lengths(flat) if flat else (None, None)
     if not ini:
         ini = next((12 * r.years for r in rows if r.years), None)
+    # the table back-dated from the expiration ends the CURRENT term: never a
+    # renewal-option table printed after it (it would land on today and win)
+    plain = [t for t in tables if not (flat and _is_option_table(flat, min(r.pos for r in rows if r.table == t)))]
+    last_plain = plain[-1] if plain else None
     for t in tables:
         trs = [r for r in rows if r.table == t]
         if all(r.label.startswith('term ') for r in trs):
@@ -1146,7 +1213,7 @@ def _anchor(rows: list[ScheduleRow], commencement: Optional[date],
                 s = _instrument_start(flat[segs[k]:end])
                 if s:
                     a, how = s, 'instrument'
-        if not a and expiration and t == tables[-1]:
+        if not a and expiration and t == last_plain:
             span = max(_offsets(r)[1] for r in trs)
             a, how = add_months(expiration + timedelta(days=1), -span), 'expiration'
         if not a:

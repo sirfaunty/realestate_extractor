@@ -888,6 +888,51 @@ def test_option_period_in_prose_counts_only_when_it_ends_on_the_roll_lease_end()
     assert r.monthly != 4100.25, r          # no roll: never assumed
 
 
+def test_extension_term_table_after_the_lease_table_is_not_back_dated_onto_today():
+    # the lease's own table counts from the commencement; the option's table
+    # printed after it is not the one that ends the current term
+    text = ("3. Minimum Rent. Tenant shall pay Landlord annual Minimum Rent as follows: PERIOD ANNUAL RENT "
+            "MONTHLY RENT Year 1 $30,000.00 $2,500.00 Year 2 $30,900.00 $2,575.00 Year 3 $31,827.00 $2,652.25 "
+            "Year 4 $32,781.81 $2,731.82 Year 5 $33,765.26 $2,813.77 " + 'clause. ' * 40 +
+            "If Tenant gives the Extension Notice, the term will be extended for the Extended Term of five (5) "
+            "years, during which Tenant shall pay Landlord annual fixed Minimum Rent during the Extended Term as "
+            "follows: EXTENDED TERM ANNUAL RENT MONTHLY RENT Year 1 $34,778.22 $2,898.19 Year 2 $35,821.57 "
+            "$2,985.13 Year 3 $36,896.22 $3,074.69 Year 4 $38,003.11 $3,166.93 Year 5 $39,143.20 $3,261.93")
+    r = derive_current_rent(as_of=date(2026, 6, 30), commencement=date(2025, 10, 1),
+                            expiration=date(2031, 2, 28), schedule_text=text)
+    assert r.monthly == 2500.0, r
+
+
+def test_term_span_header_over_year_rows_dates_each_row():
+    text = ("4. Base Rent for the Extended Term and the Options, if exercised, are as follows: Period Annual Base "
+            "Rent Monthly Base Rent Annual Base Rent Per Square Foot 03/01/2024 - 02/28/2029* *Subject to Section 6 "
+            "below Years 1-2 $96,000.00 $8,000.00 $24.00 Years 3-5 $101,760.00 $8,480.00 $25.44 Option Term 1 "
+            "$107,865.60 $8,988.80 $26.97")
+    rows = parse_dated_rows(text)
+    assert [(r.monthly, r.start, r.end) for r in rows] == [
+        (8000.0, date(2024, 3, 1), date(2026, 2, 28)),
+        (8480.0, date(2026, 3, 1), date(2029, 2, 28))], rows
+    # rows that do not reach the span's end are no such table
+    assert not [r for r in parse_dated_rows(text.replace('Years 3-5', 'Years 3-4')) if r.monthly == 8480.0]
+
+
+def test_dashed_dates_clock_times_and_split_year_labels():
+    dashed = ("Base Rent for the Existing Leased Premises: 7-1-26 to 6-30-27 $48,000.00 $4,000.00 "
+              "7-1-27 to 6-30-28 $49,440.00 $4,120.00")
+    assert [(r.monthly, r.start) for r in parse_dated_rows(dashed)] == [
+        (4000.0, date(2026, 7, 1)), (4120.0, date(2027, 7, 1))]
+    clock = ("5.3 - The Lessee shall pay to the Lessor as annual rent consideration for the Leased premises from "
+             "12:01 a.m. March 1, 2023, through 11:59 p.m. February 28, 2028, at the rate of Twenty Four Thousand "
+             "and 00/100 dollars ($24,000.00) per year, payable in installments of Two Thousand and 00/100 dollars "
+             "($2,000.00) per month.")
+    assert [(r.monthly, r.start, r.end) for r in parse_dated_rows(clock)] == [
+        (2000.0, date(2023, 3, 1), date(2028, 2, 28))]
+    split = ("MINIMUM RENT: Tenant shall pay fixed annual minimum rent as follows: PERIOD ANNUAL RENT MONTHLY RENT "
+             + ' '.join(f'Lease Year {" ".join(str(n)) if n > 9 else n} ${12000 + 120 * n:,}.00 ${1000 + 10 * n:,}.00'
+                        for n in range(1, 13)))
+    assert [r.label for r in parse_rent_schedule(split)][9:] == ['year 10', 'year 11', 'year 12']
+
+
 def test_year1_under_two_dollars_a_foot_is_never_high():
     # a confirmed date and stated escalation would make this high; $100 a month
     # on 2,400 SF is a fee or a misread, not the rent
