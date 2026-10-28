@@ -227,7 +227,8 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
                  as_of: Optional[date] = None,
                  confirmed_commencements: Optional[dict] = None,
                  use_rent_roll: bool = True,
-                 unassigned_only: bool = False) -> list[RosterRow]:
+                 unassigned_only: bool = False,
+                 rent_roll_terms: Optional[dict] = None) -> list[RosterRow]:
     """Tenancies for one property (or the whole DB when property_id is None;
     unassigned_only=True limits it to documents with no property).
 
@@ -235,7 +236,12 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     time, comes from (best first): a user confirmation
     (confirmed_commencements = {RosterRow.key: date or ISO string}, see
     Database.get_lease_confirmations), an uploaded rent roll's lease start
-    for that tenant, then the lease text itself."""
+    for that tenant, then the lease text itself.
+
+    rent_roll_terms = {RosterRow.key: {'start': date, 'end': date}}: a rent
+    roll's lease start / end matched to a tenancy outside this database (a
+    roll the owner sent, keyed by the module door); used as an uploaded rent
+    roll's would be, over it."""
     as_of = as_of or date.today()
     confirmed = {k: (v if isinstance(v, date) else parse_date(v))
                  for k, v in (confirmed_commencements or {}).items()}
@@ -344,6 +350,10 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
     _merge_label_variants(groups)
 
     rent_roll = _rent_roll(conn, property_id, groups, unassigned_only) if use_rent_roll else {}
+    for k, t in (rent_roll_terms or {}).items():
+        t = {f: (v if isinstance(v, date) else parse_date(v)) for f, v in t.items() if f in ('start', 'end') and v}
+        if any(t.values()):
+            rent_roll[k] = {**rent_roll.get(k, {}), **{f: v for f, v in t.items() if v}}
 
     for k, row in groups.items():
         row.key = k

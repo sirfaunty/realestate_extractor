@@ -888,6 +888,17 @@ def test_option_period_in_prose_counts_only_when_it_ends_on_the_roll_lease_end()
     assert r.monthly != 4100.25, r          # no roll: never assumed
 
 
+def test_year1_under_two_dollars_a_foot_is_never_high():
+    # a confirmed date and stated escalation would make this high; $100 a month
+    # on 2,400 SF is a fee or a misread, not the rent
+    r = derive_current_rent(as_of=date(2026, 6, 30), year1_monthly=100.0, escalation_pct=3,
+                            commencement=date(2025, 7, 1), commencement_confirmed=True, square_feet=2400)
+    assert r.confidence == 'low' and 'implausible_rate_psf' in r.flags, r
+    r = derive_current_rent(as_of=date(2026, 6, 30), year1_monthly=4000.0, escalation_pct=3,
+                            commencement=date(2025, 7, 1), commencement_confirmed=True, square_feet=2400)
+    assert r.confidence == 'high', r
+
+
 def test_ocr_scrambled_last_row_runs_to_the_stated_term_end():
     text = ("2. Extended Term. The term of the Lease is hereby extended for twenty-five (25) months starting on "
             "June 1, 2025 and ending on June 30, 2027. 3. Base Rent. During the Extended Term, Tenant shall pay "

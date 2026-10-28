@@ -607,9 +607,30 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         pr = None
     property_name = (pr[0] if pr else '') or ''
     if tenant_keys:
-        keyed = match_tenant_keys(
-            [(row.key or _slug(row.tenant), *match_names(row, property_name), match_rank(row)) for row in rows],
-            tenant_keys[0], tenant_keys[1] if len(tenant_keys) > 1 else None)
+        def _match(rows):
+            return match_tenant_keys(
+                [(row.key or _slug(row.tenant), *match_names(row, property_name), match_rank(row)) for row in rows],
+                tenant_keys[0], tenant_keys[1] if len(tenant_keys) > 1 else None)
+        keyed = _match(rows)
+        # the roll's lease start / end for each matched tenancy: the roster then dates
+        # its schedule as an uploaded rent roll would (the current term's start)
+        roll_at = {(r.get('tenant_key'), r.get('suite')): r for r in tenant_keys[0]}
+        terms = {}
+        for row in rows:
+            km = keyed.get(row.key or _slug(row.tenant))
+            rr = roll_at.get((km.tenant_key, km.suite)) if km and km.tenant_key and row.key else None
+            # the roll's start only fills a commencement the paper does not give: a roll's
+            # "rent start" can be the current step's start, not the term's (measured 2026-10-28
+            # on 65 buildings: over a paper commencement it fixed 3 rents and broke 3; filling
+            # a missing one fixed 32 and broke 1)
+            start = rr.get('start') if rr and not row.commencement else None
+            if rr and (start or rr.get('expiration')):
+                terms[row.key] = {'start': start, 'end': rr.get('expiration')}
+        if terms:
+            rows = build_roster(conn, property_id, as_of=as_of,
+                                confirmed_commencements=_confirmations(conn, property_id),
+                                rent_roll_terms=terms)
+            keyed = _match(rows)
     for row in rows:
         lease_id = row.key or _slug(row.tenant)
         source_key = _slug(row.tenant.split(' / ')[0])

@@ -1412,6 +1412,9 @@ def derive_current_rent(*, as_of: date,
         v = round(y1 * (1 + esc / 100.0) ** n, 2)
         if rows:
             flags.append('schedule_does_not_cover_date')
+        sf = _num(square_feet)
+        if sf and y1 * 12 / sf < 2.0:
+            flags.append('implausible_rate_psf')     # under $2/SF a year: a fee or a misread, not the rent
         if flags:
             conf = 'low'
         elif commencement_confirmed and y1_stated:
