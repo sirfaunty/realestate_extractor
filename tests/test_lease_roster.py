@@ -40,7 +40,7 @@ def test_generic_folder_never_becomes_the_tenancy():
     common = _common_filename_words(files[:3])
     stems = [_filename_stem(f, common) for f in files]
     assert stems[0] != stems[1] and 'rosa' in stems[0] and 'fern' in stems[1] and 'juniper' in stems[2], stems
-    assert 'quincebakery' in stems[3], stems
+    assert stems[3] == 'quince bakery', stems       # a run-together folder name splits at its capitals
 
 
 def test_property_prefix_is_common():

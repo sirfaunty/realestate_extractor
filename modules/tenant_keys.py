@@ -31,6 +31,16 @@ from difflib import SequenceMatcher
 LEGAL = {'inc', 'llc', 'llp', 'lp', 'ltd', 'corp', 'corporation', 'co', 'company', 'pa', 'pc', 'pllc',
          'dba', 'the', 'a', 'of', 'incorporated', 'limited', 'partnership', 'store', 'stores', 'no'}
 MIN_PREFIX = 8      # shortest normalised name a prefix match may rest on
+# trade words two unrelated names can share; never a one-word match on their own
+TRADE_WORDS = {'dentistry', 'dental', 'chiropractic', 'medical', 'clinic', 'family', 'properties', 'property',
+               'realty', 'restaurant', 'kitchen', 'fitness', 'wireless', 'cleaners', 'liquors', 'liquor', 'salon',
+               'nails', 'insurance', 'financial', 'services', 'service', 'management', 'company', 'studio',
+               'market', 'grocery', 'pharmacy', 'tobacco', 'vapor', 'vapors', 'tanning', 'massage', 'therapy',
+               'pediatric', 'orthodontics', 'veterinary', 'animal', 'hospital', 'church', 'school', 'academy',
+               'learning', 'center', 'centre', 'coffee', 'bakery', 'pizza', 'burger', 'chicken', 'sandwich',
+               'tacos', 'sushi', 'grill', 'bistro', 'express', 'national', 'american', 'northern', 'minnesota',
+               'united', 'general', 'advisors', 'partners', 'holdings', 'enterprises', 'solutions', 'systems',
+               'associates', 'group', 'office', 'offices', 'building', 'apartments', 'parking', 'storage'}
 MIN_WITHIN = 6      # shortest roll name found inside a run-together file name
 MIN_NEAR = 9        # shortest roll name matched with a misspelling
 NEAR = 0.88         # share of the roll name's letters the file name must carry, in order
@@ -149,4 +159,25 @@ def match_tenant_keys(tenancies: list, roll: list, alias: dict | None = None) ->
         out[lid] = KeyMatch(key, r.get('suite'), r.get('occupant'), basis, score)
         taken_lease.add(lid)
         taken_key.add(key)
+    # last: a word that names one roll occupant and one tenancy and nothing
+    # else in the building ("Shamrock Family Dentistry" on the roll, "SCOTT
+    # SHAMROCK, D.D.S., P.A." on the paper): a surname, a brand
+    seen = {}
+    for t in tenancies:
+        for n in list(t[1]) + (list(t[2]) if len(t) > 2 else []):
+            for w in words(n):
+                seen.setdefault(w, set()).add(('t', t[0]))
+    for r in occupied:
+        for w in words(r.get('occupant') or ''):
+            seen.setdefault(w, set()).add(('r', r['tenant_key']))
+    for w, who in seen.items():
+        if len(w) < 7 or w in TRADE_WORDS or len(who) != 2:
+            continue
+        ts = [x for k, x in who if k == 't']
+        rs = [x for k, x in who if k == 'r']
+        if len(ts) == 1 and len(rs) == 1 and ts[0] not in taken_lease and rs[0] not in taken_key:
+            r = by_key[rs[0]]
+            out[ts[0]] = KeyMatch(rs[0], r.get('suite'), r.get('occupant'), 'word', 0.4)
+            taken_lease.add(ts[0])
+            taken_key.add(rs[0])
     return out

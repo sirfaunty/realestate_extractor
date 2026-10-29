@@ -122,7 +122,7 @@ def main():
          len(regs) == 4 and all(r['sha256'] == 'f' * 64 for r in regs)
          and {r['family'] for r in regs} == {'instrument', 'ner_sheet'})
     test('two tenancies: the coffee shop (lease, amendment and worksheet together) and the dentist',
-         len(leases) == 2 and sorted(L['tenant_key'] for L in leases) == ['bean_coffee', 'riverdental']
+         len(leases) == 2 and sorted(L['tenant_key'] for L in leases) == ['bean_coffee', 'river_dental']
          and max(L['n_documents'] for L in leases) == 3)
     row = next(L for L in leases if L['tenant_key'] == 'bean_coffee')
     test('its SF and commencement come from the lease', row['sf'] == 2400 and row['commencement'] == '2022-07-01')
@@ -135,7 +135,7 @@ def main():
          len(steps) >= 5 and all(s_['source_doc_id'] and s_['source_page'] for s_ in steps)
          and any(s_['period_from'] == '2022-07-01' and s_['monthly_amount'] == 2000.0 for s_ in steps))
     test('a table no date places is published with its printed amounts, period blank, and says why',
-         any(s_['period_from'] is None and s_['monthly_amount'] == 3090.0 and s_['lease_id'] == 'fn:riverdental'
+         any(s_['period_from'] is None and s_['monthly_amount'] == 3090.0 and s_['lease_id'].replace(' ', '_') == 'fn:river_dental'
              and (s_['period_basis'] or '').startswith('unplaced') and s_['source_page'] == 2 for s_ in steps))
     test('the amendment table counts from its own effective date',
          any(s_['period_from'] == '2026-07-01' and s_['monthly_amount'] == 2500.0 for s_ in steps))
@@ -297,7 +297,44 @@ def main():
     test("an uncorroborated OCR quote on a page the consumer cannot read is withheld; a corroborated one stands",
          rv5[0][4] is None and 'RV5' in rv5[0][8] and 'empty' in rv5[0][8] and rv5[1][4] == '$2,000.00')
     test("an uncorroborated OCR quote stands where the consumer's read prints it, and is withheld where it does not",
-         rv5[2][4] == 'Base Rent' and rv5[3][4] is None and 'prints otherwise' in rv5[3][8])
+         rv5[2][4] == 'Base Rent' and rv5[3][4] is None and 'does not print this quote' in rv5[3][8]
+         and "our read prints: 'Base Rent'" in rv5[3][8])
+    # the consumer's own text of a page decides every quote on it, whatever read ours came from
+    lcols = cols + ['kind', 'quote_label']
+    theirs = ('NET EFFECTIVE RENT SHEET\nPROPERTY: Elm Court\nLEASED BY: D. Mossey\nDATE: 5/10/2022\n'
+              'The Tenant shall pay Base Rent of $2,000.00 per month\nin advance on the first day of each month')
+    anchored = verify_quotes({
+        'cap_document': (['doc_id', 'filename', 'sha256'], [(1, 'a.pdf', 'a' * 64)]),
+        'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read', 'read_agreement'],
+                          [(1, 1, 'text', 40, 'PROPERTY: LEASED BY: DATE: Elm Court D. Mossey 5/10/2022 Tenant pay Base Rent', '', None)]),
+        'cap_lease_provision': (lcols, [
+            (1, 1, 1, 'a' * 64, 'Tenant shall pay Base Rent of $2,000.00 per month', 'text', 'printed', None, None, 'clause', None),
+            (2, 1, 1, 'a' * 64, 'first day of each month in advance', 'text', 'printed', None, None, 'clause', None),
+            (3, 1, 1, 'a' * 64, 'pay Base Rent of $2,000.00 per month on the first day', 'text', 'printed', None, None, 'term', None),
+            (4, 1, 1, 'a' * 64, 'Tenant pays $2,000.00 monthly rent here', 'text', 'printed', None, None, 'term', None),
+            (5, 1, 1, 'a' * 64, 'D. Mossey', 'text', 'printed', None, None, 'label', 'LEASED BY'),
+            (6, 1, 1, 'a' * 64, '5/10/2022', 'text', 'printed', None, None, 'label', 'LEASE SUMMARY DATE'),
+            (7, 1, 1, 'a' * 64, 'Elm Court', 'text', 'printed', None, None, 'label', 'PROPERTY')])},
+        consumer_text=lambda sha, page: theirs)['cap_lease_provision'][1]
+    test("a quote the consumer's text prints stands, read from our own page order or not",
+         anchored[0][4] == 'Tenant shall pay Base Rent of $2,000.00 per month' and anchored[0][8] is None)
+    test("a quote it prints only in part is cut to the longest run of words it prints contiguously",
+         anchored[1][4] == 'in advance on the first day of each month'[-len('first day of each month'):] or anchored[1][4] == 'first day of each month')
+    test('a figure stays inside the cut quote of a valued row',
+         anchored[2][4] == 'pay Base Rent of $2,000.00 per month')
+    test('a valued row whose figure the consumer prints apart is withdrawn, with our read in the reason',
+         anchored[3][4] is None and "our read prints: 'Tenant pays $2,000.00 monthly rent here'" in anchored[3][8])
+    test("a form label the consumer's text prints stands with its value",
+         anchored[4][4] == 'D. Mossey' and anchored[4][10] == 'LEASED BY' and anchored[4][8] is None)
+    test('a label it does not print is withdrawn on its own; the value stands and the row says why',
+         anchored[5][4] == '5/10/2022' and anchored[5][10] is None and 'label' in anchored[5][8]
+         and "'LEASE SUMMARY DATE'" in anchored[5][8])
+    test('a page the consumer does not hold is checked on our own text as before',
+         verify_quotes({'cap_document': (['doc_id', 'filename', 'sha256'], [(1, 'a.pdf', 'a' * 64)]),
+                        'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read', 'read_agreement'],
+                                          [(1, 1, 'text', 9, 'Base Rent', '', None)]),
+                        'cap_x': (cols, [(1, 1, 1, 'a' * 64, 'Base Rent', 'text', 'printed', None, None)])},
+                       consumer_text=lambda sha, page: None)['cap_x'][1][0][4] == 'Base Rent')
 
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{passed} passed, {failed} failed')

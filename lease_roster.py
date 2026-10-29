@@ -265,16 +265,6 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
         not_analyzed = set()
     terms = _terms(conn, [d['id'] for d in docs])
 
-    # Words every file in this property shares ("EC", "Elm Court",
-    # "Scanned") say nothing about WHICH tenancy a file belongs to.
-    common = _common_filename_words([d['filename'] for d in docs])
-
-    # 1. group by the tenancy words in the FILE NAME. Landlords file a
-    #    tenancy's lease, amendments and assignments under one name ("EC
-    #    Bean Coffee - 3rd Lease Amendment") even as the tenant's legal
-    #    name changes through assignments (Bean Co LLC -> Roast Holdings ->
-    #    Bean Coffee Inc) — so the file name follows the tenancy; the
-    #    extracted tenant name does not. Validated on 9 pilot properties.
     # the property's own name ("Elm Court Plaza") — an extracted "tenant"
     # sharing 2+ of its words is the landlord / center, not a tenant
     prop_words = set()
@@ -287,6 +277,20 @@ def build_roster(conn: sqlite3.Connection, property_id: Optional[int] = None,
             prop_words |= set(_tokens(pn))
     except sqlite3.Error:
         pass
+
+    # Words every file in this property shares ("EC", "Elm Court",
+    # "Scanned") say nothing about WHICH tenancy a file belongs to -- unless
+    # the word is a rent-roll occupant's and not the property's: a
+    # single-tenant pad is filed under a folder named after its tenant
+    common = _common_filename_words([d['filename'] for d in docs],
+                                    _roll_occupant_words(conn, property_id, unassigned_only) - prop_words)
+
+    # 1. group by the tenancy words in the FILE NAME. Landlords file a
+    #    tenancy's lease, amendments and assignments under one name ("EC
+    #    Bean Coffee - 3rd Lease Amendment") even as the tenant's legal
+    #    name changes through assignments (Bean Co LLC -> Roast Holdings ->
+    #    Bean Coffee Inc) — so the file name follows the tenancy; the
+    #    extracted tenant name does not. Validated on 9 pilot properties.
     common = common | prop_words        # the property's own name is never tenancy words
 
     groups: dict[str, RosterRow] = {}
@@ -736,15 +740,19 @@ def _drop_generic_folders(filename: str) -> str:
     parts = (filename or '').split('__')
     while len(parts) > 1:
         ws = [w.lower() for w in re.split(r'[^A-Za-z]+', parts[0]) if w]
-        if re.match(r'^\d{1,3}[_\s-]', parts[0]) or all(w in _DOC_WORDS or w in _FOLDER_WORDS for w in ws):
+        if re.match(r'^\d{1,3}[_\s-]', parts[0]) or parts[0].lower().endswith('.zip') \
+                or all(w in _DOC_WORDS or w in _FOLDER_WORDS for w in ws):
             parts = parts[1:]
         else:
             break
     return '__'.join(parts)
 
 
+_CAMEL = re.compile(r'(?<=[a-z])(?=[A-Z][a-z])')     # "GroundLeaseScanned" -> "Ground Lease Scanned"
+
+
 def _fn_words(filename: str) -> list[str]:
-    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(filename))
+    base = _CAMEL.sub(' ', re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(filename)))
     return [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', base))
             if len(w) >= 3 and w not in _DOC_WORDS]
 
@@ -780,10 +788,35 @@ def _file_trade_name(filename: str, label: str, common: set) -> Optional[str]:
     return name if len(_alpha(name)) >= 3 else None
 
 
-def _common_filename_words(filenames: list[str]) -> set:
+def _roll_occupant_words(conn, property_id, unassigned_only=False) -> set:
+    """The distinctive words of the rent roll's occupants (4+ letters)."""
+    table = 'cur_rent_roll_entries'
+    try:
+        conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
+    except sqlite3.Error:
+        table = 'rent_roll_entries'
+    q = f"SELECT DISTINCT tenant_name FROM {table} WHERE tenant_name IS NOT NULL"
+    args = []
+    if unassigned_only:
+        q += " AND property_id IS NULL"
+    elif property_id is not None:
+        q += " AND property_id = ?"
+        args.append(property_id)
+    out = set()
+    try:
+        for (name,) in conn.execute(q, args):
+            out |= {w for w in _tokens(name) if len(w) >= 4 and w not in _DOC_WORDS}
+    except sqlite3.Error:
+        pass
+    return out
+
+
+def _common_filename_words(filenames: list[str], tenant_words: set = frozenset()) -> set:
     """The property / portfolio PREFIX of a property's file names: the
     leading run of words that >= 90% of files start with (all of them when
-    there are only 2) — "EC", "Elm Court", "Oak Square".
+    there are only 2) — "EC", "Elm Court", "Oak Square". The run stops at a
+    rent-roll occupant's word ("NorthPad-BeanCoffee-2012-(ELP)__..." files
+    one tenant's pad under its own name).
 
     Leading position, not mere frequency: a tenant word can sit in nearly
     every name of a small property ("Oak Square II Best Buy ..." x4 +
@@ -802,7 +835,7 @@ def _common_filename_words(filenames: list[str]) -> set:
         if not at:
             break
         w, c = max(at.items(), key=lambda kv: kv[1])
-        if c < need:
+        if c < need or w in tenant_words:
             break
         common.add(w)
         pos += 1
@@ -858,10 +891,28 @@ def _after_property_prefix(base: str, common: set) -> str:
 def _filename_stem(filename: str, common: set) -> str:
     """The tenancy words of a file name: its first two distinctive words
     ('EC Bean Coffee - EC-BC 3rd Lease Amendment' -> 'bean coffee')."""
-    base = re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(filename))
-    base = _after_property_prefix(base, common)
-    ws = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', base))
+    base = _CAMEL.sub(' ', re.sub(r'\.[A-Za-z0-9]{2,5}$', '', _drop_generic_folders(filename)))
+    # a folder named for the tenant, right above the file ("FernDeli__
+    # 2006-Checklist"), names every file in it; the file's own words say
+    # which document it is. A folder that names a document ("Pine-Amendment-
+    # 01-08-26") or more than three words is not that
+    head = base.split('__')[-2] if '__' in base else ''
+    hws = [x.lower() for x in re.split(r'[^A-Za-z]+', head) if x]
+    if head and len(hws) <= 3 and not any(w in _DOC_WORDS for w in hws):
+        hw = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', _after_property_prefix(head, common)))
+              if len(w) >= 3 and w not in common]
+        if hw:
+            return ' '.join(hw[:2])
+    rest = _after_property_prefix(base, common)
+    ws = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', rest))
           if len(w) >= 3 and w not in _DOC_WORDS and w not in common]
+    if not ws and rest is not base:
+        # after a ' - ' that closes the property's part, the property's own
+        # words are the tenancy's when nothing else is left ("Bank Place -
+        # Bank Scanned Lease": the bank leases in the building named after it)
+        closed = bool(_NAME_DASH.search(base[max(0, len(base) - len(rest) - 3):len(base) - len(rest)]))
+        if closed:
+            ws = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', rest)) if len(w) >= 3 and w not in _DOC_WORDS]
     return ' '.join(ws[:2])
 
 

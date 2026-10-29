@@ -57,6 +57,12 @@ test("a value ends before the next column's upper-case label and at a wide gap",
      and ('GUARANTOR', 'N/A') in form)
 test('a dot leader to a page number is no value', not any('CONTINUANCE' in lbl for lbl, _ in form))
 test('the line number is the page line', [x.line_no for x in find_labels(PAGE) if x.label == 'SF'] == [4])
+sep = [(x.label, x.value) for x in find_labels(
+    "DATE: 7/12/2023 --- PENDING --- LEASED BY: D. Mossey\nRATE PSF 2 GUARANTOR: N/A\nTENANT ACCOUNT #: 19-05")]
+test('a separator or a figure in front of a label belongs to the previous value, not the label',
+     ('LEASED BY', 'D. Mossey') in sep and ('GUARANTOR', 'N/A') in sep and ('TENANT ACCOUNT #', '19-05') in sep
+     and not any('---' in lbl or lbl.startswith('2 ') for lbl, _ in sep))
+test('a date value is kept whole', ('DATE', '7/12/2023 --- PENDING ---') in sep or ('DATE', '7/12/2023') in sep)
 
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

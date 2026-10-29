@@ -37,6 +37,7 @@ import json
 import os
 import re
 import sqlite3
+import unicodedata
 import uuid
 from datetime import date, datetime
 
@@ -102,6 +103,55 @@ def _loose(s: str) -> str:
     return re.sub(r'[^0-9a-z]', '', (s or '').lower())
 
 
+# the consumer's own reading of "verbatim": NFKC, straight quotes and dashes,
+# soft hyphens and line-break hyphenation gone, spacing and case ignored
+_CQ = str.maketrans({'’': "'", '‘': "'", '“': '"', '”': '"', '–': '-', '—': '-',
+                     ' ': ' ', '­': ''})
+_TOK = re.compile(r'[a-z0-9]+(?:[.,][0-9]+)*')
+
+
+def _cnorm(s: str) -> str:
+    t = unicodedata.normalize('NFKC', s or '').translate(_CQ).lower()
+    t = re.sub(r'-\s*\n\s*', '', t)
+    return re.sub(r'\s+', ' ', t).strip()
+
+
+def _cprinted(q: str, text: str) -> bool:
+    """Does the consumer's check find the quote on this text?"""
+    n = _cnorm(q)
+    if not n:
+        return False
+    if n in _cnorm(text):
+        return True
+    lq = re.sub(r'[^a-z0-9]', '', n)
+    return len(lq) >= 4 and lq in re.sub(r'[^a-z0-9]', '', _cnorm(text))
+
+
+def _window(q: str, text: str, keep_digits: bool = True) -> str | None:
+    """The longest run of the quote's words the text prints contiguously, as
+    the text prints it: four words or more (or the whole quote), carrying
+    every figure of the quote when keep_digits. None when there is none."""
+    toks = _TOK.findall(_cnorm(q))
+    if not toks:
+        return None
+    nt = ' ' + ' '.join(_TOK.findall(_cnorm(text))) + ' '
+    digits = {t for t in toks if any(ch.isdigit() for ch in t)}
+    need = min(4, len(toks))
+    for n in range(len(toks), need - 1, -1):
+        for i in range(0, len(toks) - n + 1):
+            run = toks[i:i + n]
+            if keep_digits and not digits <= set(run):
+                continue
+            if ' ' + ' '.join(run) + ' ' not in nt:
+                continue
+            # the same words as the page prints them (case and punctuation kept)
+            rx = r'[^A-Za-z0-9]*'.join(re.escape(t) for t in run)
+            flat = re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', text or '').translate(_CQ))
+            m = re.search(rx, flat, re.I)
+            return m.group(0).strip() if m else ' '.join(run)
+    return None
+
+
 def verify_quotes(tables: dict, consumer_text=None) -> dict:
     """The pre-publish gate: every quote must be found again, word for word
     (up to spacing and case; or letters and digits alone), on the page it
@@ -112,7 +162,15 @@ def verify_quotes(tables: dict, consumer_text=None) -> dict:
     consumer_text(sha256, page) -> the consumer's own text of that page ('' =
     a page it cannot read; None = a page it does not hold). An OCR quote our
     second read does not corroborate stands only on a second read that
-    agrees: the consumer's (R2), never on our one read alone (RV5)."""
+    agrees: the consumer's (R2), never on our one read alone (RV5).
+
+    Where the consumer holds its own text of the page, that text is the one
+    the quote is verified on (the consumer reads a page in its own order: a
+    form's columns, a scan's lines). A quote it prints stands; one it prints
+    only in part is cut down to the longest run of words it prints
+    contiguously (four or more, every figure kept); one it does not print is
+    withdrawn, the reason carrying our own read. A form label (quote_label)
+    is held to the same rule on its own."""
     pages = {}
     for r in tables['cap_page_text'][1]:
         pages[(r[0], r[1])] = (r[4] or '') + ' ' + (r[5] or '')
@@ -123,12 +181,46 @@ def verify_quotes(tables: dict, consumer_text=None) -> dict:
     def printed(q, t):
         return _norm(q) in _norm(t) or (len(_loose(q)) >= 4 and _loose(q) in _loose(t))
     for name, (cols, rows) in tables.items():
-        if not set(CITE_COLS) <= set(cols) or 'source_page' not in cols:
+        if not set(CITE_COLS) <= set(cols) or not ('source_page' in cols or 'page_from' in cols):
             continue
         ix = {c: i for i, c in enumerate(cols)}
+        ix['source_page'] = ix.get('source_page', ix.get('page_from'))     # an exhibit cites its first page
+        lab = ix.get('quote_label')
+        prose = name == 'cap_lease_provision'
+
+        def withdraw(k, r, why):
+            r = list(r)
+            r[ix['quote']] = r[ix['quote_page_method']] = None
+            if lab is not None:
+                r[lab] = None
+            if name == 'cap_lease_event' and r[ix['event_date']]:
+                why = f"the instrument's date {r[ix['event_date']]} was read from a quote the page does not verify; {why}"
+                r[ix['event_date']] = None           # a date stands only on its quote
+            r[ix['null_reason']] = why
+            rows[k] = tuple(r)
         for k, r in enumerate(rows):
             q, page = r[ix['quote']], r[ix['source_page']]
             if not q:
+                continue
+            theirs = consumer_text((r[ix['source_sha256']] or '').lower(), page) if consumer_text else None
+            if theirs:
+                # the consumer's text decides: as printed, cut to what it prints, or withdrawn
+                if not _cprinted(q, theirs):
+                    kind = r[ix['kind']] if 'kind' in ix else None
+                    w = _window(q, theirs, keep_digits=not (prose and kind in ('article', 'sweep', 'clause')))
+                    if not w:
+                        withdraw(k, r, "your text of this page does not print this quote contiguously; "
+                                       f"our read prints: '{q[:200]}'")
+                        continue
+                    r = list(r)
+                    r[ix['quote']] = w
+                    rows[k] = r = tuple(r)
+                if lab is not None and r[lab] and not _cprinted(r[lab], theirs):
+                    r = list(r)                  # the value stands on its own; the label is withdrawn
+                    r[ix['null_reason']] = ("your text of this page does not print the label contiguously; "
+                                            f"our read prints: '{r[lab][:120]}'")
+                    r[lab] = None
+                    rows[k] = tuple(r)
                 continue
             # the cited document: the one the row names, or any copy with the cited sha256
             docs = set(sha_docs.get(r[ix['source_sha256']], ()))
@@ -136,20 +228,10 @@ def verify_quotes(tables: dict, consumer_text=None) -> dict:
                 if c in ix and r[ix[c]] is not None:
                     docs.add(r[ix[c]])
             if not any(printed(q, pages.get((d, page), '')) for d in docs):
-                why = 'quote not found again on its cited page; withheld for review'
-            elif consumer_text and r[ix['quote_page_method']] in ('ocr_uncorroborated', 'ocr'):
-                theirs = consumer_text((r[ix['source_sha256']] or '').lower(), page)
-                if theirs is None or (theirs.strip() and printed(q, theirs)):
-                    continue
-                why = ('an OCR quote only our first read prints: our second read does not agree and '
-                       + ('your text of this page is empty' if not theirs.strip() else 'your text of this page prints otherwise')
-                       + '; withheld (RV5)')
-            else:
-                continue
-            r = list(r)
-            r[ix['quote']] = r[ix['quote_page_method']] = None
-            r[ix['null_reason']] = why
-            rows[k] = tuple(r)
+                withdraw(k, r, 'quote not found again on its cited page; withheld for review')
+            elif theirs is not None and r[ix['quote_page_method']] in ('ocr_uncorroborated', 'ocr'):
+                withdraw(k, r, 'an OCR quote only our first read prints: our second read does not agree and '
+                               'your text of this page is empty; withheld (RV5)')
     return tables
 
 
@@ -1036,8 +1118,10 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
 
     # depth layer C: every "LABEL: value" every document of a tenancy prints
     # (deal sheets, summaries, checklists and letters too), the value quoted
-    # in `quote` and the label in `quote_label`: a form's columns can sit
-    # apart in another read, so each is verified on its own
+    # whole in `quote` and the label in `quote_label`, each verified on its
+    # own. A form's columns sit in another order in another read, so the
+    # pairs are read from the consumer's own text of the page where it holds
+    # one: label and value are then contiguous in the text that checks them
     n_cols = len(t_prov[0]) if t_prov else None
     t_prov = [r + (None,) for r in t_prov]
     for d in docs:
@@ -1045,15 +1129,12 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             continue
         lid = doc_lease[d['id']]
         for pno, page in enumerate(pages_by_doc.get(d['id'], []), 1):
-            for lv in find_labels(page):
+            theirs = consumer_text((doc_sha.get(d['id']) or '').lower(), pno) if consumer_text else None
+            for lv in find_labels(theirs or page):
                 prov_id += 1
                 amt = re.fullmatch(r'\$?\s*([\d,]+(?:\.\d+)?)', lv.value)
                 num = _num_or_none(amt.group(1).replace(',', '')) if amt else None
-                # the quote is the value's first amount or first four words: a long
-                # value runs across a form line another read may break (the whole
-                # value stays in value_raw)
-                head = (re.match(r'\$?[\d,]+(?:\.\d+)?', lv.value) or re.match(r'\S+(?:\s+\S+){0,3}', lv.value))
-                c = Cite(pno, head.group(0) if head else lv.value, 'printed')
+                c = Cite(pno, lv.value, 'printed')
                 t_prov.append((prov_id, lid, d['id'], 'label', f'Label: {lv.label}', lv.label, lv.value, num,
                                None, None, None, None, pno, None, pno)
                               + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'label value')

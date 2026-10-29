@@ -65,6 +65,17 @@ def find_labels(page: str) -> list[LabelValue]:
             if 0 < run < len(words) and any(not _caps(w) for w in words[:-run]):
                 lbl = ' '.join(words[-run:])
                 start = m.start(1) + m.group(1).rfind(lbl)
+            # a separator or a figure in front ("--- PENDING --- LEASED BY:",
+            # "2 GUARANTOR:") belongs to what came before, not to the label
+            words = lbl.split()
+            for i in range(len(words) - 2, -1, -1):
+                w = words[i]
+                if not any(ch.isalpha() for ch in w) and (any(ch.isdigit() for ch in w) or len(set(w)) == 1 and len(w) > 1):
+                    words = words[i + 1:]        # "&", "#", "/" join words; "---", "***", "2" do not
+                    break
+            if ' '.join(words) != lbl:
+                lbl = ' '.join(words)
+                start = m.start(1) + m.group(1).rfind(lbl)
             if _is_label(lbl):
                 hits.append((start, lbl, m.end()))
         # a later label must follow some value: "Lease Date: May 1, 2020 Term: 5 years"
