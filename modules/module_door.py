@@ -460,8 +460,14 @@ def _roll_reconciliation(roll: list, keyed: dict, rows: list, t_fact: list, docs
             hits = [d['filename'] for d in docs if words and (
                 all(w in (d.get('filename') or '').lower() for w in words[:2]) or
                 all(w in ' '.join(pages_by_doc.get(d['id'], [])[:3]).lower() for w in words[:2]))]
+            # a page deeper in a file can name the occupant (a deal sheet for a
+            # proposed tenant stapled into another tenant's lease): say where
+            named = next(((d['filename'], n) for d in docs for n, p in enumerate(pages_by_doc.get(d['id'], []), 1)
+                          if words and all(w in (p or '').lower() for w in words[:2])), None) if not hits else None
             why = (f'no lease row: {len(hits)} document(s) name this occupant but do not form a tenancy '
                    f'({"; ".join(h[-60:] for h in hits[:3])})' if hits else
+                   f'no lease row: the occupant is named on p{named[1]} of {named[0][-60:]} (no instrument of its own '
+                   'is in the files received)' if named else
                    'no lease row: no document in the files received names this occupant')
             out.append(base + ('lease', None, None, None, 'NO_LEASE', why, None, None, None))
             continue

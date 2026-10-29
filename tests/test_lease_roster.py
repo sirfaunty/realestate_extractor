@@ -43,6 +43,28 @@ def test_generic_folder_never_becomes_the_tenancy():
     assert stems[3] == 'quince bakery', stems       # a run-together folder name splits at its capitals
 
 
+def test_tenant_named_after_the_building_and_tenant_folders_before_the_prefix():
+    # the bank that leases in the tower named after it: a two-letter opener
+    # ("AB Trust Tower") and the property's own words repeated as the tenant's
+    files = ['AB Trust Tower - AB Trust Scanned Lease.pdf',
+             'Lease Miscellaneous__AB Trust Tower AB Trust Checklists and NERS.pdf',
+             'Lease Miscellaneous__AB Trust Tower Atos Checklists and NERS.pdf',
+             'AB Trust Tower - Juniper Florist Lease Correspondence.pdf']
+    common = _common_filename_words(files)
+    stems = [_filename_stem(f, common) for f in files]
+    assert stems[0] == stems[1] == 'ab trust' and stems[2] == 'atos' and stems[3] == 'juniper florist', stems
+    # a tenant-named folder in front of "<Property> - <Tenant>" files does not
+    # hide the property's prefix: the files without a folder still split by tenant
+    files = ['Scanned Leases__Supplemental Lease Documents__Larkspur__Cedar Office Park II - Larkspur.pdf',
+             'Scanned Leases__Supplemental Lease Documents__Birchwood__Cedar Office Park II - Birchwood.pdf',
+             'Scanned Leases__Supplemental Lease Documents__Ironwood__Cedar Office Park II - Ironwood.pdf',
+             'Scanned Leases__Cedar Office Park II - Fern Dental Scanned Lease.pdf',
+             'Scanned Leases__Cedar Office Park II - Juniper Florist Scanned Lease.pdf']
+    common = _common_filename_words(files)
+    stems = [_filename_stem(f, common) for f in files]
+    assert stems[3] == 'fern dental' and stems[4] == 'juniper florist' and stems[0] == 'larkspur', stems
+
+
 def test_property_prefix_is_common():
     common = _common_filename_words(FILES)
     assert 'okp' in common and 'harbor' not in common, common

@@ -728,7 +728,9 @@ _DOC_WORDS = {
 _FOLDER_WORDS = {'source', 'sources', 'documents', 'document', 'deliverables', 'scans', 'archived', 'summaries',
                  'summary', 'ners', 'files', 'file', 'misc', 'miscellaneous', 'supporting', 'harvest', 'part',
                  'module', 'zip', 'pdfs', 'scan', 'leasedocuments', 'leasefiles', 'leasing', 'checklists',
-                 'property'}
+                 'property', 'supplemental', 'license', 'licenses', 'agreements', 'agreement', 'certified', 'mail',
+                 'cards', 'correspondence', 'letters', 'notices', 'amendments', 'estoppels', 'guaranties', 'exhibits',
+                 'insurance', 'certificates'}
 
 
 def _drop_generic_folders(filename: str) -> str:
@@ -821,24 +823,30 @@ def _common_filename_words(filenames: list[str], tenant_words: set = frozenset()
     Leading position, not mere frequency: a tenant word can sit in nearly
     every name of a small property ("Oak Square II Best Buy ..." x4 +
     "... Corner Liquor Best ...") without being the prefix."""
-    lists = [_fn_words(f) for f in filenames]
-    n = len(lists)
+    n = len(filenames)
     if n < 2:
         return set()
     need = n if n < 3 else max(2, int(0.9 * n + 0.999))
-    common, pos = set(), 0
-    while pos < 5:
-        at = {}
-        for ws in lists:
-            if len(ws) > pos:
-                at[ws[pos]] = at.get(ws[pos], 0) + 1
-        if not at:
-            break
-        w, c = max(at.items(), key=lambda kv: kv[1])
-        if c < need or w in tenant_words:
-            break
-        common.add(w)
-        pos += 1
+
+    def run(lists):
+        out, pos = set(), 0
+        while pos < 5:
+            at = {}
+            for ws in lists:
+                if len(ws) > pos:
+                    at[ws[pos]] = at.get(ws[pos], 0) + 1
+            if not at:
+                break
+            w, c = max(at.items(), key=lambda kv: kv[1])
+            if c < need or w in tenant_words:
+                break
+            out.add(w)
+            pos += 1
+        return out
+    # the run on the full name (a property-named folder) and on the file's own
+    # name (a tenant-named folder in front of "<Property> - <Tenant>" files
+    # would otherwise hide the property's words)
+    common = run([_fn_words(f) for f in filenames]) | run([_fn_words(f.split('__')[-1]) for f in filenames])
     # a property CODE opening a good share of the files ("CPB - Bean Coffee
     # NERS", 3+ files and 30%): the landlord's own abbreviation, not a tenant
     codes = {}
@@ -871,15 +879,25 @@ def _after_property_prefix(base: str, common: set) -> str:
     word is not the property's ('Bean Coffee - First Amendment') is left
     alone."""
     words = list(re.finditer(r'[A-Za-z]+', base))
-    if not words or words[0].group(0).lower() not in common:
+    if not words:
         return base
-    end = 0
+    first = words[0].group(0).lower()
+    # a two-letter opener ("AB Trust Tower") is not a prefix word itself; the word after it decides
+    if first not in common and not (len(first) <= 2 and len(words) > 1 and words[1].group(0).lower() in common):
+        return base
+    end, seen = 0, set()
     for m in words:
         w = m.group(0).lower()
         if end and _NAME_DASH.search(base, end, m.start()):
             break                # the ' - ' closes the property's part of the name
-        if w in common or w in _PLACE_WORDS or w in _DOC_WORDS or len(w) <= 2:
+        if w in common and w in seen:
+            break                # the property's words again: the tenant named after the building ("AB Trust Tower AB Trust ...")
+        if w in common or w in _PLACE_WORDS or w in _DOC_WORDS:
             end = m.end()
+            if w in common:
+                seen.add(w)
+        elif len(w) <= 2:
+            continue             # a short word rides with the prefix word that follows it
         else:
             break
     d = _NAME_DASH.match(base, end)
@@ -907,12 +925,15 @@ def _filename_stem(filename: str, common: set) -> str:
     ws = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', rest))
           if len(w) >= 3 and w not in _DOC_WORDS and w not in common]
     if not ws and rest is not base:
-        # after a ' - ' that closes the property's part, the property's own
-        # words are the tenancy's when nothing else is left ("Bank Place -
-        # Bank Scanned Lease": the bank leases in the building named after it)
+        # after a ' - ' that closes the property's part, or when the rest only
+        # repeats the property's own words, those words are the tenancy's
+        # ("Bank Place - Bank Scanned Lease", "Bank Place Bank Checklists":
+        # the bank leases in the building named after it); the short word
+        # stays too ("AB Trust", not "Trust")
         closed = bool(_NAME_DASH.search(base[max(0, len(base) - len(rest) - 3):len(base) - len(rest)]))
-        if closed:
-            ws = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', rest)) if len(w) >= 3 and w not in _DOC_WORDS]
+        cand = [w for w in (x.lower() for x in re.split(r'[^A-Za-z]+', rest)) if len(w) >= 2 and w not in _DOC_WORDS]
+        if cand and (closed or all(w in common or len(w) <= 2 for w in cand)):
+            ws = cand
     return ' '.join(ws[:2])
 
 
