@@ -12,7 +12,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
-from realestate_extractor.extractors.ner_sheet import parse_ner  # noqa: E402
+from realestate_extractor.extractors.ner_sheet import canonical, parse_ner  # noqa: E402
 
 passed = failed = 0
 
@@ -106,6 +106,41 @@ test("OCR '$' read as 'S' and a space after a comma", parse_ner(
     COLUMNS.replace('TOTAL LANDLORD EXPENSES $13.00 $15,600.00 $0.00 $0.00',
                     'TOTAL LANDLORD EXPENSES S13.00 $15, 600.00 S0.00 S0.00')).tie == 'TIE')
 test('a page that is not a deal sheet is None', parse_ner('LEASE AGREEMENT between ...') is None)
+
+print('\nThe method: fixed lines with a kind, rate and total apart, printed means printed')
+test('each line maps to its canonical line and kind; the template is named',
+     s.template == 'legacy' and c.template == 'modern'
+     and [(x.cost_line, x.kind) for x in c.cost_lines] == [('ALLOWANCE', 'allowance'), ('Vanilla Shell Cost', 'landlord_work'),
+                                                            ('Tenant Specific Cost', 'landlord_work'),
+                                                            ('Landlord Leasing Fee', 'leasing_fee'), ('Co-Broker', 'leasing_fee'),
+                                                            ('MISC LANDLORD EXPENSES', 'misc')])
+test('a legacy line keeps its rate beside its total', [(x.proposed_psf, x.amount) for x in s.cost_lines
+                                                        if x.cost_line == 'ALLOWANCE'] == [(10.0, 16000.0)])
+test('the modern form keeps proposed and budgeted PSF and totals apart',
+     [(x.proposed_psf, x.amount, x.budgeted_psf, x.budgeted) for x in c.cost_lines if x.cost_line == 'ALLOWANCE']
+     == [(5.0, 6000.0, 0.0, 0.0)])
+no_fig = parse_ner(TYPED.replace('SPACE PLANS $ -', 'SPACE PLANS'))
+test('the form\'s "$ -" is 0, a line printed with no figure is None and says so',
+     [x.amount for x in s.cost_lines if x.cost_line == 'Space Plans'] == [0.0]
+     and no_fig.cost_lines[0].value_status == 'line_on_form_no_figure' and no_fig.cost_lines[0].amount is None)
+rate_only = parse_ner(TYPED.replace('LEASING FEE @ $ 3.00 psf. $ 4,800.00', 'LEASING FEE @ $ 3.00 psf.'))
+lf = [x for x in rate_only.cost_lines if x.cost_line == 'Landlord Leasing Fee'][0]
+test('a line printing only a rate gets its total as rate x SF, marked derived, and the sheet still ties',
+     (lf.proposed_psf, lf.amount, lf.value_status) == (3.0, 4800.0, 'total derived = psf x SF (not printed)')
+     and rate_only.tie == 'TIE' and 'derived' in rate_only.tie_note)
+test('the control is the printed total: the difference is kept on a BREAK',
+     b.control_delta == -1000.0 and s.control_delta == 0.0)
+test('the budgeted column ties on its own where the form prints it',
+     c.printed_total_budgeted.value == 0.0 and c.budget_tie == 'TIE' and c.budget_sum == 0.0
+     and parse_ner(COLUMNS.replace('MISC LANDLORD EXPENSES $0.00 $0.00 $0.00 $0.00',
+                                   'MISC LANDLORD EXPENSES $0.00 $0.00 $1.00 $1,200.00')).budget_tie == 'BREAK')
+test('OCR forms of the labels still map', [canonical(x)[0] for x in ('K1A LEASING FEE @', 'SACIWAC (estimate)',
+                                                                      'LEASEHOLD IMPROVEMENTS {LHI}', 'e Construction Docs',
+                                                                      '5% Const Mgt Fee', 'CM Fee', 'LANDLORD WORK: Vanilla Shelt Cast')]
+     == ['Landlord Leasing Fee', 'SAC/WAC', 'Leasehold Improvements (LHI)', 'Construction Docs',
+         'Construction Management Fee', 'Construction Management Fee', 'Vanilla Shell Cost'])
+test('a label that is none of the fixed lines is kept as kind other',
+     canonical('Signage reimbursement') == (None, 'other'))
 
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

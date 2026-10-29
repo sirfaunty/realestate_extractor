@@ -74,11 +74,17 @@ TABLES = {
     'cap_lease_exhibit': ('exhibit_id', 'every exhibit, rider or addendum attached to an instrument: label, title as printed, pages, the instrument it is filed in'),
     'cap_lease_term': ('term_id', 'one row per term-setting instrument: start, expiry and years as it prints them (else computed from its own rent rows), SF, starting and ending rent PSF and average escalation from its rent rows, with the nearest deal sheet economics'),
     'cap_option_register': ('optreg_id', 'every renewal / extension option granted or deleted in a tenancy instrument: count, years each, notice window, rent basis, cited'),
-    'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its printed fields, the printed total landlord expense and whether the cost lines tie to it (TIE / BREAK)'),
+    'cap_ner_deal': ('ner_id', 'every net effective rent deal sheet: its template (legacy / modern), its printed fields, the printed total landlord expense (proposed, and budgeted where printed) and whether the cost lines tie to it (TIE / BREAK with control_delta / NO_PRINTED_TOTAL)'),
     'cap_roll_reconciliation': ('recon_id', "every rent-roll tenancy given, field by field (SF, base rent, expiration): the roll's value, the paper's value with the words it is printed in, TIE / DIFFERS / NOT_ON_PAPER / NO_LEASE, and what explains a difference"),
-    'cap_ner_cost_line': ('ner_id, seq', "every cost line printed on a deal sheet, proposed and budgeted, cited to its line; memo says why a printed line is not counted in the sum"),
+    'cap_ner_cost_line': ('ner_id, seq', "every cost line of a deal sheet against the fixed line list (cost_line, kind: allowance / landlord_work / leasing_fee / exclusion / concession / misc / memo / other), rate and total apart for the proposed and the budgeted column, the printed line, value_status (printed / line_on_form_no_figure / total derived = psf x SF), cited; memo says why a line is left out of the sum"),
     'cap_lease_fact': ('fact_id', "each tenancy value (SF, commencement, expiration, current rent) with the document, page and verbatim words it came from"),
+    'cap_suite_history': ('hist_id', "every suite's occupant runs over the owner's monthly rent rolls: one row per run of the same occupant on consecutive rolls (vacant runs too), first and last roll, SF and base rent as the last roll prints them, prior and next occupant; given by the publisher from the rolls, not read from the property's documents"),
 }
+
+# a suite-history row as the publisher hands it in (one per run); see TABLES['cap_suite_history']
+SUITE_HISTORY_COLS = ['hist_id', 'suite_id', 'seq', 'status', 'occupant', 'tenant_key', 'sf', 'base_rent', 'first_roll',
+                      'last_roll', 'rolls', 'lease_start', 'lease_end', 'prior_occupant', 'next_occupant', 'basis',
+                      'note', 'source_sha256', 'source_page']
 
 CITE_COLS = ['source_sha256', 'quote', 'quote_page_method', 'value_basis', 'period_basis', 'null_reason']
 
@@ -629,12 +635,14 @@ def _confirmations(conn, property_id):
 
 def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                       reads_db: str | None = None, tenant_keys: tuple | None = None,
-                      consumer_text=None) -> dict:
+                      consumer_text=None, suite_history: list | None = None) -> dict:
     """Read a property's extraction DB and return {table: (columns, rows)}.
     Second OCR reads (extractors/second_read.py) come from the DB's own
     page_reads table and, when given, reads_db. tenant_keys = (roll rows,
     alias table) maps each tenancy to the owner's rent-roll key
-    (modules/tenant_keys.py); the engine's own key stays in source_tenant_key."""
+    (modules/tenant_keys.py); the engine's own key stays in source_tenant_key.
+    suite_history = rows (dicts on SUITE_HISTORY_COLS) the publisher built
+    from the owner's monthly rent rolls; published as cap_suite_history."""
     as_of = as_of or date.today()
     conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
     docs = _property_docs(conn, property_id)
@@ -996,9 +1004,20 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             ns = parse_ner(page)
             if not ns:
                 continue
+            dpages = pages_by_doc.get(d['id'], [])
+            # a sheet whose lines do not tie on the first OCR read, or whose printed
+            # total it lost, is read again from the page's second OCR read and that
+            # read stands when it ties (the consumer's escalation rule)
+            s2 = second.get((d['id'], pno))
+            if ns.tie in ('BREAK', 'NO_PRINTED_TOTAL') and (s2 or '').strip():
+                ns2 = parse_ner(s2)
+                if ns2 and ns2.tie == 'TIE':
+                    ns = ns2
+                    ns.tie_note += '; read from the second OCR read of the page (the first read did not tie)'
+                    dpages = list(dpages)
+                    dpages[pno - 1] = s2
             ner_id += 1
             tot = ns.printed_total_landlord_expense
-            dpages = pages_by_doc.get(d['id'], [])
 
             def on_line(value, line, pno=pno, dpages=dpages):
                 # the printed amount itself (a sheet's columns OCR differently line to
@@ -1010,18 +1029,23 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                         return Cite(pno, cv.quote, 'printed')
                 return Cite(pno, line, 'printed') if line else Cite(None, '', 'not_found')
             c = on_line(tot.value, tot.line)
-            t_ner.append((ner_id, doc_lease.get(d['id']), d['id'], pno, ns.version_date.value, ns.deal_type.value,
-                          ns.tenant.value, ns.use.value, ns.space.value, ns.sqft.value, ns.term_years.value,
-                          ns.total_contract_rent.value, ns.allowance_total.value, ns.leasing_fee.value,
-                          ns.cobroker_fee.value, tot.value, ns.cost_sum, ns.tie, ns.tie_note,
+            t_ner.append((ner_id, doc_lease.get(d['id']), d['id'], pno, ns.template, ns.version_date.value,
+                          ns.deal_type.value, ns.tenant.value, ns.use.value, ns.space.value, ns.sqft.value,
+                          ns.term_years.value, ns.total_contract_rent.value, ns.allowance_total.value,
+                          ns.leasing_fee.value, ns.cobroker_fee.value, tot.value, ns.cost_sum, ns.control_delta,
+                          ns.tie, ns.tie_note, ns.printed_total_budgeted.value, ns.budget_sum, ns.budget_tie or None,
                           ns.total_effective_contract_rent.value, ns.avg_annual_effective_rent.value,
                           ns.avg_psf_effective_rent.value,
                           '; '.join(f'{x[0]}: {x[2]}' for x in ns.ladder) or None)
                          + _cite_cols(c, d['id'], doc_sha, doc_method, None, 'total landlord expense',
                                       missing_value=tot.value is None and not tot.line))
             for seq, cl in enumerate(ns.cost_lines, 1):
-                cc = on_line(cl.amount if cl.amount is not None else cl.budgeted, cl.line)
-                t_ner_cost.append((ner_id, seq, cl.label, cl.amount, cl.budgeted, cl.memo or None, d['id'], pno)
+                # a line's quote is its printed total (its rate when only a rate is printed), else its line
+                printed_fig = cl.amount if cl.amount is not None and not cl.value_status.startswith('total derived') \
+                    else (cl.proposed_psf if cl.proposed_psf is not None else cl.budgeted)
+                cc = on_line(printed_fig, cl.line)
+                t_ner_cost.append((ner_id, seq, cl.label, cl.cost_line, cl.kind, cl.proposed_psf, cl.amount,
+                                   cl.budgeted_psf, cl.budgeted, cl.line, cl.value_status, cl.memo or None, d['id'], pno)
                                   + _cite_cols(cc, d['id'], doc_sha, doc_method, None, 'cost line'))
 
     # lease terms: one row per term-setting instrument, its start / expiry /
@@ -1178,17 +1202,22 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         'cap_option_register': (['optreg_id', 'lease_id', 'source_doc_id', 'source_page', 'status', 'n_options',
                                  'option_years', 'notice_window', 'notice_min_days', 'notice_max_days', 'rent_basis',
                                  'rent_basis_words'] + CITE_COLS, t_optreg),
-        'cap_ner_deal': (['ner_id', 'lease_id', 'source_doc_id', 'source_page', 'version_date', 'deal_type', 'tenant',
-                          'use', 'space', 'sqft', 'term_years', 'total_contract_rent', 'allowance_total',
+        'cap_ner_deal': (['ner_id', 'lease_id', 'source_doc_id', 'source_page', 'template', 'version_date', 'deal_type',
+                          'tenant', 'use', 'space', 'sqft', 'term_years', 'total_contract_rent', 'allowance_total',
                           'leasing_fee', 'cobroker_fee', 'printed_total_landlord_expense', 'cost_lines_sum',
-                          'tie_status', 'tie_note', 'total_effective_contract_rent', 'avg_annual_effective_rent',
+                          'control_delta', 'tie_status', 'tie_note', 'printed_total_budgeted', 'budgeted_lines_sum',
+                          'budget_tie_status', 'total_effective_contract_rent', 'avg_annual_effective_rent',
                           'avg_psf_effective_rent', 'rent_ladder'] + CITE_COLS, t_ner),
         'cap_roll_reconciliation': (['recon_id', 'roll_suite', 'roll_occupant', 'tenant_key', 'field', 'roll_value',
                                      'paper_value', 'lease_id', 'state', 'explanation', 'source_doc_id', 'source_page',
                                      'paper_quote'], t_recon),
-        'cap_ner_cost_line': (['ner_id', 'seq', 'label', 'proposed', 'budgeted', 'memo', 'source_doc_id', 'source_page']
-                              + CITE_COLS, t_ner_cost),
+        'cap_ner_cost_line': (['ner_id', 'seq', 'label_as_printed', 'cost_line', 'kind', 'proposed_psf', 'proposed_total',
+                               'budgeted_psf', 'budgeted_total', 'printed_line', 'value_status', 'memo', 'source_doc_id',
+                               'source_page'] + CITE_COLS, t_ner_cost),
     }
+    if suite_history:
+        tables['cap_suite_history'] = (list(SUITE_HISTORY_COLS),
+                                       [tuple(r.get(c) for c in SUITE_HISTORY_COLS) for r in suite_history])
     return verify_quotes(tables, consumer_text)
 
 
@@ -1292,7 +1321,8 @@ def snapshot():
 def publish_property_door(db_path: str, out_dir: str, package: str, property_id=None,
                           as_of: date | None = None, publisher: str = PUBLISHER,
                           property_label: str = '', reads_db: str | None = None,
-                          tenant_keys: tuple | None = None, consumer_text=None) -> dict:
+                          tenant_keys: tuple | None = None, consumer_text=None,
+                          suite_history: list | None = None) -> dict:
     """Write the package into out_dir: the generation database, HANDOFF.txt,
     SOURCE_PATH.txt, BOUNDARY_CONTRACT.md, door/_cap_door.py and, LAST,
     PUBLISH_MANIFEST.json. Returns the manifest."""
@@ -1302,7 +1332,7 @@ def publish_property_door(db_path: str, out_dir: str, package: str, property_id=
     if os.path.exists(man_path):
         os.remove(man_path)                      # consumers now see a publish under way
     tables = build_door_tables(db_path, property_id, as_of, reads_db=reads_db, tenant_keys=tenant_keys,
-                               consumer_text=consumer_text)
+                               consumer_text=consumer_text, suite_history=suite_history)
     gen = uuid.uuid4().hex
     db_name = f'{PREFIX}_{package.lower()}_{gen}.db'
     db_out = os.path.join(out_dir, db_name)

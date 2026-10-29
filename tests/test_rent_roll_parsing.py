@@ -109,6 +109,41 @@ def test_steps_vacant_land_and_sections():
     assert len(rows) == 9, [(r['unit_number'], r.get('tenant_name')) for r in rows]
 
 
+# Dotted and long suite ids, a tenant on several suites whose own Totals line
+# must not end the read, and an "Additional Space" row that belongs to the
+# tenant above it.
+MRI_PAGE_3 = """Cedar Office Park (Building Id: 3010)
+Bldg Status: Active only
+Rent Roll
+Report Date: 9/30/2026
+Bldg Id Suite Id Occupant Name Rent Start Expiration Sqft Base Rent Rate PSF Recovery Stop Other Income Cat Date Monthly Amt PSF
+Occupied Suites
+3010 0100.0 Maple Dental PA 4/13/2015 4/30/2031 4,906 6,541.33 16.00 5,612.61 RNT 5/1/2027 6,672.16 16.32
+3010 400-404+ Quill Medical Systems, Inc. 8/2/2007 4/30/2027 12,650 10,067.29 9.55 6,193.59
+Additional Space: 3010 -406 5/1/2022 4/30/2027 2,465 1,961.34 9.55 1,206.92
+Totals: 15,115 12,028.63 7,400.51 0.00
+3010 430B-432B Fern Insurance 1/1/2023 10/31/2030 3,022 2,054.96 8.16 1,479.59
+3010 Bldg. Antenna Co 5/23/2023 4/22/2026 0
+Totals: Occupied Sqft: 100.00% 5 Units 23,043 20,624.92 14,492.71 0.00
+Total Cedar Office Park:
+Occupied Sqft: 100.00% 5 Units 23,043 20,624.92 14,492.71 0.00
+Report Id MRIX_CMROLL Database EXAMPLE Reported by A. Person 10/1/2026 3:56 PM Page 3"""
+
+
+def test_dotted_suites_additional_space_and_tenant_totals():
+    rows = parse(MRI_PAGE_3)
+    by = {(r['unit_number'], r.get('tenant_name')): r for r in rows}
+    assert by[('0100.0', 'Maple Dental PA')]['monthly_rent'] == 6541.33, rows
+    assert by[('400-404+', 'Quill Medical Systems, Inc.')]['square_footage'] == 12650.0
+    add = by[('406', 'Quill Medical Systems, Inc.')]
+    assert (add['monthly_rent'], add['lease_start'], add['metadata'].get('additional_space')) == (1961.34, '5/1/2022', True), add
+    # the tenant's own totals line ends nothing: the suites after it are read
+    assert by[('430B-432B', 'Fern Insurance')]['monthly_rent'] == 2054.96
+    assert by[('Bldg.', 'Antenna Co')]['square_footage'] == 0.0
+    # the section totals and the property total end the data
+    assert len(rows) == 5, [(r['unit_number'], r.get('tenant_name')) for r in rows]
+
+
 def test_other_layouts_untouched():
     # a Format-A style roll (unit + type + sqft, tenant, deposit, rent, other)
     # must not be caught by the one-line reader

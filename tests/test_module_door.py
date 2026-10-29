@@ -266,6 +266,23 @@ def main():
     test("the landlord's own company on the roll is OWNER_AFFILIATE, naming the landlord",
          rec[('birchwood_corporate', 'lease')]['state'] == 'OWNER_AFFILIATE'
          and 'Birchwood Realty' in rec[('birchwood_corporate', 'lease')]['explanation'])
+
+    print('\nSuite history from the monthly rolls')
+    runs = [{'hist_id': '7:220:1', 'suite_id': '220', 'seq': 1, 'status': 'former', 'occupant': 'Lark Florist',
+             'tenant_key': 'lark_florist', 'sf': 1800.0, 'base_rent': 2500.0, 'first_roll': '2021-01', 'last_roll': '2023-06',
+             'rolls': 30, 'lease_start': '1/1/2019', 'lease_end': '6/30/2023', 'prior_occupant': None,
+             'next_occupant': 'River Dental PA', 'basis': 'monthly rent rolls 2021-01 to 2023-06', 'note': '30 rolls',
+             'source_sha256': 'a' * 64, 'source_page': 3},
+            {'hist_id': '7:220:2', 'suite_id': '220', 'seq': 2, 'status': 'current', 'occupant': 'River Dental PA',
+             'tenant_key': 'river_dental', 'sf': 1800.0, 'base_rent': 3000.0, 'first_roll': '2023-07', 'last_roll': '2026-09',
+             'rolls': 39, 'prior_occupant': 'Lark Florist', 'basis': 'monthly rent rolls 2023-07 to 2026-09'}]
+    sh = build_door_tables(db_path, pid, date(2026, 9, 1), suite_history=runs)
+    test('the runs the publisher hands in are published as cap_suite_history, one row per run, on the declared columns',
+         'cap_suite_history' in sh and len(sh['cap_suite_history'][1]) == 2
+         and sh['cap_suite_history'][0][:4] == ['hist_id', 'suite_id', 'seq', 'status']
+         and dict(zip(*[sh['cap_suite_history'][0], sh['cap_suite_history'][1][1]]))['next_occupant'] is None)
+    test('with no runs given there is no cap_suite_history table',
+         'cap_suite_history' not in build_door_tables(db_path, pid, date(2026, 9, 1)))
     test('a management office on the roll is NOT_A_TENANCY', rec[('leasing_office', 'lease')]['state'] == 'NOT_A_TENANCY')
     test('a roll tenancy no document names is NO_LEASE, and says so',
          rec[('quince_bakery', 'lease')]['state'] == 'NO_LEASE'

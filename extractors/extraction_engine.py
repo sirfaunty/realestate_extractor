@@ -1735,11 +1735,21 @@ class ExtractionEngine:
     # Format D row: building id, suite, occupant, rent start, expiration, sqft,
     # then the money columns (monthly base rent, annual rate PSF, recoveries…).
     # The suite may be alphanumeric ("10A", "LAND"); the sqft may be 0.
+    # a suite id as the systems print it: "110", "10A", "0001.0", "Bldg.", "400-404+", "430B-432B"
+    _RR_SUITE = r'(?P<suite>[A-Za-z0-9][A-Za-z0-9.\-+]{0,11})'
     _RR_LINE = re.compile(
-        r'^(?P<bldg>\d{2,6})\s+(?P<suite>[A-Za-z0-9][A-Za-z0-9\-]{0,7})\s+(?P<name>.+?)\s+'
+        r'^(?P<bldg>\d{2,6})\s+' + _RR_SUITE + r'\s+(?P<name>.+?)\s*'
         r'(?P<start>\d{1,2}/\d{1,2}/\d{4})\s+(?P<end>\d{1,2}/\d{1,2}/\d{4})\s+'
         r'(?P<sqft>\d[\d,]*)(?P<rest>(?:\s+.*)?)$')
-    _RR_VACANT = re.compile(r'^(?P<bldg>\d{2,6})\s+(?P<suite>[A-Za-z0-9\-]{1,8})\s+Vacant\s+(?P<sqft>\d[\d,]*)\s*$', re.I)
+    _RR_VACANT = re.compile(r'^(?P<bldg>\d{2,6})\s+' + _RR_SUITE + r'\s+Vacant\s+(?P<sqft>\d[\d,]*)\s*$', re.I)
+    # a second suite under the tenant above it: "Additional Space: 1010 -406 5/1/2022 4/30/2027 2,465 1,961.34 9.55"
+    _RR_ADDITIONAL = re.compile(
+        r'^Additional Space:\s*(?P<bldg>\d{2,6})\s+-?(?P<suite>[A-Za-z0-9][A-Za-z0-9.\-+]{0,11}?)\s*'
+        r'(?P<start>\d{1,2}/\d{1,2}/\d{4})\s+(?P<end>\d{1,2}/\d{1,2}/\d{4})\s+'
+        r'(?P<sqft>\d[\d,]*)(?P<rest>(?:\s+.*)?)$', re.I)
+    # the section totals end the data ("Totals: Occupied Sqft", "Total Elm Court:"); a multi-suite tenant's own
+    # "Totals: 15,115 12,028.63 ..." line (figures only) does not
+    _RR_SECTION_TOTAL = re.compile(r'^(?:totals?:\s*[a-z]|total\s+[a-z])', re.I)
     # scheduled changes, on the row's tail or on their own continuation lines:
     # "RNT 8/1/2026 3,783.75 9.00" (rent step), "PTX"/"N72"/"CON" = other charges
     _RR_STEP = re.compile(r'\b(?P<cat>[A-Z][A-Z0-9]{2})\s+(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+(?P<amt>-?[\d,]+\.\d{2})\s+(?P<psf>-?[\d,]+\.\d{2})')
@@ -1764,8 +1774,25 @@ class ExtractionEngine:
             if low in ('occupied suites', 'occupied'):
                 status = 'occupied'
                 continue
-            if low.startswith('total'):
+            if self._RR_SECTION_TOTAL.match(line.strip()):
                 break
+            if low.startswith('total'):
+                continue                      # one tenant's own totals over its suites
+            am = self._RR_ADDITIONAL.match(line.strip())
+            if am and rows and rows[-1].get('tenant_name'):
+                rest = am.group('rest') or ''
+                first_step = self._RR_STEP.search(rest)
+                money = self._RR_MONEY.findall(rest[:first_step.start()] if first_step else rest)
+                monthly = float(money[0].replace(',', '')) if money else None
+                rows.append({'unit_number': am.group('suite'), 'tenant_name': rows[-1]['tenant_name'],
+                             'lease_start': am.group('start'), 'lease_end': am.group('end'),
+                             'square_footage': float(am.group('sqft').replace(',', '')), 'monthly_rent': monthly,
+                             'annual_rent': round(monthly * 12, 2) if monthly else None,
+                             'rent_psf': float(money[1].replace(',', '')) if len(money) > 1 else None,
+                             'status': rows[-1].get('status', status), 'page_number': page_numbers.get(i),
+                             'metadata': {'building_id': am.group('bldg'), 'format': 'one_line',
+                                          'additional_space': True}, '_steps': []})
+                continue
             vm = self._RR_VACANT.match(line)
             if vm:
                 rows.append({'unit_number': vm.group('suite'), 'tenant_name': None,
