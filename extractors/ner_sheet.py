@@ -171,7 +171,11 @@ def _figures(line: str) -> list:
         tail = line[m.end():m.end() + 8]
         rate = bool(_RATE_MARK.match(tail))
         fig = m.group(1) or m.group(2)
-        out.append((_num(fig) if fig else 0.0, rate))
+        v = _num(fig) if fig else 0.0
+        # a figure in parentheses is a credit: "($4.28) ($90,650.40)" takes the total down
+        if v and line[max(0, m.start() - 1):m.start()] == '(' and re.match(r'\s*\)', line[m.end():m.end() + 2]):
+            v = -v
+        out.append((v, rate))
     return out
 
 
@@ -299,8 +303,9 @@ def parse_ner(text: str) -> NerSheet | None:
         label = re.split(r'[:@$]', ln, 1)[0].strip(' .-')
         name, kind = canonical(label)
         figs = _figures(ln)
-        if name is None and (len(re.findall(r'[A-Za-z]', label)) < 3 or ('$' not in ln and not figs)):
-            continue                          # a ladder row or prose between the lines, not a cost line
+        if name is None and (len(re.findall(r'[A-Za-z]', label)) < 3 or '$' not in ln or label[:1].isdigit()
+                             or re.match(r'\s*term\b', label, re.I)):
+            continue                          # a ladder row, the term header or prose: not a cost line
         psf = next((v for v, rate in figs if rate), None)
         total = _last_amount(ln)
         cl = _cost_line(label, ln, total, psf, None, None, s.sqft.value)

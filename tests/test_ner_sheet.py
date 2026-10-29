@@ -141,6 +141,14 @@ test('OCR forms of the labels still map', [canonical(x)[0] for x in ('K1A LEASIN
          'Construction Management Fee', 'Construction Management Fee', 'Vanilla Shell Cost'])
 test('a label that is none of the fixed lines is kept as kind other',
      canonical('Signage reimbursement') == (None, 'other'))
+credit = parse_ner(COLUMNS.replace('MISC LANDLORD EXPENSES $0.00 $0.00 $0.00 $0.00',
+                                   'MISC LANDLORD EXPENSES ($2.00) ($2,400.00) $0.00 $0.00')
+                   .replace('TOTAL LANDLORD EXPENSES $13.00 $15,600.00', 'TOTAL LANDLORD EXPENSES $11.00 $13,200.00'))
+test('a figure in parentheses is a credit that takes the total down, and the sheet ties',
+     [x.amount for x in credit.cost_lines if x.cost_line == 'MISC LANDLORD EXPENSES'] == [-2400.0] and credit.tie == 'TIE')
+hdr = parse_ner(TYPED.replace('TOTAL CONTRACT RENT: $ 58,464.00', 'TOTAL CONTRACT RENT: $ 58,464.00\nTerm: 5.00 Years PERIOD\n2 N/A N/A $2,425.50 $2,425.50'))
+test('the term header and a ladder row between the lines are not cost lines',
+     hdr.tie == 'TIE' and all(x.cost_line for x in hdr.cost_lines))
 
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)
