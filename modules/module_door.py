@@ -50,7 +50,7 @@ from ..extractors.exhibits import find_exhibits
 from ..extractors.instrument_terms import instrument_term
 from ..extractors.instruments import recited_dates, split_instruments
 from ..extractors.labels import find_labels
-from ..extractors.ner_sheet import parse_ner
+from ..extractors.ner_sheet import parse_ner, retie
 from ..extractors.options import find_options
 from ..extractors.second_read import in_read, load_reads
 from ..lease_roster import _pages, build_roster
@@ -1009,13 +1009,30 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             # total it lost, is read again from the page's second OCR read and that
             # read stands when it ties (the consumer's escalation rule)
             s2 = second.get((d['id'], pno))
-            if ns.tie in ('BREAK', 'NO_PRINTED_TOTAL') and (s2 or '').strip():
-                ns2 = parse_ner(s2)
-                if ns2 and ns2.tie == 'TIE':
-                    ns = ns2
-                    ns.tie_note += '; read from the second OCR read of the page (the first read did not tie)'
-                    dpages = list(dpages)
-                    dpages[pno - 1] = s2
+            ns2 = parse_ner(s2) if (s2 or '').strip() else None
+            if ns2 and ns.tie in ('BREAK', 'NO_PRINTED_TOTAL') and ns2.tie == 'TIE':
+                ns = ns2
+                ns.tie_note += '; read from the second OCR read of the page (the first read did not tie)'
+                dpages = list(dpages)
+                dpages[pno - 1] = s2
+            elif ns2:
+                # a line the first read left without a figure takes the figure the
+                # second read prints for the same line (a "$ -" the first OCR dropped)
+                by2 = {cl.cost_line: cl for cl in ns2.cost_lines
+                       if cl.cost_line and cl.value_status != 'line_on_form_no_figure'}
+                filled = False
+                for cl in ns.cost_lines:
+                    o = by2.get(cl.cost_line) if cl.value_status == 'line_on_form_no_figure' else None
+                    if o is not None:
+                        cl.amount, cl.proposed_psf, cl.budgeted, cl.budgeted_psf = (o.amount, o.proposed_psf,
+                                                                                    o.budgeted, o.budgeted_psf)
+                        cl.value_status = f'from the second OCR read of the page ({o.value_status})'
+                        filled = True
+                if filled:
+                    before = ns.tie
+                    retie(ns)
+                    if ns.tie != 'TIE' and before == 'TIE':
+                        ns = parse_ner(page)              # the fill broke a tying sheet: keep the first read as it was
             ner_id += 1
             tot = ns.printed_total_landlord_expense
 

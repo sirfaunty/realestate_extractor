@@ -149,6 +149,19 @@ test('a figure in parentheses is a credit that takes the total down, and the she
 hdr = parse_ner(TYPED.replace('TOTAL CONTRACT RENT: $ 58,464.00', 'TOTAL CONTRACT RENT: $ 58,464.00\nTerm: 5.00 Years PERIOD\n2 N/A N/A $2,425.50 $2,425.50'))
 test('the term header and a ladder row between the lines are not cost lines',
      hdr.tie == 'TIE' and all(x.cost_line for x in hdr.cost_lines))
+ocr = parse_ner(TYPED.replace('SPACE PLANS $ -', 'SPACE PLANS $ ?')
+                .replace('RENT CONCESSION: - MONTHS $ -', 'RENT CONCESSION: - MONTHS Ss -')
+                .replace('MISCELLANEOUS LL COSTS: $ -', 'MISCELLANEOUS LL COSTS: #REF!')
+                .replace('LHI - AMORTIZED IN BASE RENT - ANNUAL PSF $ - psf. ann. $ - TERM',
+                         'LHI - AMORTIZED IN BASE RENT - ANNUAL PSF - psf. ann. $ : TERM'))
+test('the OCR forms of a dash cell ("$ ?", "Ss -", "$ :", "- psf", a #REF! cell) read as the zero the form prints',
+     [x.amount for x in ocr.cost_lines if x.cost_line in ('Space Plans', 'RENT CONCESSION', 'MISC LANDLORD EXPENSES',
+                                                           'LHI Amortized in Base Rent')] == [0.0, 0.0, 0.0, 0.0]
+     and [x.proposed_psf for x in ocr.cost_lines if x.cost_line == 'LHI Amortized in Base Rent'] == [0.0] and ocr.tie == 'TIE')
+from realestate_extractor.extractors.ner_sheet import retie  # noqa: E402
+filled = parse_ner(TYPED.replace('SPACE PLANS $ -', 'SPACE PLANS'))
+filled.cost_lines[0].amount, filled.cost_lines[0].value_status = 0.0, 'from the second OCR read of the page (printed)'
+test('a line filled from another read re-sums and re-judges the tie', retie(filled).tie == 'TIE' and filled.cost_sum == 24000.0)
 
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

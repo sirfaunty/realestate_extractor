@@ -35,7 +35,9 @@ TIE_TOLERANCE = 1.0
 _MONEY = re.compile(r'(?:\$|(?<![A-Za-z])S(?=[0-9][0-9,]*\.\d{2}))\s*([0-9]{1,3}(?:\s?,\s?[0-9]{3})+(?:\s?\.\s?[0-9]{1,2})?'
                     r'|[0-9]+(?:\s?\.\s?[0-9]{1,2})?)'
                     r'|(?<![\w/$.,])([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})(?![\d/%])'   # a figure OCR left without its "$"
-                    r'|(?:\$|(?<![A-Za-z])S)\s*(?:-|—|–|_|\*|\.|·|�)(?=\s|$)')                  # "$ -" and its OCR forms
+                    r'|(?:\$s?|(?<![A-Za-z])Ss?|\bi?S\))\s*(?:-|—|–|_|\*|\.|·|�|\?|=|:|~|\+)(?=\s|$)'   # "$ -" and its OCR forms
+                    r'|#(?:REF|VALUE|DIV/0)!'                                                           # the form's own error cell
+                    r'|(?<![\w$])-(?=\s*(?:psf|ps[a-z]))')                                              # "- psf." = a zero rate
 _RATE_MARK = re.compile(r'\s*(?:psf|ps[a-z]|p\.s\.f|\$s\b|/\s*sf|%|\|\s*psf)', re.I)   # a figure followed by "psf" (or its OCR) is a rate
 _DATE = re.compile(r'\b(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{2,4})\b')
 _COST_START = re.compile(r'TOTAL\s+CONTRACT\s+RENT', re.I)
@@ -326,6 +328,15 @@ def parse_ner(text: str) -> NerSheet | None:
         if ln:
             setattr(s, attr, Field(_last_amount(ln), ln.strip()))
     _tie(s, end is not None)
+    return s
+
+
+def retie(s: NerSheet) -> NerSheet:
+    """Re-sum the lines and re-judge the tie after a line was filled from
+    another read of the page (the caller sets the line's value_status)."""
+    s.cost_sum = round(sum(c.amount or 0.0 for c in s.cost_lines if not c.memo), 2)
+    s.tie_note = ''
+    _tie(s, s.tie != 'NO_TOTAL')
     return s
 
 
