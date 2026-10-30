@@ -32,15 +32,17 @@ TIE_TOLERANCE = 1.0
 
 # a dollar figure; OCR reads '$' as 'S' before a cents figure ("S0.00") and
 # puts a space after a thousands comma ("$63, 102.00"); "$ -" is the form's zero
-_MONEY = re.compile(r'(?:\$|(?<![A-Za-z])S(?=[0-9][0-9,]*\.\d{2}))\s*([0-9]{1,3}(?:\s?,\s?[0-9]{3})+(?:\s?\.\s?[0-9]{1,2})?'
+_MONEY = re.compile(r'(?:\$|(?<![A-Za-z])S(?=[0-9O][0-9,.]*[.,]\d{2}))\s*([0-9]{1,3}(?:\.[0-9]{3})+\.[0-9]{2}'    # "$14.140.00": OCR dots for commas
+                    r'|[0-9]{1,3}(?:\s?,\s?[0-9]{3})+(?:\s?[.,]\s?[0-9]{1,2})?'
                     r'|[0-9]+(?:\s?\.\s?[0-9]{1,2})?)'
+                    r'|(?<![A-Za-z0-9])[S$]?[O0]\.[O0D][O0D](?![\w.])'                                   # "SO.DO", "$0.oo": an OCR zero
                     r'|(?<![\w/$.,])([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})(?![\d/%])'   # a figure OCR left without its "$"
                     r'|(?:\$s?|(?<![A-Za-z])Ss?|\bi?S\))\s*(?:-|—|–|_|\*|\.|·|�|\?|=|:|~|\+)(?=\s|$)'   # "$ -" and its OCR forms
                     r'|#(?:REF|VALUE|DIV/0)!'                                                           # the form's own error cell
                     r'|(?<![\w$])-(?=\s*(?:psf|ps[a-z]))')                                              # "- psf." = a zero rate
 _RATE_MARK = re.compile(r'\s*(?:psf|ps[a-z]|p\.s\.f|\$s\b|/\s*sf|%|\|\s*psf)', re.I)   # a figure followed by "psf" (or its OCR) is a rate
 _DATE = re.compile(r'\b(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{2,4})\b')
-_COST_START = re.compile(r'TOTAL\s+CONTRACT\s+RENT', re.I)
+_COST_START = re.compile(r'TOTAL\s+CONTRA\w*\s+REN\w*', re.I)      # and its OCR forms ("CONTRAGT REN *")
 _COST_END = re.compile(r'TOTAL\s+LANDLORD\s+EXPENSE', re.I)
 # the spreadsheet (modern) form, known by its header or by row names the typed form never prints
 _COLUMN_FORM = re.compile(r'EXPENSES\s*:?\s*PROPOSED|LANDLORD\s+WORK|LEASING\s+FEES|MISC\s+LANDLORD\s+EXPENSES',
@@ -65,7 +67,7 @@ LINES = [
     ('LEASING FEES', 'leasing_fee', r'^\W*leasing fees\b'),
     ('Co-Broker', 'leasing_fee', r'co-?\s*broker( fee)?\b(?!\s*name)'),   # before the landlord's own fee: "Co-Broker Pine Realty"
     ('LL Rep', 'leasing_fee', r'\bll rep\b'),
-    ('License %', 'leasing_fee', r'license fee\s*%|\blicense\b.*%'),
+    ('License %', 'leasing_fee', r'\blicense fee\b|\blicense\b.*%'),
     ('Landlord Leasing Fee', 'leasing_fee', r'\brealty\b|\bleasing fee\b|\bagency\b'),
     ('CAM & CAP EXCLUSIONS', 'exclusion', r'cap(s)? & exclusions|cam & cap'),
     ('RENT CONCESSION', 'concession', r'rent concession'),
@@ -159,6 +161,10 @@ def _num(s: str) -> float | None:
     s = re.sub(r'\s', '', s or '')
     if not s or not re.search(r'\d', s):
         return None
+    if re.fullmatch(r'\d{1,3}(?:\.\d{3})+\.\d{2}', s):
+        s = s.replace('.', '', s.count('.') - 1)        # OCR reads a thousands comma as a dot: "14.140.00"
+    if re.fullmatch(r'\d{1,3}(?:,\d{3})*,\d{2}', s):
+        s = s[:-3] + '.' + s[-2:]                       # ... or the decimal point as a comma: "2,110,50"
     try:
         return float(s.replace(',', ''))
     except ValueError:
@@ -218,6 +224,13 @@ def _cost_line(label: str, line: str, proposed: float | None, proposed_psf: floa
     name, kind = canonical(label)
     memo = _memo(line) or ('amortized in base rent: restates the improvement cost as rent' if kind == 'memo' else '')
     status = 'printed'
+    # the rate column proves the total: a printed total a hundred times off rate x SF
+    # is an OCR figure with its decimal lost ("$17,657,860" for $17,657.86)
+    if proposed and proposed_psf and sqft and proposed_psf * sqft > 0:
+        ratio = proposed / (proposed_psf * sqft)
+        if ratio > 50 or ratio < 0.02:
+            proposed = round(proposed_psf * sqft, 2)
+            status = 'total derived = psf x SF (the printed total fails the rate check)'
     if proposed is None and proposed_psf is not None and sqft:
         proposed = round(proposed_psf * sqft, 2)          # a "$ -" rate derives a 0 total
         status = 'total derived = psf x SF (not printed)'
@@ -306,8 +319,9 @@ def parse_ner(text: str) -> NerSheet | None:
         name, kind = canonical(label)
         figs = _figures(ln)
         if name is None and (len(re.findall(r'[A-Za-z]', label)) < 3 or '$' not in ln or label[:1].isdigit()
-                             or re.match(r'\s*term\b', label, re.I)):
-            continue                          # a ladder row, the term header or prose: not a cost line
+                             or re.match(r'\s*term\b', label, re.I) or len(figs) >= 3
+                             or re.search(r'\btotal\b|contra\w*\s+ren', label, re.I)):
+            continue                          # a ladder row, the term header, a total or prose: not a cost line
         psf = next((v for v, rate in figs if rate), None)
         total = _last_amount(ln)
         cl = _cost_line(label, ln, total, psf, None, None, s.sqft.value)
@@ -447,11 +461,21 @@ def _parse_columns(lines: list) -> NerSheet:
         name, _kind = canonical(label)
         if not am and name is None:
             continue                              # prose between the rows
+        if name is None and (re.search(r'\btotal\b|contra\w*\s+ren', label, re.I) or label[:1].isdigit()):
+            continue                              # a ladder row or a total that is not a cost line
+        # a percent in the rate column ("License % 10% $120.00 $0.00 $0.00"): the rate, then the totals
+        pct = re.search(r'(\d+(?:\.\d+)?)\s*%', txt[len(label):] if txt.startswith(label) else '')
+        pct = pct or re.search(r'(\d+(?:\.\d+)?)\s*%(?=[^$]*\$)', ln)
+        ppsf = bpsf = proposed = budgeted = None
+        if pct and len(am) == 3:
+            ppsf, proposed, bpsf, budgeted = float(pct.group(1)), am[0], am[1], am[2]
+            am = []
         # four figures: proposed PSF, TOTAL, budgeted PSF, TOTAL; two: either a
         # PSF and its total (a rate is small beside its total) or proposed and
         # budgeted totals; one: the proposed total alone (a scanned sheet)
-        ppsf = bpsf = proposed = budgeted = None
-        if len(am) == 1:
+        if pct and not am:
+            pass
+        elif len(am) == 1:
             proposed = am[0]
         elif len(am) >= 4:
             ppsf, proposed, bpsf, budgeted = am[0], am[1], am[2], am[3]
