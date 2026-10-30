@@ -34,7 +34,7 @@ TIE_TOLERANCE = 1.0
 # puts a space after a thousands comma ("$63, 102.00"); "$ -" is the form's zero
 _MONEY = re.compile(r'(?:\$|(?<![A-Za-z])S(?=[0-9O][0-9,.]*[.,]\d{2}))\s*([0-9]{1,3}(?:\.[0-9]{3})+\.[0-9]{2}'    # "$14.140.00": OCR dots for commas
                     r'|[0-9]{1,3}(?:\s?,\s?[0-9]{3})+(?:\s?[.,]\s?[0-9]{1,2})?'
-                    r'|[0-9]+(?:\s?\.\s?[0-9]{1,2})?)'
+                    r'|[0-9]+(?:\s?\.\s?[0-9]{1,2})?)(?![\d(]|[,.]\d)'                                  # not a garbled figure ("$7,7(n.(n")
                     r'|(?<![A-Za-z0-9])[S$]?[O0]\.[O0D][O0D](?![\w.])'                                   # "SO.DO", "$0.oo": an OCR zero
                     r'|(?<![\w/$.,])([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})(?![\d/%])'   # a figure OCR left without its "$"
                     r'|(?:\$s?|(?<![A-Za-z])Ss?|\bi?S\))\s*(?:-|—|–|_|\*|\.|·|�|\?|=|:|~|\+)(?=\s|$)'   # "$ -" and its OCR forms
@@ -183,20 +183,25 @@ def _figures(line: str) -> list:
         # a figure in parentheses is a credit: "($4.28) ($90,650.40)" takes the total down
         if v and line[max(0, m.start() - 1):m.start()] == '(' and re.match(r'\s*\)', line[m.end():m.end() + 2]):
             v = -v
-        out.append((v, rate))
+        out.append((v, rate, fig is None))           # (value, is a rate, is a dash / zero form)
     return out
 
 
 def _amounts(line: str) -> list:
     """Dollar figures on a line in order ("$ -" is 0.0)."""
-    return [v for v, _ in _figures(line)]
+    return [f[0] for f in _figures(line)]
 
 
 def _last_amount(line: str) -> float | None:
     """The line's dollar total: its last figure that is not a per-square-
-    foot rate ("@ $ 1.50 psf." is a rate, never the line's total)."""
-    out = [v for v, rate in _figures(line) if not rate]
-    return out[-1] if out else None
+    foot rate ("@ $ 1.50 psf." is a rate, never the line's total). A dash
+    after a real figure is a note's noise ("$25,214.88 Note: ... ($?"), not
+    the total."""
+    out = [(v, dash) for v, rate, dash in _figures(line) if not rate]
+    if not out:
+        return None
+    real = [v for v, dash in out if not dash]
+    return real[-1] if real and out[-1][1] else out[-1][0]
 
 
 def _bare_amount(line: str) -> bool:
@@ -322,7 +327,7 @@ def parse_ner(text: str) -> NerSheet | None:
                              or re.match(r'\s*term\b', label, re.I) or len(figs) >= 3
                              or re.search(r'\btotal\b|contra\w*\s+ren', label, re.I)):
             continue                          # a ladder row, the term header, a total or prose: not a cost line
-        psf = next((v for v, rate in figs if rate), None)
+        psf = next((v for v, rate, _ in figs if rate), None)
         total = _last_amount(ln)
         cl = _cost_line(label, ln, total, psf, None, None, s.sqft.value)
         s.cost_lines.append(cl)
@@ -446,13 +451,16 @@ def _parse_columns(lines: list) -> NerSheet:
         s.printed_total_budgeted = Field(btot, lines[end].strip() if btot is not None else '')
     group = ''
     for ln in lines[start + 1:end if end is not None else start + 1]:
-        if not re.search(r'[A-Za-z]{3}', ln):
+        lettered = bool(re.search(r'[A-Za-z]{3}', ln))
+        am = _amounts(ln)
+        if not lettered and len(am) < 2:
             continue
         if re.match(r'\s*PSF\s+TOTAL', ln, re.I):
             continue                              # the column header under EXPENSES
-        am = _amounts(ln)
         txt = re.split(r'\$', ln, 1)[0].strip()
-        if not txt.startswith(('●', '•', '*')):
+        if not lettered:
+            label = '(label not printed)'         # a cost row whose label the read lost: its figures still count
+        elif not txt.startswith(('●', '•', '*')):
             parts = re.split(r'\s*[●•]\s*', txt, 1)
             group = parts[0].strip()
             label = txt if len(parts) == 1 else f'{group}: {parts[1].strip()}'
