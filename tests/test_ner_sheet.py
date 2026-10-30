@@ -7,6 +7,7 @@ Fictional sheets in the real layouts.
     venv/Scripts/python tests/test_ner_sheet.py
 """
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -162,6 +163,24 @@ from realestate_extractor.extractors.ner_sheet import retie  # noqa: E402
 filled = parse_ner(TYPED.replace('SPACE PLANS $ -', 'SPACE PLANS'))
 filled.cost_lines[0].amount, filled.cost_lines[0].value_status = 0.0, 'from the second OCR read of the page (printed)'
 test('a line filled from another read re-sums and re-judges the tie', retie(filled).tie == 'TIE' and filled.cost_sum == 24000.0)
+
+print('\nThe label as OCR prints it, and a read that lost every figure')
+lost = parse_ner('\n'.join(re.sub(r'\$.*$', '', ln) if 'RENT SHEET' not in ln else ln for ln in TYPED.splitlines()))
+test('a read with no cost figure and no total is NO_PRINTED_TOTAL, never a zero-for-zero TIE',
+     lost.tie == 'NO_PRINTED_TOTAL' and 'no cost figure' in lost.tie_note)
+HDR = 'TENANT ENTITY: Juniper Tea House LLC EXPANSION'
+test('the entity label as OCR prints it', parse_ner(TYPED.replace('TENANT ENTITY:', 'TENANTY ENTITY:')).tenant.value == 'Juniper Tea House LLC'
+     and parse_ner(TYPED.replace('TENANT ENTITY:', 'TENANTENTITY:')).tenant.value == 'Juniper Tea House LLC')
+test('an entity line printed bare leaves the tenant to the name / dba line',
+     parse_ner(TYPED.replace(HDR, 'TENANT ENTITY:\nTENANT NAMErdba: Juniper Tea Room EXPANSION')).tenant.value == 'Juniper Tea Room')
+test('the older form prints TENANT: alone; a bare label names nobody',
+     parse_ner(TYPED.replace(HDR, 'TENANT: Juniper Tea House LLC EXPANSION')).tenant.value == 'Juniper Tea House LLC'
+     and parse_ner(TYPED.replace(HDR, 'TENANT ENTITY:')).tenant.value is None)
+test('the spreadsheet form: NAME/DBA as OCR prints it, else the legal entity',
+     parse_ner(COLUMNS.replace('NAME/DBA:', 'NAMEIDBA:')).tenant.value == 'Lark Florist'
+     and parse_ner(COLUMNS.replace('NAME/DBA:', 'NAME/OBA:')).tenant.value == 'Lark Florist'
+     and parse_ner(COLUMNS.replace('NAME/DBA: Lark Florist TENANT LEGAL ENTITY: Lark Florist Inc',
+                                   'NAME/DBA:\nTENANT LEGAL ENTITY: Lark Florist Inc')).tenant.value == 'Lark Florist Inc')
 
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

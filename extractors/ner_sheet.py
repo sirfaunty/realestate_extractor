@@ -282,7 +282,13 @@ def parse_ner(text: str) -> NerSheet | None:
             if m and m.group(1).strip(' :~-'):
                 return Field(m.group(1).strip(' :~-'), ln.strip())
         return Field()
-    s.tenant = labelled(r'TENANT\s+ENTITY', r'\s+(?:EXPANSION|RENEWAL|NEW LEASE)\s*$|$')
+    # the label as OCR prints it ("TENANTY ENTITY"); an entity line printed bare or lost
+    # leaves the tenant to the name / dba line
+    s.tenant = labelled(r'TENANT\w*\s*ENTITY', r'\s+(?:EXPANSION|RENEWAL|NEW LEASE)\s*$|$')
+    if s.tenant.value is None:
+        s.tenant = labelled(r'TENANT\s*NAME\w*\s*[/I|l1r]\s*[DO0]BA', r'\s+(?:EXPANSION|RENEWAL|NEW LEASE|REVISION)\b.*$|$')
+    if s.tenant.value is None:          # the older form prints "TENANT:" alone
+        s.tenant = labelled(r'^\W*TENANT\s*:', r'\s+(?:EXPANSION|RENEWAL|NEW LEASE|REVISION)\b.*$|$')
     s.use = labelled(r'^\s*USE')
     s.property = labelled(r'PROPERTY')
     s.space = labelled(r'^\s*(?:BAY|SPACE|SUITE)')
@@ -367,8 +373,10 @@ def _tie(s: NerSheet, has_total: bool):
     total = s.printed_total_landlord_expense.value
     if not has_total:
         s.tie, s.tie_note = 'NO_TOTAL', 'the sheet prints no total landlord expense'
-    elif total is None and s.cost_sum == 0:
-        s.tie, s.tie_note = 'TIE', 'no costs printed and the total is printed blank'
+    elif total is None and not any(c.value_status != 'line_on_form_no_figure' for c in s.cost_lines):
+        # nothing read on either side: a zero sum against a blank total is no tie (the
+        # read lost the figures, as when OCR splits a form into its labels and its values)
+        s.tie, s.tie_note = 'NO_PRINTED_TOTAL', 'no cost figure and no total read on this read of the page'
     elif total is None:
         s.tie, s.tie_note = 'NO_PRINTED_TOTAL', f'cost lines sum {s.cost_sum:,.2f}; the total is printed blank or unreadable'
     elif abs(total - s.cost_sum) <= TIE_TOLERANCE:
@@ -397,8 +405,9 @@ def _parse_columns(lines: list) -> NerSheet:
     def after(rx, stop=r'\s+[A-Z][A-Z &/.]{2,}:|$'):
         for ln in lines[:30]:
             m = re.search(rx + r'\s*:?\s*(.+?)(?:' + stop + ')', ln)
-            if m and m.group(1).strip():
-                return Field(m.group(1).strip(), ln.strip())
+            v = m.group(1).strip(' :~-') if m else ''     # a label printed bare names nobody
+            if v:
+                return Field(v, ln.strip())
         return Field()
     d = after(r'VERSION\s*&\s*DATE')
     m = _DATE.search(d.value or '')
@@ -408,7 +417,9 @@ def _parse_columns(lines: list) -> NerSheet:
         iso = _valid(y, mo, dd)
         if iso:
             s.version_date = Field(iso, d.line)
-    s.tenant = after(r'NAME\s*/\s*DBA')
+    s.tenant = after(r'[NMW]AME\s*[/I|l1]\s*[DO0]BA')    # the N, the slash and the D as OCR prints them
+    if s.tenant.value is None:
+        s.tenant = after(r'TENANT\s+LEGAL\s+ENTITY')
     s.use = after(r'DESCRIPTION')
     s.property = after(r'^\s*NAME')
     s.space = after(r'SPACE', r'\s+SF\s*:|$')

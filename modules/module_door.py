@@ -1062,14 +1062,23 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                         ns = parse_ner(page)              # the fill broke a tying sheet: keep the first read as it was
             # neither read ties: a third read of the page at higher resolution stands when
             # its lines tie to a printed total (a tie with no total printed is no tie)
-            s3 = third.get((d['id'], pno)) if ns.tie in ('BREAK', 'NO_PRINTED_TOTAL') else None
+            s3 = third.get((d['id'], pno))
             ns3 = parse_ner(s3) if (s3 or '').strip() else None
-            if ns3 and ns3.tie == 'TIE' and ns3.printed_total_landlord_expense.value is not None:
+            if ns.tie in ('BREAK', 'NO_PRINTED_TOTAL') and ns3 and ns3.tie == 'TIE' \
+                    and ns3.printed_total_landlord_expense.value is not None:
                 ns = ns3
                 ns.tie_note += '; read from a third OCR read of the page at higher resolution (neither the first ' \
                                'nor the second read tied)'
                 dpages = list(dpages)
                 dpages[pno - 1] = s3
+            # a header field the read in hand printed bare (OCR that split the form's labels
+            # from its values) takes the other read's value; these fields are not cited
+            for other in (ns2, ns3):
+                if other is None or other is ns:
+                    continue
+                for name in ('tenant', 'use', 'property', 'space', 'sqft', 'term_years', 'version_date'):
+                    if getattr(ns, name).value is None and getattr(other, name).value is not None:
+                        setattr(ns, name, getattr(other, name))
             ner_id += 1
             tot = ns.printed_total_landlord_expense
 

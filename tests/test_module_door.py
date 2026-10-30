@@ -384,7 +384,11 @@ TOTAL EFFECTIVE CONTRACT RENT: $ 34,464.00
     # read (higher resolution) prints the sheet as it is; a second sheet breaks on all three reads
     reads = {'CR-HazelYarn-NERS.pdf': (SHEET.replace('$ 4,800.00', '$ 4,300.00'), SHEET.replace('$ 4,800.00', '$ 4,900.00'), SHEET),
              'CR-Quill-NERS.pdf': (SHEET.replace('$ 4,800.00', '$ 4,300.00'), SHEET.replace('$ 4,800.00', '$ 4,900.00'),
-                                   SHEET.replace('$ 4,800.00', '$ 4,100.00'))}
+                                   SHEET.replace('$ 4,800.00', '$ 4,100.00')),
+             # a first read that ties but printed the tenant label bare (OCR split the labels from
+             # the values); the second read names the tenant
+             'CR-Moss-NERS.pdf': (SHEET.replace('TENANT ENTITY: Hazel Yarn Co LLC', 'TENANT ENTITY:'),
+                                  SHEET.replace('Hazel Yarn Co LLC', 'Moss Pottery LLC'), None)}
     ldid = {}
     for name, (first, second_, third_) in reads.items():
         did = ld.insert_document(name, os.path.join(tmp, name), 'lease', auto_create_property=False)
@@ -392,7 +396,8 @@ TOTAL EFFECTIVE CONTRACT RENT: $ 34,464.00
                         "analysis_status='analyzed' WHERE id=?", (lpid, 'd' * 64, did))
         ld.conn.execute("INSERT INTO document_fulltext(document_id, page_number, content) VALUES (?,?,?)", (did, 1, first))
         store_read(ld.conn, did, 1, second_, 0.8, 0.95, METHOD)
-        store_read(ld.conn, did, 1, third_, 0.9, 0.95, LADDER)
+        if third_:
+            store_read(ld.conn, did, 1, third_, 0.9, 0.95, LADDER)
         ldid[name] = did
     ld.conn.commit()
     ld.close()
@@ -405,6 +410,10 @@ TOTAL EFFECTIVE CONTRACT RENT: $ 34,464.00
          and hazel['leasing_fee'] == 4800.0 and 'third OCR read' in hazel['tie_note'])
     test('a sheet that breaks on all three reads stays a BREAK and says nothing of a third read',
          quill and quill['tie_status'] == 'BREAK' and 'third' not in quill['tie_note'])
+    moss = deal.get(ldid['CR-Moss-NERS.pdf'])
+    test('a header the read in hand printed bare takes the other read\'s value; the tying read still stands',
+         moss and moss['tenant'] == 'Moss Pottery LLC' and moss['tie_status'] == 'TIE'
+         and 'second OCR read' not in moss['tie_note'])
     ccols, crows = lt['cap_ner_cost_line']
     lines = [dict(zip(ccols, r)) for r in crows if r[ccols.index('ner_id')] == hazel['ner_id']]
     fee = next(l_ for l_ in lines if l_['cost_line'] and 'Leasing Fee' in l_['cost_line'])
