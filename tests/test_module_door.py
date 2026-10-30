@@ -353,6 +353,66 @@ def main():
                         'cap_x': (cols, [(1, 1, 1, 'a' * 64, 'Base Rent', 'text', 'printed', None, None)])},
                        consumer_text=lambda sha, page: None)['cap_x'][1][0][4] == 'Base Rent')
 
+    print('\nA deal sheet read a third time')
+    from realestate_extractor.extractors.second_read import LADDER, METHOD, store_read  # noqa: E402
+    SHEET = """3/14/2012
+NET EFFECTIVE RENT SHEET- 5 YEAR
+XXX NEW LEASE
+TENANT ENTITY: Hazel Yarn Co LLC
+USE: Yarn shop
+PROPERTY: Cedar Row
+BAY: 4
+SQ. FT.: 1,600
+YEAR P.S.F. MONTHLY ANNUALLY
+1 $ 18.00 $ 2,400.00 $ 28,800.00
+2 $ 18.54 $ 2,472.00 $ 29,664.00
+TOTAL CONTRACT RENT: $ 58,464.00
+SPACE PLANS $ -
+LEASEHOLD IMPROVEMENT - ALLOWANCE $ 10.00 psf. $ 16,000.00
+LEASING FEE @ $ 3.00 psf. $ 4,800.00
+CO-BROKER FEE @ $ 2.00 psf. $ 3,200.00
+RENT CONCESSION: - MONTHS $ -
+MISCELLANEOUS LL COSTS: $ -
+TOTAL LANDLORD EXPENSES: $ 24,000.00
+TOTAL EFFECTIVE CONTRACT RENT: $ 34,464.00
+"""
+    ladder_db = os.path.join(tmp, 'ladder.db')
+    ld = Database(ladder_db)
+    ld.connect()
+    lpid = ld.create_property('Cedar Row', property_type='retail')
+    # the first OCR read misreads the leasing fee, the second misreads it differently, the third
+    # read (higher resolution) prints the sheet as it is; a second sheet breaks on all three reads
+    reads = {'CR-HazelYarn-NERS.pdf': (SHEET.replace('$ 4,800.00', '$ 4,300.00'), SHEET.replace('$ 4,800.00', '$ 4,900.00'), SHEET),
+             'CR-Quill-NERS.pdf': (SHEET.replace('$ 4,800.00', '$ 4,300.00'), SHEET.replace('$ 4,800.00', '$ 4,900.00'),
+                                   SHEET.replace('$ 4,800.00', '$ 4,100.00'))}
+    ldid = {}
+    for name, (first, second_, third_) in reads.items():
+        did = ld.insert_document(name, os.path.join(tmp, name), 'lease', auto_create_property=False)
+        ld.conn.execute("UPDATE documents SET property_id=?, file_hash=?, page_count=1, is_scanned=1, "
+                        "analysis_status='analyzed' WHERE id=?", (lpid, 'd' * 64, did))
+        ld.conn.execute("INSERT INTO document_fulltext(document_id, page_number, content) VALUES (?,?,?)", (did, 1, first))
+        store_read(ld.conn, did, 1, second_, 0.8, 0.95, METHOD)
+        store_read(ld.conn, did, 1, third_, 0.9, 0.95, LADDER)
+        ldid[name] = did
+    ld.conn.commit()
+    ld.close()
+    lt = build_door_tables(ladder_db, lpid, date(2026, 9, 1))
+    dcols, drows = lt['cap_ner_deal']
+    deal = {r[dcols.index('source_doc_id')]: dict(zip(dcols, r)) for r in drows}
+    hazel, quill = deal.get(ldid['CR-HazelYarn-NERS.pdf']), deal.get(ldid['CR-Quill-NERS.pdf'])
+    test('a sheet neither read ties is read a third time, and that read stands when it ties',
+         hazel and hazel['tie_status'] == 'TIE' and hazel['printed_total_landlord_expense'] == 24000.0
+         and hazel['leasing_fee'] == 4800.0 and 'third OCR read' in hazel['tie_note'])
+    test('a sheet that breaks on all three reads stays a BREAK and says nothing of a third read',
+         quill and quill['tie_status'] == 'BREAK' and 'third' not in quill['tie_note'])
+    ccols, crows = lt['cap_ner_cost_line']
+    lines = [dict(zip(ccols, r)) for r in crows if r[ccols.index('ner_id')] == hazel['ner_id']]
+    fee = next(l_ for l_ in lines if l_['cost_line'] and 'Leasing Fee' in l_['cost_line'])
+    tot_method = hazel['quote_page_method']
+    test('a figure only the third read prints says so; the total every read prints is corroborated',
+         fee['quote_page_method'] == 'ocr_third_read_only' and '4,800.00' in fee['quote']
+         and tot_method == 'ocr_corroborated')
+
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{passed} passed, {failed} failed')
     sys.exit(1 if failed else 0)

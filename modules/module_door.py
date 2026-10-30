@@ -52,7 +52,7 @@ from ..extractors.instruments import recited_dates, split_instruments
 from ..extractors.labels import find_labels
 from ..extractors.ner_sheet import parse_ner, retie
 from ..extractors.options import find_options
-from ..extractors.second_read import in_read, load_reads
+from ..extractors.second_read import LADDER, in_read, load_reads
 from ..lease_roster import _pages, build_roster
 from .tenant_keys import match_tenant_keys
 
@@ -64,7 +64,9 @@ GENERIC = {'the', 'and', 'inc', 'llc', 'corp', 'company', 'store', 'stores', 'sh
 TABLES = {
     # table: (key columns, what it holds)
     'cap_document': ('doc_id', 'one row per document: sha256, pages, how it was read, its family and folder hints'),
-    'cap_page_text': ('doc_id, page_no', 'every page of every document verbatim, with the method that read it'),
+    'cap_page_text': ('doc_id, page_no', 'every page of every document verbatim, with the method that read it; an OCR '
+                                         'page carries its second read, and a deal sheet whose first two reads did not '
+                                         'tie a third read at higher resolution (third_read)'),
     'cap_lease_lease': ('lease_id', 'one row per tenancy: SF, commencement, expiration, current base rent with method, confidence and flags, the action it needs'),
     'cap_lease_chain': ('lease_id, seq', "the tenancy's documents in chain order with their role (instrument, worksheet, summary, archived)"),
     'cap_lease_rent_step': ('step_id', 'every rent row placed in time from the instruments: period, monthly, annual, basis, option flag; cited'),
@@ -179,7 +181,8 @@ def verify_quotes(tables: dict, consumer_text=None) -> dict:
     is held to the same rule on its own."""
     pages = {}
     for r in tables['cap_page_text'][1]:
-        pages[(r[0], r[1])] = (r[4] or '') + ' ' + (r[5] or '')
+        # our reads of the page: the first, the second, and the third where one was made
+        pages[(r[0], r[1])] = ' '.join(x or '' for x in (r[4], r[5], r[7] if len(r) > 7 else ''))
     sha_docs = {}
     for r in tables['cap_document'][1]:
         sha_docs.setdefault(r[2], set()).add(r[0])
@@ -665,6 +668,10 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
     if reads_db:
         second.update(load_reads(reads_db))
     second_agree = _read_agreement(conn, reads_db)
+    # a third read (higher resolution) exists only for a deal sheet whose first two reads did not tie
+    third = load_reads(conn, methods=(LADDER,))
+    if reads_db:
+        third.update(load_reads(reads_db, methods=(LADDER,)))
 
     # registry + page text
     t_doc, t_page = [], []
@@ -683,7 +690,8 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
             # An OCR page carries its second read and how far the two agree.
             s2 = second.get((d['id'], n))
             m = method if (p or '').strip() else ('ocr_second_read' if (s2 or '').strip() else 'none')
-            t_page.append((d['id'], n, m, len(p or ''), p or '', s2, second_agree.get((d['id'], n))))
+            t_page.append((d['id'], n, m, len(p or ''), p or '', s2, second_agree.get((d['id'], n)),
+                           third.get((d['id'], n))))
 
     # the roster = the lease rows
     rows = build_roster(conn, property_id, as_of=as_of,
@@ -696,14 +704,16 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
     def doc_method(doc_id, page, quote):
         """How the quoted page was read: its text layer, one OCR read, or two
         OCR reads that both print the quote (corroborated) or do not."""
-        s2 = second.get((doc_id, page))
-        if s2 is not None:
+        s2, s3 = second.get((doc_id, page)), third.get((doc_id, page))
+        if s2 is not None or s3 is not None:
             first = pages_by_doc.get(doc_id, [])
             p1 = first[page - 1] if page and page <= len(first) else ''
-            in1, in2 = in_read(quote, p1), in_read(quote, s2)
-            if in1 and in2:
+            in1 = in_read(quote, p1)
+            in2 = s2 is not None and in_read(quote, s2)
+            in3 = s3 is not None and in_read(quote, s3)
+            if in1 + in2 + in3 >= 2:
                 return 'ocr_corroborated'
-            return 'ocr_second_read_only' if in2 else 'ocr_uncorroborated'
+            return 'ocr_second_read_only' if in2 else 'ocr_third_read_only' if in3 else 'ocr_uncorroborated'
         return 'ocr' if scanned.get(doc_id) else 'text'
 
     second_pages = {}
@@ -1050,6 +1060,16 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                     retie(ns)
                     if ns.tie != 'TIE' and before == 'TIE':
                         ns = parse_ner(page)              # the fill broke a tying sheet: keep the first read as it was
+            # neither read ties: a third read of the page at higher resolution stands when
+            # its lines tie to a printed total (a tie with no total printed is no tie)
+            s3 = third.get((d['id'], pno)) if ns.tie in ('BREAK', 'NO_PRINTED_TOTAL') else None
+            ns3 = parse_ner(s3) if (s3 or '').strip() else None
+            if ns3 and ns3.tie == 'TIE' and ns3.printed_total_landlord_expense.value is not None:
+                ns = ns3
+                ns.tie_note += '; read from a third OCR read of the page at higher resolution (neither the first ' \
+                               'nor the second read tied)'
+                dpages = list(dpages)
+                dpages[pno - 1] = s3
             ner_id += 1
             tot = ns.printed_total_landlord_expense
 
@@ -1203,7 +1223,7 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
         'cap_document': (['doc_id', 'filename', 'sha256', 'pages', 'document_type', 'method', 'ocr_confidence',
                           'family', 'archived_hint', 'review_status', 'processed_at'], t_doc),
         'cap_page_text': (['doc_id', 'page_no', 'method', 'chars', 'text', 'second_read',
-                           'read_agreement'], t_page),
+                           'read_agreement', 'third_read'], t_page),
         'cap_lease_lease': (['lease_id', 'tenant_key', 'trade_name', 'legal_names', 'status', 'sf',
                              'commencement', 'commencement_source', 'expiration', 'expiration_source',
                              'expiration_paper', 'base_rent_monthly', 'rent_method', 'rent_confidence',

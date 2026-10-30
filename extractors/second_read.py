@@ -31,6 +31,7 @@ SECOND_DPI = 300
 SECOND_PSM = int(__import__('os').environ.get('CAPACTIVE_SECOND_PSM', 4))   # 4 = one column of varying lines (measured best of 4 / 6)
 METHOD = 'ocr_second_read'
 LAYER = 'text_layer_read'   # a scanned PDF's own text layer (the scanner's OCR): an independent read too
+LADDER = 'ocr_ladder_read'  # a third read at higher resolution, made for a form whose first two reads do not tie
 CORROBORATED = 0.80         # page agreement at or above this = the two reads agree
 
 _Q = str.maketrans({'’': "'", '‘': "'", '“': '"', '”': '"', '–': '-',
