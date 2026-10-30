@@ -209,6 +209,14 @@ def verify_quotes(tables: dict, consumer_text=None) -> dict:
             if not q:
                 continue
             theirs = consumer_text((r[ix['source_sha256']] or '').lower(), page) if consumer_text else None
+            if theirs is None and consumer_text is not None and str(r[ix['quote_page_method']] or '').startswith('ocr'):
+                # a scanned page the consumer reads with its own OCR, which we do not hold:
+                # an OCR quote of ours cannot be verified on its side, so the value stands
+                # and the quote is withdrawn with our read as the reason (a NULL with its
+                # reason is accepted; a quote its read does not print is not)
+                withdraw(k, r, "the consumer's own read of this scanned page is not held here, so an OCR quote "
+                               f"cannot be verified on it; our read prints: '{q[:200]}'")
+                continue
             if theirs:
                 # the consumer's text decides: as printed, cut to what it prints, or withdrawn
                 if not _cprinted(q, theirs):
@@ -959,9 +967,12 @@ def build_door_tables(db_path: str, property_id=None, as_of: date | None = None,
                     if later[0]:
                         why += f'; a later instrument recites it as {later[0]}'
                     cols = cols[:5] + (why,)
+                # the recited dates are those of OTHER instruments: a recital of a document
+                # signed the same day as this one (the lease a same-day guaranty recites) is
+                # not evidence against the instrument's own date and is left out of the list
                 t_event.append((event_id, lid, seq, i, ins.event_type, ins.ordinal, ins.title or None,
                                 ins.page_from, ins.page_to, ev_date, ev_page,
-                                '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited) or None) + cols
+                                '; '.join(f'{d} ({q[:80]})' for d, q in ins.recited if d != ev_date) or None) + cols
                                + (later[0], later[3], later[2], later[1]))
 
     # possible duplicates: two tenancies whose documents name the same legal
