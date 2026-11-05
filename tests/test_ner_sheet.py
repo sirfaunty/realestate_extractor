@@ -182,5 +182,30 @@ test('the spreadsheet form: NAME/DBA as OCR prints it, else the legal entity',
      and parse_ner(COLUMNS.replace('NAME/DBA: Lark Florist TENANT LEGAL ENTITY: Lark Florist Inc',
                                    'NAME/DBA:\nTENANT LEGAL ENTITY: Lark Florist Inc')).tenant.value == 'Lark Florist Inc')
 
+print('\nWhat a 20-page sample of the sheets no OCR read ties taught (2026-11-05)')
+noted = parse_ner(TYPED.replace('LEASING FEE @ $ 3.00 psf. $ 4,800.00', 'LEASING FEE @ $ 3.00 psf. $ 4,800.00 Note: $2 x 1,200sf and $4 x 400')
+                  .replace('LEASEHOLD IMPROVEMENT - ALLOWANCE $ 10.00 psf. $ 16,000.00',
+                           'LEASEHOLD IMPROVEMENT - ALLOWANCE $ 10.00 psf. $ 16,000.00 See note: (additional $850 to remove tile)'))
+test('a note printed after the figure explains the line, it is not the line',
+     [x.amount for x in noted.cost_lines if x.cost_line in ('ALLOWANCE', 'Landlord Leasing Fee')] == [16000.0, 4800.0]
+     and noted.tie == 'TIE')
+credit = parse_ner(TYPED.replace('SPACE PLANS $ -', 'Full buildout $ 20.00 psf $ 32,000.00\nAmount included in the other deal $ -10.00 psf -$16,000.00')
+                   .replace('TOTAL LANDLORD EXPENSES: $ 24,000.00', 'TOTAL LANDLORD EXPENSES: $ 40,000.00'))
+test('a minus before the dollar sign is an offset that takes the total down',
+     [x.amount for x in credit.cost_lines if 'included' in x.line] == [-16000.0] and credit.tie == 'TIE')
+AMORT = 'LHI - AMORTIZED IN BASE RENT - ANNUAL PSF $ - psf. ann. $ - TERM'
+counted = parse_ner(TYPED.replace(AMORT, 'LHI - AMORTIZED IN BASE RENT - ANNUAL PSF $ 0.50 psf. ann. $ 800.00 TERM')
+                    .replace('TOTAL LANDLORD EXPENSES: $ 24,000.00', 'TOTAL LANDLORD EXPENSES: $ 24,800.00'))
+test('the amortized line counts on a sheet whose printed total includes it, and the note says so',
+     counted.tie == 'TIE' and counted.cost_sum == 24800.0 and 'amortized line counts' in counted.tie_note
+     and [x.memo for x in counted.cost_lines if 'AMORTIZED' in x.line] == [''])
+left_out = parse_ner(TYPED.replace(AMORT, 'LHI - AMORTIZED IN BASE RENT - ANNUAL PSF $ 0.50 psf. ann. $ 800.00 TERM'))
+test('... and stays a memo line, out of the sum, where the printed total leaves it out',
+     left_out.tie == 'TIE' and left_out.cost_sum == 24000.0 and [x.memo for x in left_out.cost_lines if 'AMORTIZED' in x.line][0] != '')
+garbled = parse_ner(COLUMNS.replace('LEASING FEES ● Agency $4.00 $4,800.00 $0.00 $0.00', 'LEASING FEES ● Agency 3 1/81 $4,800.00 $0.00 $0.00'))
+test('the spreadsheet form with its proposed rate unreadable: the total, then the budgeted pair',
+     [(x.proposed_psf, x.amount, x.budgeted) for x in garbled.cost_lines if x.cost_line == 'Landlord Leasing Fee'] == [(None, 4800.0, 0.0)]
+     and garbled.tie == 'TIE')
+
 print(f'\n{passed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

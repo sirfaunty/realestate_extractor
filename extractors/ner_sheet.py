@@ -16,7 +16,10 @@ Two templates:
 Printed means printed: a blank on the form is None with a reason, the form's
 "$ -" is 0. The cost block ends at TOTAL LANDLORD EXPENSES; text below it is
 comments. A line restating the improvement cost as rent ("amortized in base
-rent") is a memo line, kept and left out of the sum.
+rent") is a memo line, kept and left out of the sum, unless the printed
+total counts it (the lines tie with it and not without): then it counts and
+the tie note says so. A note printed after a line's figure ("Note: $2 x
+8,950sf ...") is not read; a minus before the dollar sign is a credit.
 
     parse_ner(page_text) -> NerSheet | None      (None: not an NER sheet)
 
@@ -41,6 +44,7 @@ _MONEY = re.compile(r'(?:\$|(?<![A-Za-z])S(?=[0-9O][0-9,.]*[.,]\d{2}))\s*([0-9]{
                     r'|#(?:REF|VALUE|DIV/0)!'                                                           # the form's own error cell
                     r'|(?<![\w$])-(?=\s*(?:psf|ps[a-z]))')                                              # "- psf." = a zero rate
 _RATE_MARK = re.compile(r'\s*(?:psf|ps[a-z]|p\.s\.f|\$s\b|/\s*sf|%|\|\s*psf)', re.I)   # a figure followed by "psf" (or its OCR) is a rate
+_NOTE = re.compile(r'\b(?:see\s+note\b|note\s*:)', re.I)                                   # a note printed after a line's figure
 _DATE = re.compile(r'\b(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{2,4})\b')
 _COST_START = re.compile(r'TOTAL\s+CONTRA\w*\s+REN\w*', re.I)      # and its OCR forms ("CONTRAGT REN *")
 _COST_END = re.compile(r'TOTAL\s+LANDLORD\s+EXPENSE', re.I)
@@ -173,15 +177,22 @@ def _num(s: str) -> float | None:
 
 def _figures(line: str) -> list:
     """Dollar figures on a line in order, each (value, is_rate): a printed
-    "$ -" is 0.0; a figure followed by "psf" or "%" is a rate."""
+    "$ -" is 0.0; a figure followed by "psf" or "%" is a rate. A note the
+    form prints after the figure ("$23,900.00 Note: $2 x 8,950sf and $4 x
+    1,500", "$110,600.00 See note: (additional $4,850 ...)") is not read:
+    its figures explain the line, they are not the line."""
     out = []
-    for m in _MONEY.finditer(line):
+    for m in _MONEY.finditer(_NOTE.split(line, 1)[0]):
         tail = line[m.end():m.end() + 8]
         rate = bool(_RATE_MARK.match(tail))
         fig = m.group(1) or m.group(2)
         v = _num(fig) if fig else 0.0
-        # a figure in parentheses is a credit: "($4.28) ($90,650.40)" takes the total down
+        # a figure in parentheses is a credit: "($4.28) ($90,650.40)" takes the total down;
+        # so is a minus before the dollar sign, as the form prints an offset ("-$60,000.00")
         if v and line[max(0, m.start() - 1):m.start()] == '(' and re.match(r'\s*\)', line[m.end():m.end() + 2]):
+            v = -v
+        elif v and m.group(0).startswith('$') and line[max(0, m.start() - 1):m.start()] == '-' \
+                and (m.start() < 2 or line[m.start() - 2].isspace()):      # not an underline OCR read as "_-$7,200.00"
             v = -v
         out.append((v, rate, fig is None))           # (value, is a rate, is a dash / zero form)
     return out
@@ -232,9 +243,9 @@ def _cost_line(label: str, line: str, proposed: float | None, proposed_psf: floa
     # the rate column proves the total: a printed total a hundred times off rate x SF
     # is an OCR figure with its decimal lost ("$17,657,860" for $17,657.86)
     if proposed and proposed_psf and sqft and proposed_psf * sqft > 0:
-        ratio = proposed / (proposed_psf * sqft)
+        ratio = abs(proposed) / (proposed_psf * sqft)      # a credit line's rate is a credit too
         if ratio > 50 or ratio < 0.02:
-            proposed = round(proposed_psf * sqft, 2)
+            proposed = round(proposed_psf * sqft, 2) * (-1 if proposed < 0 else 1)
             status = 'total derived = psf x SF (the printed total fails the rate check)'
     if proposed is None and proposed_psf is not None and sqft:
         proposed = round(proposed_psf * sqft, 2)          # a "$ -" rate derives a 0 total
@@ -382,7 +393,18 @@ def _tie(s: NerSheet, has_total: bool):
     elif abs(total - s.cost_sum) <= TIE_TOLERANCE:
         s.tie, s.tie_note = 'TIE', f'cost lines sum {s.cost_sum:,.2f} = printed {total:,.2f}'
     else:
-        s.tie, s.tie_note = 'BREAK', f'cost lines sum {s.cost_sum:,.2f} vs printed {total:,.2f}'
+        # the amortized line is a memo on most sheets; on a sheet whose printed total counts it,
+        # it counts (the total is the control: with the line the lines tie, without it they do not)
+        memo = [c for c in s.cost_lines if c.kind == 'memo' and c.memo and c.amount]
+        with_memo = round(s.cost_sum + sum(c.amount for c in memo), 2)
+        if memo and abs(total - with_memo) <= TIE_TOLERANCE:
+            for c in memo:
+                c.memo = ''
+            s.cost_sum = with_memo
+            s.tie, s.tie_note = 'TIE', (f'cost lines sum {s.cost_sum:,.2f} = printed {total:,.2f}; '
+                                        f'the amortized line counts on this sheet (the printed total includes it)')
+        else:
+            s.tie, s.tie_note = 'BREAK', f'cost lines sum {s.cost_sum:,.2f} vs printed {total:,.2f}'
     if total is not None:
         s.control_delta = round(s.cost_sum - total, 2)
     derived = [c for c in s.cost_lines if c.value_status.startswith('total derived')]
@@ -498,6 +520,8 @@ def _parse_columns(lines: list) -> NerSheet:
             proposed = am[0]
         elif len(am) >= 4:
             ppsf, proposed, bpsf, budgeted = am[0], am[1], am[2], am[3]
+        elif len(am) == 3 and am[1] < 100 <= am[0]:
+            proposed, bpsf, budgeted = am[0], am[1], am[2]     # the proposed rate unreadable ("3 1/81"): the total, then the budgeted pair
         elif len(am) == 3:
             ppsf, proposed, budgeted = am[0], am[1], am[2]
         elif len(am) == 2 and am[0] < 100 <= am[1]:
