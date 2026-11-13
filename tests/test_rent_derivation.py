@@ -985,6 +985,89 @@ def test_ocr_scrambled_last_row_runs_to_the_stated_term_end():
     assert [(r.monthly, r.start, r.end) for r in rows] == [(1800.0, date(2025, 7, 1), date(2027, 6, 30))], rows
 
 
+def test_ocr_broken_amounts_repaired_in_place():
+    # scanned table: letters for 1 and spaces inside the figures
+    t = """Minimum Rent shall be payable as follows:
+    Year 8 $ I 1,397.00 $949.7 5 Year 9 $ I 1,593.50 $966. I 3 Year 10 $11,790.00 $982.50"""
+    r = rent(t, commencement=date(2017, 11, 1))
+    assert r.monthly == 966.13, r
+    assert r.method == 'schedule', r
+
+
+def test_bare_ranges_under_a_months_header_count_months():
+    # "Lease Months" header, then bare "a-b" ranges before each pair
+    t = """Tenant shall pay Landlord annual Minimum Rent as follows:
+    Lease Months Monthly Annually 1-60 $2,000.00 $24,000.00 61-120 $2,200.00 $26,400.00
+    For purposes of this Amendment, Lease Month 1 is the first full month of the term."""
+    r = rent(t, commencement=date(2020, 1, 1))
+    assert r.monthly == 2200.0, r
+    assert r.confidence == 'high', r
+
+
+def test_monthly_only_amendment_rows_beside_a_paired_table_dated_from_roll_end():
+    filler = ' The parties agree to the covenants set out in this instrument. ' * 12
+    t = """Base Rent: Year 1 $24,000.00 $2,000.00 Year 2 $24,600.00 $2,050.00""" + filler + \
+        """3. The term of the Lease is hereby extended for three years (the "Extension Period").
+    4. Minimum Rent during the Extension Period shall be as follows:
+    Year 1 $2,100.00 per month Year 2 $2,150.00 per month Year 3 $2,200.00 per month"""
+    r = rent(t, commencement=date(2016, 1, 1), term_end=date(2027, 12, 31))
+    assert r.monthly == 2150.0, r
+    assert 'dated_back_from_roll_end' in r.flags, r
+
+
+def test_roll_lease_end_passed_means_holdover_not_an_assumed_option():
+    t = """Base Rent: Year 1 $30,000.00 $2,500.00 Year 2 $30,600.00 $2,550.00 Year 3 $31,200.00 $2,600.00
+    If Tenant exercises its option to extend, rent for the Option Term shall be as follows:
+    Year 1 $36,000.00 $3,000.00 Year 2 $36,720.00 $3,060.00"""
+    r = rent(t, commencement=date(2023, 5, 1), term_end=date(2026, 4, 30))
+    assert r.monthly == 2600.0, r
+    assert r.method != 'option_period', r
+
+
+def test_extension_stated_after_the_table_is_executed_not_an_option():
+    from realestate_extractor.extractors.rent_derivation import _is_option_table
+    t = """Tenant shall pay Minimum Rent during the Extended Term as follows:
+    Lease Months Monthly Annually 1-24 $1,000.00 $12,000.00 25-48 $1,100.00 $13,200.00
+    5. Extended Term: The term of the Lease is hereby extended for forty-eight months."""
+    flat = ' '.join(t.split())
+    assert not _is_option_table(flat, flat.index('$1,000.00')), 'an executed extension'
+    r = rent(t, commencement=date(2001, 3, 1), term_end=date(2027, 12, 31))
+    assert r.monthly == 1100.0, r
+
+
+def test_packet_filed_twice_is_no_later_schedule():
+    orig = "Base Rent: Year 1 $12,000.00 $1,000.00 Year 2 $12,600.00 $1,050.00"
+    amend = """Rent during the Extended Term: 4/1/2025 to 3/31/2026 $14,400.00 $1,200.00
+    4/1/2026 to 3/31/2027 $15,000.00 $1,250.00"""
+    r = rent(orig + ' ' + amend + ' ' + orig, commencement=date(2015, 4, 1))
+    assert r.monthly == 1250.0, r
+    assert r.confidence == 'high', r
+
+
+def test_payment_plan_memo_is_not_a_dated_rent_row():
+    t = """Tenant shall pay annual Minimum Rent as follows: EXTENDED TERM ANNUAL RENT MONTHLY RENT
+    Year 1 (7/1/2023 to 6/30/2024) $30,000.00 $2,500.00 Year 2 (7/1/2024 to 6/30/2025) $30,600.00 $2,550.00
+    Year 3 (7/1/2025 to 6/30/2026) $31,200.00 $2,600.00 Year 4 (7/1/2026 to 6/30/2027) $31,824.00 $2,652.00
+    Recommendation: Total Amount Owed: $5,590.27. Proposed Payment Plan: $500 per month until balance is
+    paid in full (12 months). First 11 months: September 1, 2025 - July 1, 2026 (11 months): $500.00 per month."""
+    r = rent(t, commencement=date(2023, 7, 1))
+    assert r.monthly == 2600.0, r
+    assert r.confidence == 'high', r
+
+
+def test_holdover_keeps_the_row_that_ends_on_the_roll_end():
+    # the roll's lease end passed a month ago; the dated row ending there is
+    # the rent held over, not an older table dated back from that end
+    t = """Minimum Rent: PERIOD ANNUAL RENT MONTHLY RENT Months 1-2 $14,080.00 $1,173.33
+    Months 3-12 $22,800.00 $1,900.00 Months 13-24 $23,256.00 $1,938.00 Months 25-36 $23,721.12 $1,976.76
+    Months 37-38 $24,195.60 $2,016.30
+    Amendment. Base Rent during the Extended Term: 6/1/2023 to 5/31/2024 $20,000.04 $1,666.67
+    6/1/2024 to 5/31/2025 $20,799.96 $1,733.33 6/1/2025 to 5/31/2026 $21,423.96 $1,785.33"""
+    r = rent(t, commencement=date(2020, 4, 1), term_end=date(2026, 5, 31))
+    assert r.monthly == 1785.33, r
+    assert 'holdover_past_roll_end' in r.flags, r
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]

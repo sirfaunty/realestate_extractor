@@ -199,10 +199,41 @@ def _ocr_year_labels(flat: str) -> str:
     return _SPLIT_YEAR.sub(lambda m: f'{m.group(1)}{m.group(2)}{m.group(3)} ', flat)
 
 
+# a dollar amount OCR broke: letters for 1 ("$ I 1,593.50", "$933.3I"),
+# spaces inside the figure ("$91 7.00", "$37,0 1 8.68", "$ I 01 ,503.60");
+# and a Year-1 label read as a bar ("Lease Year |! $0.00", "Option Year I")
+_OCR_AMOUNT = re.compile(r'\$\s?((?:[\dIl|]|[ ,.](?=[\dIl| ,.]*[\dIl|]))+)')
+_OCR_NOISE = re.compile(r'[Il|]|\d \d|\d ,|, \d|\d \.|\. \d')
+_OCR_CLEAN = re.compile(r'^\d{1,3}(?:,\d{3})*\.\d{2}$|^\d{1,6}\.\d{2}$')
+_OCR_YEAR1 = re.compile(r'(?i)\b((?:lease|option)\s+)?(year\s+)([|Il!]{1,2})(?=\s*\$)')
+
+
+def _ocr_amounts(flat: str) -> str:
+    """Repair OCR-broken amounts and Year-1 labels, keeping every position
+    (the repaired token is padded with spaces to its old length)."""
+    def fix(m):
+        raw = m.group(1)
+        if not _OCR_NOISE.search(raw):
+            return m.group(0)
+        norm = re.sub(r'[Il|]', '1', raw.replace(' ', ''))
+        if not _OCR_CLEAN.match(norm) or len(norm) > len(raw):
+            return m.group(0)
+        return '$' + norm + ' ' * (len(m.group(0)) - 1 - len(norm))
+    flat = _OCR_AMOUNT.sub(fix, flat)
+    return _OCR_YEAR1.sub(lambda m: f'{m.group(1) or ""}{m.group(2)}1{" " * (len(m.group(3)) - 1)}', flat)
+
+
 def _same_length_dates(flat: str) -> str:
     flat = _DASH_RANGE.sub(lambda m: f'{m.group(1)}/{m.group(2)}/{m.group(3)}{m.group(4)}'
                                      f'{m.group(5)}/{m.group(6)}/{m.group(7)}', flat)
     return _CLOCK.sub(lambda m: ' ' * len(m.group(0)), flat)
+
+
+def _adjacent_dates(flat: str) -> str:
+    """A table row whose period column prints its two dates side by side
+    ("June 27, 2025 June 26, 2030 $82,000.00 $6,833.33"): read as a range,
+    marked '~' so the row it makes never shows unreviewed."""
+    return _ADJACENT.sub(r'\1 ~ ', flat)
 
 
 @_text_memo
@@ -215,7 +246,7 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
     period marker precedes it (explicit date range, 'Months a-b',
     'Year n'); unlabelled rows are sequential lease years.
     """
-    flat = _ocr_year_labels(re.sub(r'\s+', ' ', text or ''))
+    flat = _adjacent_dates(_ocr_amounts(_ocr_year_labels(re.sub(r'\s+', ' ', text or ''))))
     # every money token, then test ADJACENT tokens as a pair — overlapping,
     # so a $/SF column between them ("2,400 $24.50 $58,800.00 $4,900.00")
     # can't swallow the real annual/monthly pair
@@ -273,7 +304,7 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
 
     out = []
     seq = {}
-    split, last_term = {}, {}
+    split, last_term, hdr_kind = {}, {}, {}
     for _, row, pre, table in rows:
         if _RANGE.search(pre):
             continue            # explicitly dated row — parse_dated_rows owns it
@@ -284,6 +315,20 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
                 r'third|fourth|fifth|extended|extension|renewal|option)\b[^)]{0,30}?\bterm\s*\)', pre))
         yy = list(re.finditer(r'(?i)(?:lease\s+)?year\s*(\d{1,2})\b', pre))
         tm = list(_TERM_LABEL.finditer(pre))
+        # a bare range under the table's header ("Lease Months Monthly
+        # Annually 1-72 $... 73-132 $...", "Lease Year ... Primary 1-5 $...
+        # Primary 6-10 $...") counts what the header says; an "Nth Option
+        # a-b" row stays sequential
+        if not (mm or yr or yy or tm):
+            hk = re.search(r'(?i)\b(?:lease\s+)?(months|years?)\b', pre)
+            if hk:
+                hdr_kind[table] = hk.group(1).lower()
+            br = re.search(r'(?<![\d/$.,])(\d{1,3})\s*-\s*(\d{1,3})\s*$', pre)
+            if br and hdr_kind.get(table) and not re.search(r'(?i)\boption\b', pre):
+                if hdr_kind[table].startswith('month'):
+                    mm = [br]
+                else:
+                    yr = [br]
         if tm and not (mm or yr or yy):
             k = _term_index(tm[-1])
             # the term sequence restarting ("Initial Term" again) = a
@@ -340,6 +385,16 @@ def parse_rent_schedule(text: str, sf: Optional[float] = None) -> list[ScheduleR
         out = _written_rows(flat)
     if not out:
         out = _named_term_rows(flat, sf)
+    else:
+        # monthly-only rows elsewhere in the chain ("Year 1 $1,999.93 per
+        # month Year 2 $2,039.93 per month", an amendment's table) sit beside
+        # the paired tables as a table of their own
+        extra = _per_month_rows(flat)
+        if extra and not any(abs(r.pos - x.pos) < 400 for r in out for x in extra):
+            t_new = max(r.table for r in out) + 1
+            for x in extra:
+                x.table = t_new
+            out += extra
     # option rents written as prose sit beside whatever table the lease has
     if not any(_is_option_table(flat, r.pos) for r in out):
         out += _option_prose_rows(flat, max((r.table for r in out), default=0) + 1)
@@ -366,7 +421,7 @@ _SINGLE_HDR = re.compile(
 _SINGLE_ROW = re.compile(r'(?i)(?:(?:lease\s+)?(?:years?|months?)\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*\$\s*([\d,]+(?:\.\d{2})?)(?![\d.])')
 # prose rows that say the unit themselves: "Years 1 through 5 $4,500.00 per
 # month Years 6 through 10 $4,950.00 per month" -- no table header needed
-_PER_MONTH_ROW = re.compile(r'(?i)\b(years?|months?)\s*(\d{1,3})\s*(?:-|–|through|thru|to)\s*(\d{1,3})\s*'
+_PER_MONTH_ROW = re.compile(r'(?i)\b(years?|months?)\s*(\d{1,3})(?:\s*(?:-|–|through|thru|to)\s*(\d{1,3}))?\s*'
                             r'\$\s*([\d,]+(?:\.\d{2})?)\s*(?:per\s+(?:calendar\s+)?month|/\s*mo\b|monthly|per\s+(?:lease\s+)?year|annually)')
 
 
@@ -374,7 +429,8 @@ def _per_month_rows(flat: str) -> list[ScheduleRow]:
     rows, nxt, kind = [], None, None
     for m in _PER_MONTH_ROW.finditer(flat):
         k = m.group(1).lower()
-        a, b, v = int(m.group(2)), int(m.group(3)), _num(m.group(4))
+        a, v = int(m.group(2)), _num(m.group(4))
+        b = int(m.group(3)) if m.group(3) else a       # "Year 1 $1,999.93 per month"
         unit = m.group(0).lower()
         monthly = v if ('month' in unit.split('$')[-1] or '/' in unit.split('$')[-1]) else round(v / 12, 2)
         if not v or b < a or monthly > MAX_MONTHLY:
@@ -648,7 +704,7 @@ _D = (r'(?:(?:January|February|March|April|May|June|July|August|September|'
       r'October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}'
       r'|\d{1,2}/\d{1,2}/\d{2,4})')
 _RANGE = re.compile(
-    r'(' + _D + r')\s*\)?\s*(?:,\s*(?=through|thru|until))?(?:through|thru|to|until|-|–|—|'
+    r'(' + _D + r')\s*\)?\s*(?:,\s*(?=through|thru|until))?(?:through|thru|to|until|-|–|—|~|'
     r'and\s+(?:ending|expiring|terminating)(?:\s+on)?|'
     r'and\s+continuing\s+(?:through|thru|until|to)|'    # "Beginning on X and continuing through Y"
     r'10(?=\d{1,2}/))'                       # OCR: "to" read as "10" ("1/1/20261012/31/2026")
@@ -669,6 +725,8 @@ _INSTRUMENT_START = [
 # a period column that wraps: "10/01/2025- $10.50 $7,779.63 $93,355.50 09/30/2030"
 # (start, dash, up to three amounts, then the end date) -> "start - end amounts"
 _SPLIT_RANGE = re.compile(r'(' + _D + r')\s*-\s*((?:\$\s*\d[\d,]*(?:\.\d{2})?\s+){1,3})(' + _D + r')(?!\s*-)')
+# two dates side by side in a period column, amounts right after
+_ADJACENT = re.compile(r'(' + _D + r')\s+(?=' + _D + r'\s*\$)')
 # a rent table's column header, when the word "rent" itself is further up
 # the page than the context window reaches ("LEASE TERM | TIME PERIOD |
 # PER SQ FT | MONTHLY | ANNUALLY")
@@ -680,6 +738,7 @@ _OPTION_CTX = re.compile(r'\b(?:extended\s+term|extension\s+(?:term|option|perio
 # an amendment that actually changed the term / premises (not an unexercised
 # option): its table can supersede, even if it also says "Extended Term"
 _EXECUTED_CTX = re.compile(r'\b(?:hereby\s+extended|is\s+extended|expansion|relocat\w*)\b', re.I)
+_EXTENDED_AFTER = re.compile(r'\b(?:hereby\s+extended|is\s+extended)\b', re.I)
 
 
 def _is_option_table(flat: str, pos: int) -> bool:
@@ -689,6 +748,10 @@ def _is_option_table(flat: str, pos: int) -> bool:
     before = flat[max(0, pos - 1500):pos]
     executed = [m for m in _EXECUTED_CTX.finditer(before)
                 if not re.search(r'(?i)\bif\s+(?:this|the)\s+lease\s+$', before[max(0, m.start() - 20):m.start()])]
+    # an extension amendment states the extension AFTER its rent table too
+    # ("5. Extended Term: The term of the Lease is hereby extended for ...")
+    if not executed and _EXTENDED_AFTER.search(flat[pos:pos + 1500]):
+        executed = [True]
     return bool(_OPTION_CTX.search(flat[max(0, pos - 300):pos]) and not executed)
 
 
@@ -702,9 +765,16 @@ def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = (),
     # well enough to answer, not well enough to let an EARLIER row show
     # unreviewed (the instrument may count from delivery, not that date)
     placed = {round(d.monthly, 2) for d in dated}
+    # the packet filed twice: a table repeating an earlier table's amounts is
+    # the same paper again, not a later schedule
+    sig = {}
+    for x in rows:
+        sig.setdefault(x.table, []).append(round(x.monthly, 2))
+    dups = {t for t, s in sig.items() if any(u < t and sig[u] == s for u in sig)}
     return any((x.start is None or (re.search(r'\[(?:instrument|term start\+?)\]$', x.label)
                                     and x.table != own_table))
                and x.pos > after_pos and round(x.monthly, 2) not in placed
+               and x.table not in dups
                and not _is_option_table(flat, x.pos)
                for x in rows)
 
@@ -715,7 +785,9 @@ def _later_unplaced(rows: list, flat: str, after_pos: int, dated: list = (),
 # month period from January 1, 2011 through June 1, 2012 (the Repayment Period)")
 _BAD_CTX = re.compile(r'\b(?:security\s+deposit|deposit|operating\s+costs?|cam|'
                       r'common\s+area|estimated?|sublease|subtenant|sublandlord|deferred|'
-                      r'breakpoint|gross\s+sales|percentage\s+rent|promissory|repayment)\b')
+                      r'breakpoint|gross\s+sales|percentage\s+rent|promissory|repayment|'
+                      r'payment\s+plan|amount\s+owed|past\s+due|arrears|balance\s+is\s+paid|'
+                      r'(?:unpaid|outstanding)\s+balance)\b')
 
 
 def _amounts(seg: str, keep_zero: bool = False):
@@ -780,7 +852,7 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
 
     Amounts are read AFTER the range (up to the next range); if there are
     none there, BEFORE it (back to the previous range)."""
-    flat = _same_length_dates(re.sub(r'\s+', ' ', text or ''))
+    flat = _adjacent_dates(_ocr_amounts(_same_length_dates(re.sub(r'\s+', ' ', text or ''))))
     # a wrapped period column puts the end date after the amounts: move it
     # back beside its start date (same tokens, so positions barely shift)
     flat = _SPLIT_RANGE.sub(lambda m: f'{m.group(1)} - {m.group(3)} {m.group(2).strip()} ', flat)
@@ -840,7 +912,7 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
             continue
         if i in columnar:
             r = ScheduleRow(monthly=columnar[i], annual=round(columnar[i] * 12, 2),
-                            start=start, end=end, label='dates')
+                            start=start, end=end, label='dates~' if '~' in m.group(0) else 'dates')
             r.pos = m.start()
             out.append(r)
             continue
@@ -875,7 +947,7 @@ def parse_dated_rows(text: str) -> list[ScheduleRow]:
         if not monthly or not (50 <= monthly <= MAX_MONTHLY):
             continue
         r = ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),
-                        start=start, end=end, label='dates')
+                        start=start, end=end, label='dates~' if '~' in m.group(0) else 'dates')
         r.pos = m.start()
         out.append(r)
     return out + _defined_term_rows(flat) + _scrambled_last_rows(flat, ranges)
@@ -987,7 +1059,7 @@ def _defined_term_rows(flat: str) -> list[ScheduleRow]:
         if not monthly or not (50 <= monthly <= MAX_MONTHLY):
             continue
         r = ScheduleRow(monthly=monthly, annual=round(monthly * 12, 2),
-                        start=start, end=end, label='dates')
+                        start=start, end=end, label='dates~' if '~' in m.group(0) else 'dates')
         r.pos = m.start()
         out.append(r)
     return out
@@ -1255,14 +1327,37 @@ def _roll_end_table(rows: list, flat: str, term_end: date, as_of: date, undated_
     are the same label in an adjacent table of the same instrument for
     another space of the lease ("b. Expansion Premises ... as follows:")
     -- the tenancy pays their sum."""
-    rel_tables = sorted({x.table for x in rows if not x.label.startswith('term ')
-                         and not _is_option_table(flat, x.pos)
-                         and (not undated_only or all(y.start is None for y in rows if y.table == x.table))},
-                        key=lambda t: max(x.pos for x in rows if x.table == t))
+    by_t = {}
+    for x in rows:
+        by_t.setdefault(x.table, []).append(x)
+    # the packet filed twice: a table repeating an earlier table's amounts is
+    # the same paper again, never the latest table; a renewal option's rows
+    # are not the schedule's (one table may print both); named terms are
+    # placed elsewhere
+    sig, dups = {}, set()
+    for t in sorted(by_t):
+        s = tuple(round(x.monthly, 2) for x in by_t[t])
+        if s in sig.values():
+            dups.add(t)
+        sig[t] = s
+    by_t = {t: [y for y in trs if not _is_option_table(flat, y.pos)] for t, trs in by_t.items()
+            if t not in dups and not any(y.label.startswith('term ') for y in trs)}
+    by_t = {t: trs for t, trs in by_t.items() if trs}
+    rel_tables = sorted((t for t, trs in by_t.items()
+                         if not undated_only or all(y.start is None for y in trs)),
+                        key=lambda t: max(x.pos for x in by_t[t]))
     if not rel_tables:
         return None
-    t = rel_tables[-1]
-    trs = [x for x in rows if x.table == t]
+    # a one-row table after the schedule (a prose amount, a stub period): the
+    # latest multi-row table is the schedule -- unless that single amount
+    # restates one of its rows (an extension at the same rent: nothing to date)
+    multi = [t for t in rel_tables if len(by_t[t]) >= 2]
+    t = (multi or rel_tables)[-1]
+    if multi:
+        amts = {round(x.monthly, 2) for x in by_t[t]}
+        if any(s > t and len(by_t[s]) == 1 and round(by_t[s][0].monthly, 2) in amts for s in rel_tables):
+            return None
+    trs = by_t[t]
 
     def off(x):              # offsets by the row's own label, without a dating tag
         return _offsets(ScheduleRow(x.monthly, x.annual, label=x.label.split(' [')[0]))
@@ -1273,12 +1368,16 @@ def _roll_end_table(rows: list, flat: str, term_end: date, as_of: date, undated_
         except (ValueError, IndexError):
             return None
         a = add_months(term_end + timedelta(days=1), -span)
-        cov = []
+        placed, cov = [], []
         for x in trs:
             s0, e0 = off(x)
             st, en = add_months(a, s0), add_months(a, e0) - timedelta(days=1)
+            placed.append((x, st, en))
             if st <= as_of <= en:
                 cov.append((x, st, en))
+        # past the roll's own lease end (under a year): holdover at the last row
+        if not cov and as_of > term_end and (as_of - term_end).days <= 366:
+            cov = [max(placed, key=lambda c: (c[2], c[0].pos))]
         return max(cov, key=lambda c: (c[1], c[0].pos)) if cov else None
     hit = covering(trs)
     if not hit:
@@ -1372,6 +1471,8 @@ def derive_current_rent(*, as_of: date,
     cov = [r for r in dated if r.start <= as_of <= r.end]
     if cov:
         r = max(cov, key=lambda x: (x.start, x.pos))
+        if r.label == 'dates~':
+            flags.append('adjacent_dates')      # a range read from two bare dates: review it
         # a later instrument's lease-year table, dated by its own stated start,
         # whose row covering today starts after the dated row's and sits after
         # it in the chain, is the newer schedule ("... 2025-04-01 to
@@ -1471,7 +1572,48 @@ def derive_current_rent(*, as_of: date,
                               f'ends {t_end}')
     placed_end = max((r.end for r in list(dated) + [x for x in rows if x.start and x.end]),
                      default=None)
-    if placed_end and as_of > placed_end:
+    # the rent roll's own lease end has passed: the landlord bills holdover at
+    # the last scheduled rent, no renewal is assumed (an option the roll does
+    # not show taken is not in effect)
+    if placed_end and as_of > placed_end and not (t_end and as_of > t_end):
+        # 2b'. the rent roll's lease end dates the renewal table: its last
+        #      row ends the roll's term (the option the roll shows taken, or
+        #      an extension whose start this paper does not state). The
+        #      latest such table in the chain whose rows then cover today;
+        #      past the roll's own end (holdover, under a year), its last row
+        if t_end and t_end > placed_end:
+            _, ext0 = _term_lengths(flat)
+            opt_tables = sorted({x.table for x in rows if x.start is None and _is_option_table(flat, x.pos)},
+                                key=lambda t: -max(x.pos for x in rows if x.table == t))
+            for t in opt_tables:
+                trs = [x for x in rows if x.table == t]
+                if any(x.label.startswith('term ') for x in trs):
+                    continue
+                per_term = ext0 if ext0 and all(x.label.startswith('seq ') for x in trs) else None
+
+                def offs(x, per_term=per_term):
+                    if per_term:
+                        n = int(x.label.split()[1])
+                        return per_term * (n - 1), per_term * n
+                    return _offsets(x)
+                try:
+                    span = max(offs(x)[1] for x in trs)
+                except (ValueError, IndexError):
+                    continue
+                a = add_months(t_end + timedelta(days=1), -span)
+                placed_rows = []
+                for x in trs:
+                    s0, e0 = offs(x)
+                    placed_rows.append((x, add_months(a, s0), add_months(a, e0) - timedelta(days=1)))
+                cov = [p for p in placed_rows if p[1] <= as_of <= p[2]]
+                if not cov and as_of > t_end and (as_of - t_end).days <= 366:
+                    cov = [max(placed_rows, key=lambda p: (p[2], p[0].pos))]
+                if cov:
+                    x, st, en = max(cov, key=lambda p: (p[1], p[0].pos))
+                    return RentResult(x.monthly, 'option_period', 'medium',
+                                      flags + ['option_dated_back_from_roll_end'],
+                                      f'{len(trs)}-row renewal table dated back from the rent roll\'s lease end '
+                                      f'{t_end}, row {x.label} ({st}..{en})')
         start = placed_end + timedelta(days=1)
         _, ext = _term_lengths(flat)
         for t in sorted({x.table for x in rows if x.start is None and _is_option_table(flat, x.pos)}):
@@ -1508,26 +1650,38 @@ def derive_current_rent(*, as_of: date,
     if dated and max(r.end for r in dated) < as_of:
         flags.append('schedule_ends_before_date')   # a later amendment is missing
 
+    # 2c. every placed row has ended, but the rent roll's lease runs on (its
+    #     end is still ahead, or passed under a year ago: holdover): the
+    #     latest lease-year table on paper is the current term's, counted
+    #     from the wrong start (an amendment's table dated from the original
+    #     commencement). Its last row ends the term: date it back from the
+    #     roll's lease end -- medium, flagged
+    placed = list(dated) + [r for r in rows if r.start and r.end]
+    if placed and max(r.end for r in placed) < as_of and t_end and (t_end - as_of).days > -366:
+        if as_of > t_end:
+            # a placed row already ends on the roll's lease end: that rent is held over
+            near = [r for r in placed if abs((r.end - t_end).days) <= 45]
+            if near:
+                r = max(near, key=lambda x: (x.end, x.pos))
+                return RentResult(r.monthly, 'last_scheduled', 'medium', flags + ['holdover_past_roll_end'],
+                                  f'last scheduled rent ({r.start}..{r.end}) ends on the rent roll\'s '
+                                  f'lease end {t_end}; held over')
+        late = _roll_end_table(rows, flat, t_end, as_of)
+        if late:
+            x, st, en, n_rows, par = late
+            return RentResult(round(x.monthly + sum(p.monthly for p in par), 2), 'schedule', 'medium',
+                              flags + ['dated_back_from_roll_end'] + (['multi_space_sum'] if par else [])
+                              + (['holdover_past_roll_end'] if as_of > t_end else []),
+                              f'{n_rows}-row schedule dated back from the rent roll\'s lease end '
+                              f'{t_end}, row {x.label.split(" [")[0]} ({st}..{en})'
+                              + (f' + {len(par)} parallel space(s)' if par else ''))
+
     # 3. every scheduled row has ended (holdover, or a renewal the file
     #    doesn't hold): the last scheduled rent -- not the original Year 1
     #    rolled forward past the tables that replaced it (a pilot got a
     #    28-year-old Year 1 x 1.10^28, seven times the rent its extension
     #    table ended at -- the amount the rent roll still bills)
     placed = list(dated) + [r for r in rows if r.start and r.end]
-    # 2c. every placed row has ended, but the rent roll's lease runs on (its
-    #     end is still ahead): the latest lease-year table on paper is the
-    #     current term's, counted from the wrong start (an amendment's table
-    #     dated from the original commencement). Its last row ends the term:
-    #     date it back from the roll's lease end -- medium, flagged
-    if placed and max(r.end for r in placed) < as_of and term_end and term_end > as_of:
-        late = _roll_end_table(rows, flat, term_end, as_of)
-        if late:
-            x, st, en, n_rows, par = late
-            return RentResult(round(x.monthly + sum(p.monthly for p in par), 2), 'schedule', 'medium',
-                              flags + ['dated_back_from_roll_end'] + (['multi_space_sum'] if par else []),
-                              f'{n_rows}-row schedule dated back from the rent roll\'s lease end '
-                              f'{term_end}, row {x.label.split(" [")[0]} ({st}..{en})'
-                              + (f' + {len(par)} parallel space(s)' if par else ''))
     if placed and max(r.end for r in placed) < as_of:
         last = max(placed, key=lambda x: (x.end, x.pos))
         return RentResult(last.monthly, 'last_scheduled', 'low', flags + ['after_schedule_end'],
