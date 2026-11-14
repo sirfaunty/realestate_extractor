@@ -197,10 +197,17 @@ def _session_revoked_reason():
     return None
 
 
+def _op_pw_tag(password_hash: str) -> str:
+    import hashlib as _h
+    return _h.sha256((password_hash or '').encode()).hexdigest()[:16]
+
+
 def _operator_still_valid():
     store = get_config_store()
     try:
-        return store.get_operator(session['operator_id']) is not None
+        op = store.get_operator(session['operator_id'])
+        # a changed password ends every session signed in with the old one
+        return op is not None and session.get('op_pw') == _op_pw_tag(op.get('password_hash'))
     finally:
         store.close()
 
@@ -568,9 +575,12 @@ def extract_zip(zip_path, dest_dir, _depth=0):
     Recursively expands nested ZIP files up to 3 levels deep."""
     import zipfile
     MAX_DEPTH = 3
+    MAX_UNPACKED = 4 * 1024 ** 3        # 4 GB decompressed per upload, nested zips included
     extracted = []
     skipped = []
     with zipfile.ZipFile(zip_path, 'r') as zf:
+        if sum(i.file_size for i in zf.infolist()) > MAX_UNPACKED:
+            raise ValueError('zip expands past the 4 GB limit')
         for member in zf.namelist():
             # Skip directories, macOS resource forks, hidden files
             if member.endswith('/'):
@@ -595,8 +605,9 @@ def extract_zip(zip_path, dest_dir, _depth=0):
                 counter += 1
 
             # Extract the single file
+            import shutil as _shutil
             with zf.open(member) as src, open(dest_path, 'wb') as dst:
-                dst.write(src.read())
+                _shutil.copyfileobj(src, dst, 1024 * 1024)
 
             # Recursively expand nested ZIP files
             if ext == 'zip' and _depth < MAX_DEPTH:
@@ -919,6 +930,7 @@ def login():
                 return redirect(request.url)
 
             if not user.get('password_hash'):
+                _login_failed('user', email)
                 flash("This account isn't set up yet. Open the invite link your "
                       "admin sent you, or ask them for a new one.", 'error')
                 return redirect(request.url)
@@ -996,10 +1008,15 @@ def forgot_password():
                         user['display_name'],
                         url_for('accept_invite', token=token, _external=True),
                         RESET_HOURS)
-                    sent = mailer.send_email(user['email'], subject, body)
-                    _audit(user['org_id'], 'password_reset_requested', user['user_id'],
-                           f'reset link emailed (from {request.remote_addr})' if sent
-                           else 'reset link could not be emailed', success=sent)
+                    import threading as _threading
+                    org_id, uid, ip = user['org_id'], user['user_id'], request.remote_addr
+
+                    def _send(to=user['email']):
+                        sent = mailer.send_email(to, subject, body)
+                        _audit(org_id, 'password_reset_requested', uid,
+                               f'reset link emailed (from {ip})' if sent
+                               else 'reset link could not be emailed', success=sent)
+                    _threading.Thread(target=_send, daemon=True).start()
             finally:
                 store.close()
         return render_template('forgot.html', mail_on=True, sent=True)
@@ -2345,6 +2362,7 @@ def operator_login():
                 _login_succeeded('operator', email.lower())
                 session.clear()
                 session['operator_id'] = op['operator_id']
+                session['op_pw'] = _op_pw_tag(op['password_hash'])
                 session['operator_name'] = op['display_name']
                 store.touch_operator_login(op['operator_id'])
                 store.log_operator_action(op['operator_id'], 'login')
@@ -4793,11 +4811,21 @@ def api_export(table):
 
 @app.route('/api/status')
 def api_system_status():
-    llm = get_llm()
-    return jsonify({
-        'ollama_connected': llm.is_available(),
-        'ollama_models': llm.list_models(),
-    })
+    # anonymous callers (the container healthcheck) get a static answer: no
+    # outbound probe and no model list for strangers
+    if not session.get('user_id'):
+        return jsonify({'ok': True})
+    import time as _time
+    now = _time.time()
+    if now - _STATUS_CACHE.get('at', 0) > 60:
+        llm = get_llm()
+        _STATUS_CACHE.update(at=now, body={'ok': True,
+                                           'ollama_connected': llm.is_available(),
+                                           'ollama_models': llm.list_models()})
+    return jsonify(_STATUS_CACHE['body'])
+
+
+_STATUS_CACHE = {}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────

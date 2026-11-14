@@ -28,7 +28,7 @@ _REGISTRY = registry_path()
 lease_abstraction_bp = Blueprint('lease_abstraction', __name__, url_prefix='/lease-abstraction')
 
 _JOBS = {}
-_LATEST = {}   # slug -> {'docx','summary','returns','returns_summary'}
+_LATEST = {}   # (org_id, slug) -> {'docx','summary','returns','returns_summary'}
 
 
 def register_lease_abstraction_routes(app):
@@ -154,7 +154,7 @@ def _run_generate(job_id, slug, lease_rel, force):
             'generated_at': datetime.datetime.now().isoformat(timespec='seconds'),
         }
         job.update(status='done', step='complete', detail='Compendium ready.', summary=summary)
-        _LATEST.setdefault(slug, {}).update(docx=out_path, summary=summary)
+        _LATEST.setdefault((job.get('org_id', 'dev'), slug), {}).update(docx=out_path, summary=summary)
     except Exception as e:
         logger.exception('Lease abstraction generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
@@ -220,7 +220,7 @@ def api_status(job_id):
 @lease_abstraction_bp.route('/api/download')
 def api_download():
     slug = request.args.get('slug', '')
-    path = (_LATEST.get(slug) or {}).get('docx')
+    path = (_LATEST.get((session.get('org_id', 'dev'), slug)) or {}).get('docx')
     if not path or not os.path.exists(path):
         abort(404)
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
@@ -260,7 +260,7 @@ def api_generate_returns():
             'xlsx_name': os.path.basename(out),
             'generated_at': datetime.datetime.now().isoformat(timespec='seconds'),
         }
-        _LATEST.setdefault(slug, {}).update(returns=out, returns_summary=summary)
+        _LATEST.setdefault((session.get('org_id', 'dev'), slug), {}).update(returns=out, returns_summary=summary)
         return jsonify(summary)
     except Exception as e:
         logger.exception('Lease abstraction returns generate failed')
@@ -270,7 +270,7 @@ def api_generate_returns():
 @lease_abstraction_bp.route('/api/download_returns')
 def api_download_returns():
     slug = request.args.get('slug', '')
-    path = (_LATEST.get(slug) or {}).get('returns')
+    path = (_LATEST.get((session.get('org_id', 'dev'), slug)) or {}).get('returns')
     if not path or not os.path.exists(path):
         abort(404)
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))

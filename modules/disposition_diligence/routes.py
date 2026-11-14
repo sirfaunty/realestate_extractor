@@ -32,7 +32,7 @@ _REGISTRY = registry_path()
 disposition_diligence_bp = Blueprint('disposition_diligence', __name__, url_prefix='/disposition-diligence')
 
 _JOBS = {}
-_LATEST = {}   # slug -> {'docx': path, 'summary': {...}}
+_LATEST = {}   # (org_id, slug) -> {'docx': path, 'summary': {...}}
 
 
 def register_disposition_diligence_routes(app):
@@ -146,7 +146,7 @@ def _run_generate(job_id, slug, force):
         if warnings:
             summary['warnings'] = warnings
         job.update(status='done', step='complete', detail='Report ready.', summary=summary)
-        _LATEST[slug] = {'docx': out, 'summary': summary}
+        _LATEST[(job.get('org_id', 'dev'), slug)] = {'docx': out, 'summary': summary}
     except Exception as e:
         logger.exception('Disposition diligence generate failed')
         job.update(status='error', error=str(e), traceback=traceback.format_exc())
@@ -211,7 +211,7 @@ def api_status(job_id):
 @disposition_diligence_bp.route('/api/download')
 def api_download():
     slug = request.args.get('slug', '')
-    latest = _LATEST.get(slug)
+    latest = _LATEST.get((session.get('org_id', 'dev'), slug))
     if not latest or not latest.get('docx') or not os.path.exists(latest['docx']):
         abort(404)
     return send_file(latest['docx'], as_attachment=True,

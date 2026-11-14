@@ -148,6 +148,16 @@ def main():
     test('the emailed link sets the password', r.status_code == 302)
     test('a first password sends no "changed" notice', len(mail_to('morgan@cedar.test')) == 1)
 
+    def _wait_mail():
+        import threading
+        import time
+        for _ in range(100):          # up to 5 s for background reset sends
+            if not [t for t in threading.enumerate() if t is not threading.current_thread()
+                    and t.daemon and t.name.startswith('Thread-')]:
+                break
+            time.sleep(0.05)
+        time.sleep(0.1)
+
     print('\nForgot password')
     page = app.test_client().get('/login').get_data(as_text=True)
     test('sign-in offers "Forgot password?" when email is on', 'Forgot password?' in page)
@@ -155,6 +165,7 @@ def main():
     anon = app.test_client()
     r1 = anon.post('/forgot', data={'email': 'Morgan@Cedar.test'}).get_data(as_text=True)
     r2 = anon.post('/forgot', data={'email': 'nobody@cedar.test'}).get_data(as_text=True)
+    _wait_mail()      # reset mail goes out off the request thread
     test('the same answer for a real and an unknown address',
          'a reset link is on its way' in r1 and r1 == r2)
     msgs = mail_to('morgan@cedar.test')
@@ -185,6 +196,7 @@ def main():
     spam = app.test_client()
     for _ in range(8):
         spam.post('/forgot', data={'email': 'avery@cedar.test'})
+    _wait_mail()
     test('reset emails are throttled per address (5 in 15 minutes)',
          len(mail_to('avery@cedar.test')) == 5)
 
