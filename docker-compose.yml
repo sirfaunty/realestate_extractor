@@ -19,6 +19,8 @@ services:
     restart: unless-stopped
     environment:
       CAPACTIVE_SECRET_KEY: ${CAPACTIVE_SECRET_KEY:?set CAPACTIVE_SECRET_KEY (see header comment)}
+      # signs org / license keys; derived from CAPACTIVE_SECRET_KEY when unset
+      CAPACTIVE_LICENSE_SECRET: ${CAPACTIVE_LICENSE_SECRET:-}
       # outgoing email (invites, password resets) — optional; see docs/DEPLOY.md
       CAPACTIVE_SMTP_HOST: ${CAPACTIVE_SMTP_HOST:-}
       CAPACTIVE_SMTP_PORT: ${CAPACTIVE_SMTP_PORT:-587}

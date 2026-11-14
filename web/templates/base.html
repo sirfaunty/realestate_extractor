@@ -13,8 +13,10 @@
         CAPACTIVE OPERATOR SESSION — you are inside
         <strong>{{ session.get('org_id') }}</strong> as its admin; actions
         are audited &nbsp;·&nbsp;
-        <a href="{{ url_for('operator_exit') }}"
-           style="color:#fff; font-weight:600;">Exit to console</a>
+        <form method="POST" action="{{ url_for('operator_exit') }}" style="display:inline">
+          <button type="submit"
+                  style="color:#fff; font-weight:600; background:none; border:0; padding:0; cursor:pointer; font:inherit; text-decoration:underline;">Exit to console</button>
+        </form>
     </div>
     <div style="height:30px"></div>
     {% endif %}
@@ -254,7 +256,10 @@
             <div class="sidebar-user">
                 <span class="user-name">{{ current_user.display_name }}</span>
                 <span class="user-org">{{ current_user.org_name }}</span>
-                <a href="{{ url_for('logout') }}" class="logout-link">Log out</a>
+                <form method="POST" action="{{ url_for('logout') }}" style="display:inline">
+                    <button type="submit" class="logout-link"
+                            style="background:none; border:0; padding:0; cursor:pointer; font:inherit;">Log out</button>
+                </form>
             </div>
             <div style="margin-top: 10px;" id="llm-status">
             {% else %}

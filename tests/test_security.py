@@ -361,7 +361,7 @@ def main():
     webapp._login_failures.clear()
     opc = app.test_client()
     opc.post('/operator/login', data={'email': 'ops@alder.test', 'password': 'operator-pass-1'})
-    page = opc.get('/operator/enter/alder?to=modules', follow_redirects=True).get_data(as_text=True)
+    page = opc.post('/operator/enter/alder', data={'to': 'modules'}, follow_redirects=True).get_data(as_text=True)
     test('the Modules page flags instance-data modules', 'instance data' in page)
     test('...and warns that this instance hosts other organizations',
          'hosts other organizations' in page)

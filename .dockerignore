@@ -41,3 +41,10 @@ scripts
 .idea
 CLAUDE.md
 .claude
+
+# secrets kept beside the compose file: never in the image
+.env
+.env.*
+.b2_upload_key*
+*.pem
+*.key

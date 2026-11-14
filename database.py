@@ -2676,7 +2676,7 @@ class Database:
             try:
                 fts_sql = """
                     SELECT ft.document_id, ft.page_number,
-                           snippet(document_fulltext, 2, '<mark>', '</mark>', '...', 50) as snippet,
+                           snippet(document_fulltext, 2, '\x02', '\x03', '...', 50) as snippet,
                            rank, d.filename, d.document_type, d.property_id,
                            p.name as property_name
                     FROM document_fulltext ft
@@ -2693,6 +2693,11 @@ class Database:
                 params.append(limit)
                 cur = self.conn.execute(fts_sql, params)
                 results['raw'] = [dict(row) for row in cur.fetchall()]
+                # document text is untrusted: escape it, then mark the hits
+                from markupsafe import Markup, escape as _esc
+                for r in results['raw']:
+                    r['snippet'] = Markup(str(_esc(r.get('snippet') or ''))
+                                          .replace('\x02', '<mark>').replace('\x03', '</mark>'))
             except Exception:
                 # FTS5 MATCH can fail on invalid syntax; fall back to LIKE
                 results['raw'] = []
@@ -2846,8 +2851,9 @@ class Database:
     @staticmethod
     def _highlight_snippet(text: str, query: str, max_length: int = 200) -> str:
         """Extract a snippet from text centered around the query match, with highlighting."""
+        from markupsafe import Markup, escape as _esc
         if not text or not query:
-            return text or ''
+            return Markup(_esc(text or ''))
         lower_text = text.lower()
         lower_q = query.lower()
         idx = lower_text.find(lower_q)
@@ -2858,7 +2864,7 @@ class Database:
                 if idx != -1:
                     break
         if idx == -1:
-            return text[:max_length] + ('...' if len(text) > max_length else '')
+            return Markup(_esc(text[:max_length] + ('...' if len(text) > max_length else '')))
 
         # Center the snippet around the match
         start = max(0, idx - max_length // 2)
@@ -2869,17 +2875,19 @@ class Database:
         if end < len(text):
             snippet = snippet + '...'
 
-        # Highlight all occurrences of query terms
+        # Highlight all occurrences of query terms -- on the ESCAPED text
+        # (clause text is untrusted document content)
         import re as _re
+        snippet = str(_esc(snippet))
         for word in query.split():
             if word:
                 snippet = _re.sub(
-                    f'({_re.escape(word)})',
+                    f'({_re.escape(str(_esc(word)))})',
                     r'<mark>\1</mark>',
                     snippet,
                     flags=_re.IGNORECASE
                 )
-        return snippet
+        return Markup(snippet)
 
     # ─── Clause Operations ───────────────────────────────────────────
 

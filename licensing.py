@@ -42,11 +42,26 @@ PLAN_CODES = {
 
 CODE_TO_PLAN = {v: k for k, v in PLAN_CODES.items()}
 
-# This would be stored securely in production — env variable or HSM
-_SIGNING_SECRET = os.environ.get(
-    'CAPACTIVE_LICENSE_SECRET',
-    'capactive-dev-signing-key-change-in-production'
-)
+def _signing_secret() -> str:
+    """The key that signs org / user keys and license files. Never a value
+    anyone with the source knows: CAPACTIVE_LICENSE_SECRET, else derived
+    from the instance's CAPACTIVE_SECRET_KEY, else (dev mode only) a fixed
+    dev string, else a per-process random key (keys then verify only within
+    this process, which is the safe failure)."""
+    explicit = os.environ.get('CAPACTIVE_LICENSE_SECRET')
+    if explicit:
+        return explicit
+    secret_key = os.environ.get('CAPACTIVE_SECRET_KEY')
+    if secret_key:
+        return hmac.new(secret_key.encode(), b'capactive-license-signing',
+                        hashlib.sha256).hexdigest()
+    if os.environ.get('CAPACTIVE_DEV_MODE') == '1':
+        return 'capactive-dev-signing-key-change-in-production'
+    import secrets as _secrets
+    return _secrets.token_hex(32)
+
+
+_SIGNING_SECRET = _signing_secret()
 
 
 @dataclass

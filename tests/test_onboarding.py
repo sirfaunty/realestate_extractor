@@ -57,13 +57,13 @@ test('setup with an issued key creates the org', r.status_code == 302
 test('once set up, /setup is closed', c.get('/setup').status_code == 302)
 
 print('\nFirst sign-in')
-c.get('/logout')
+c.post('/logout')
 r = c.post('/login', data={'email': 'jordan@northfield.test', 'password': 'jordan-pass-1'},
            follow_redirects=True)
 page = r.get_data(as_text=True)
 test('the first sign-in says Welcome, not Welcome back',
      'Welcome, Jordan Lee!' in page and 'Welcome back' not in page)
-c.get('/logout')
+c.post('/logout')
 page = c.post('/login', data={'email': 'jordan@northfield.test', 'password': 'jordan-pass-1'},
               follow_redirects=True).get_data(as_text=True)
 test('later sign-ins say Welcome back', 'Welcome back, Jordan Lee!' in page)

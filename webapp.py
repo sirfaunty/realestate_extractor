@@ -94,6 +94,9 @@ ARCHIVE_EXTENSIONS = {'zip'}
 
 # Max upload size: 500 MB (supports ~100 large PDFs in a single batch)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
+# chunked PDF sync: 4 MB chunks, at most 2,048 of them (8 GB) per file
+_SYNC_MAX_CHUNK_BYTES = 4 * 1024 * 1024 + 4096
+_SYNC_MAX_CHUNKS = 2048
 
 
 # ─── Global authentication gate ──────────────────────────────────────
@@ -613,10 +616,17 @@ def extract_zip(zip_path, dest_dir, _depth=0):
 
     return extracted, skipped
 
+def _slug(s: str) -> str:
+    """An identifier safe as a path component: [a-z0-9-] only (org ids name
+    the org's database file and PDF store)."""
+    return re.sub(r'[^a-z0-9]+', '-', (s or '').lower()).strip('-')
+
+
 def is_setup_complete():
     """Check if initial setup has been completed."""
     store = get_config_store()
-    orgs = store.list_orgs()
+    # a deactivated org still counts: the instance must never reopen /setup
+    orgs = store.list_orgs(active_only=False)
     return len(orgs) > 0
 
 def get_current_user():
@@ -827,8 +837,8 @@ def setup():
             return redirect(request.url)
 
         # Generate IDs and keys
-        org_id = org_name.lower().replace(' ', '-')[:32]
-        user_id = admin_email.split('@')[0].lower().replace('.', '-')
+        org_id = _slug(org_name)[:32]
+        user_id = _slug(admin_email.split('@')[0])
 
         pw_hash = generate_password_hash(password)
 
@@ -931,6 +941,7 @@ def login():
             first_visit = not user.get('last_login')
             store.update_user_login(user['user_id'])
 
+            session.clear()        # no leftovers from an earlier identity (operator, another org)
             session['user_id'] = user['user_id']
             session['org_id'] = org.org_id
             session['org_name'] = org.org_name
@@ -1008,7 +1019,7 @@ def _email_password_changed(user, how):
     return mailer.send_email(user['email'], subject, body)
 
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
     """Log out the current user."""
     session.clear()
@@ -2179,9 +2190,13 @@ def api_sync_pdf_chunk():
         return jsonify({'error': 'index and total required'}), 400
     if not _re.fullmatch(r'[0-9a-f]{64}', sha) or index < 0 or index >= total:
         return jsonify({'error': 'bad sha256/index/total'}), 400
+    if total > _SYNC_MAX_CHUNKS or (request.content_length or 0) > _SYNC_MAX_CHUNK_BYTES:
+        return jsonify({'error': 'chunk count or size over the limit'}), 413
     blob = request.get_data()
     if not blob:
         return jsonify({'error': 'empty chunk'}), 400
+    if len(blob) > _SYNC_MAX_CHUNK_BYTES:
+        return jsonify({'error': 'chunk over the limit'}), 413
     pdir = _partial_dir(g.device_org_id, sha)
     tmp = os.path.join(pdir, f'{index}.tmp')
     with open(tmp, 'wb') as f:
@@ -2214,6 +2229,8 @@ def api_sync_pdf_complete():
             total = int(total)
         except (TypeError, ValueError):
             return jsonify({'error': 'total required to assemble'}), 400
+        if total < 1 or total > _SYNC_MAX_CHUNKS:
+            return jsonify({'error': 'chunk count over the limit'}), 413
         pdir = os.path.join(store, '.partial', sha)
         missing = [i for i in range(total)
                    if not os.path.exists(os.path.join(pdir, f'{i}.part'))]
@@ -2326,6 +2343,7 @@ def operator_login():
             op = store.get_operator_by_email(email)
             if op and check_password_hash(op['password_hash'], password):
                 _login_succeeded('operator', email.lower())
+                session.clear()
                 session['operator_id'] = op['operator_id']
                 session['operator_name'] = op['display_name']
                 store.touch_operator_login(op['operator_id'])
@@ -2338,7 +2356,7 @@ def operator_login():
     return render_template('operator_login.html', error=error)
 
 
-@app.route('/operator/logout')
+@app.route('/operator/logout', methods=['POST'])
 def operator_logout():
     op = session.pop('operator_id', None)
     session.pop('operator_name', None)
@@ -2519,7 +2537,7 @@ def operator_reset_password(org_id):
     return redirect(url_for('operator_dashboard'))
 
 
-@app.route('/operator/enter/<org_id>')
+@app.route('/operator/enter/<org_id>', methods=['POST'])
 @operator_required
 def operator_enter(org_id):
     """Impersonation: full admin inside the org, audited + bannered."""
@@ -2543,12 +2561,12 @@ def operator_enter(org_id):
     finally:
         store.close()
     # ?to=modules lands straight on the (operator-only) module activation page
-    if request.args.get('to') == 'modules':
+    if request.values.get('to') == 'modules':
         return redirect(url_for('admin_modules'))
     return redirect(url_for('index'))
 
 
-@app.route('/operator/exit')
+@app.route('/operator/exit', methods=['POST'])
 @operator_required
 def operator_exit():
     org_id = session.pop('org_id', None)

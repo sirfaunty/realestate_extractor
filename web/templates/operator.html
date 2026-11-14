@@ -44,7 +44,9 @@
 
 <h1>Capactive // Operator Console</h1>
 <div class="sub">{{ operator_name }} — all actions audited ·
-  <a href="{{ url_for('operator_logout') }}">log out</a></div>
+  <form method="POST" action="{{ url_for('operator_logout') }}" style="display:inline">
+    <button type="submit" style="background:none; border:0; padding:0; cursor:pointer; font:inherit; color:inherit; text-decoration:underline;">log out</button>
+  </form></div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% for cat, msg in messages %}
@@ -89,11 +91,14 @@ Your Capactive workspace for {{ w.org_name }} is ready.
       {{ o.access_seats }} acc</td>
   <td><code>{{ o.org_key }}</code></td>
   <td>
-    <a class="btn btn-primary" href="{{ url_for('operator_enter', org_id=o.org_id) }}"
-       onclick="return confirm('Enter {{ o.org_name }} as its admin? This is audited.');">
-       Enter workspace</a>
-    <a class="btn" href="{{ url_for('operator_enter', org_id=o.org_id, to='modules') }}"
-       title="Enable/disable modules for this org (plan override)">Modules</a>
+    <form class="inline" method="POST" action="{{ url_for('operator_enter', org_id=o.org_id) }}"
+          onsubmit="return confirm('Enter {{ o.org_name }} as its admin? This is audited.');">
+      <button type="submit" class="btn btn-primary">Enter workspace</button>
+    </form>
+    <form class="inline" method="POST" action="{{ url_for('operator_enter', org_id=o.org_id) }}">
+      <input type="hidden" name="to" value="modules">
+      <button type="submit" class="btn" title="Enable/disable modules for this org (plan override)">Modules</button>
+    </form>
     <form class="inline" method="POST"
           action="{{ url_for('operator_org_action', org_id=o.org_id) }}">
       <input type="hidden" name="action" value="set_plan">
