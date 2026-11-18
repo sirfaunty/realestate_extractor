@@ -1068,6 +1068,136 @@ def test_holdover_keeps_the_row_that_ends_on_the_roll_end():
     assert 'holdover_past_roll_end' in r.flags, r
 
 
+
+def test_ocr_broken_dates_repaired_and_reviewed():
+    # a slash read as 7 and "to" read as 1 inside the brackets; the amendment
+    # replaces the older table's rent for the same year
+    t = """Gross Rent. During the Extended Term, Tenant shall pay annual Gross Rent as follows: EXTENDED TERM
+    ANNUAL RENT MONTHLY RENT Year 1 (10/1/2025 to 9/30/2026) $48,000.00 $4,000.00 Year 2 (10/1/2026 to 9/30/2027)
+    $49,200.00 $4,100.00 """ + 'x ' * 400 + """SECOND AMENDMENT. The Gross Rent table is deleted and replaced with
+    the following amounts: EXTENDED TERM ANNUAL RENT MONTHLY RENT (10/172025 1 9/30/2026) $42,000.00 $3,500.00"""
+    r = rent(t)
+    assert r.monthly == 3500.0, r
+    assert r.confidence == 'medium' and 'dates_repaired' in r.flags, r
+    # a slash read as 1 in a two-digit-year table
+    t = """annual Minimum Rent as follows: 10/1/23 - 9/30/24 $29,400.00 $2,450.00 10/1/24 - 9/30/25 $30,000.00
+    $2,500.00 10/1125 - 9/30/26 $30,600.00 $2,550.00 10/1/26-9/30/27 $31,200.00 $2,600.00"""
+    r = rent(t)
+    assert r.monthly == 2550.0 and 'dates_repaired' in r.flags, r
+
+
+def test_same_period_priced_twice_in_one_instrument_is_reviewed():
+    t = """During the Extended Term, Tenant shall pay annual Gross Rent for the Restaurant Premises as follows:
+    EXTENDED TERM ANNUAL RENT MONTHLY RENT Year 1 (1/1/2026 to 12/31/2026) $90,000.00 $7,500.00 Year 2
+    (1/1/2027 to 12/31/2027) $93,600.00 $7,800.00 b. During the Extended Term, Tenant shall pay Minimum Rent for
+    the Annex Premises as follows: EXTENDED TERM ANNUAL RENT MONTHLY RENT Year 1 (1/1/2026 to 12/31/2026)
+    $42,000.00 $3,500.00 Year 2 (1/1/2027 to 12/31/2027) $43,200.00 $3,600.00"""
+    r = rent(t)
+    assert r.confidence == 'medium' and 'several_premises_same_dates' in r.flags, r
+
+
+def test_expansion_space_table_does_not_replace_the_running_schedule():
+    t = """Tenant shall pay Minimum Rent as follows: Lease Years 1-5 $240,000.00 $20,000.00 Lease Years 6-10
+    $264,000.00 $22,000.00 """ + 'x ' * 300 + """FIRST AMENDMENT. Tenant shall pay Minimum Rent for the Expansion
+    Space as follows: TERM ANNUAL RENT MONTHLY RENT 8/1/2019 - 4/30/2023 $18,000.00 $1,500.00 5/1/2023 - 4/30/2028
+    $19,200.00 $1,600.00"""
+    r = rent(t, commencement=date(2018, 5, 1), commencement_confirmed=True)
+    assert r.monthly == 22000.0, r
+    assert r.confidence == 'medium' and 'expansion_space_table' in r.flags, r
+
+
+_MONTHS_TABLE = """Tenant shall pay Minimum Rent as follows: PERIOD ANNUAL RENT MONTHLY RENT Months 1-2 $0.00 $0.00
+    Months 3-14 $12,000.00 $1,000.00 Months 15-26 $18,000.00 $1,500.00 Months 27-38 $24,000.00 $2,000.00
+    Months 39-50 $25,200.00 $2,100.00 Months 51-62 $26,400.00 $2,200.00 Months 63-74 $27,600.00 $2,300.00
+    Months 75-86 $28,800.00 $2,400.00"""
+
+
+def test_table_running_past_the_roll_lease_end_is_counted_back_from_it():
+    # from the commencement the 86-month table would end 9/30/2028, ten months
+    # after the roll lease end: it began before the commencement in hand
+    r = rent(_MONTHS_TABLE, commencement=date(2021, 8, 1), commencement_confirmed=True,
+             term_end=date(2027, 11, 30))
+    assert r.monthly == 2300.0, r
+    assert r.confidence == 'medium' and 'table_runs_past_roll_end' in r.flags, r
+    # the table ending on the roll lease end stands, unreviewed
+    r = rent(_MONTHS_TABLE, commencement=date(2021, 8, 1), commencement_confirmed=True,
+             term_end=date(2028, 9, 30))
+    assert r.monthly == 2200.0 and r.confidence == 'high', r
+
+
+def test_step_within_a_month_is_settled_by_the_roll_lease_end():
+    # commencement 5/23: from it the step falls on 6/23, a week before today;
+    # the roll lease end (6/30) puts the step on 7/1
+    t = """Minimum Rent: PERIOD ANNUAL RENT MONTHLY RENT Months 1-13 $24,000.00 $2,000.00 Months 14-25
+    $36,000.00 $3,000.00 Months 26-37 $37,200.00 $3,100.00 Months 38-49 $38,400.00 $3,200.00 Months 50-61
+    $39,600.00 $3,300.00"""
+    r = rent(t, commencement=date(2023, 5, 23), commencement_confirmed=True, term_end=date(2028, 6, 30))
+    assert r.monthly == 3100.0, r
+    assert 'step_dated_from_roll_end' in r.flags and r.confidence == 'medium', r
+
+
+def test_roll_lease_end_picks_between_dated_rows_that_disagree():
+    # the older table has a renewal term running past the roll lease end; the
+    # later table re-dates the terms and its row ends on it
+    t = """Minimum Rent: LEASE TERM PERIOD PSF MONTHLY ANNUAL Extension Term 10/01/19-09/30/20 $6.00 $4,000.00
+    $48,000.00 First Renewal Term 10/01/20-09/30/25 $7.00 $4,600.00 $55,200.00 Second Renewal Term
+    10/01/25-09/30/30 $7.50 $5,000.00 $60,000.00 """ + 'x ' * 300 + """THIRD AMENDMENT. Minimum Rent: LEASE TERM
+    PERIOD PSF MONTHLY ANNUAL Third Extension Term 10/01/2021-09/30/2023 $6.80 $4,400.00 $52,800.00 First Renewal
+    Term 10/01/2023-09/30/2028 $7.00 $4,600.00 $55,200.00"""
+    r = rent(t, term_end=date(2028, 9, 30))
+    assert r.monthly == 4600.0, r
+    assert 'row_ends_on_roll_end' in r.flags and r.confidence == 'medium', r
+    # an instrument whose table goes on past the roll lease end is not on the roll yet
+    t = """Minimum Rent as follows: April 1, 2025 - March 31, 2026 $120,000.00 $10,000.00 April 1, 2026 -
+    May 31, 2027 $122,400.00 $10,200.00 """ + 'x ' * 300 + """FOURTH AMENDMENT. Minimum Rent as follows: EXTENDED
+    TERM ANNUAL RENT MONTHLY RENT Year 1 (6/1/2026 to 5/31/2027) $96,000.00 $8,000.00 Year 2 (6/1/2027 to
+    5/31/2028) $98,400.00 $8,200.00"""
+    r = rent(t, term_end=date(2027, 5, 31))
+    assert r.monthly == 10200.0 and 'row_ends_on_roll_end' in r.flags, r
+    assert rent(t).monthly == 8000.0        # without a roll, the later instrument
+
+
+def test_column_scrambled_rows_after_the_term_dates():
+    # the dates of the term itself sit just above the column of periods
+    t = """The term is extended for a period commencing on November 1, 2027 and ending on October 31, 2030.
+    Base Rent. Tenant shall pay to Landlord annual Base Rent as follows: PERIOD ANNUAL RENT MONTHLY RENT
+    November 1, 2023 to October 31, 2027 November 1, 2027 to October 31, 2030 $120,000.00 $10,000.00
+    $126,000.00 $10,500.00 Monthly installments shall be paid on the first day of each month."""
+    r = rent(t)
+    assert r.monthly == 10000.0, r
+    assert r.confidence == 'medium' and 'dates_repaired' in r.flags, r
+
+
+def test_lease_years_written_in_ordinals():
+    t = """Base Rent. From the Commencement Date through the end of the fifth (5th) Lease Year: $48,000.00 per
+    year in equal monthly installments of $4,000.00. From the beginning of the sixth (6th) Lease Year through the
+    end of the tenth (10th) Lease Year: $54,000.00 per year in equal monthly installments of $4,500.00. From the
+    beginning of the eleventh (11th) Lease Year through the end of the fifteenth (15th) Lease Year; $60,000.00
+    per year in equal monthly installments of $5,000.00."""
+    rows = parse_rent_schedule(t)
+    assert [(x.label.split(' [')[0], x.monthly) for x in rows] == [
+        ('years 1-5', 4000.0), ('years 6-10', 4500.0), ('years 11-15', 5000.0)], rows
+    r = rent(t, commencement=date(2014, 9, 10), commencement_confirmed=True)
+    assert r.monthly == 5000.0, r
+
+
+def test_year_ranges_fixed_at_and_listed_years():
+    t = """13. BASE RENT: Years Base Rent 1-5 Fixed at $4,000.00/Month $48,000.00/Year 6-10 Fixed at
+    $4,500.00/Month $54,000.00/Year 11-15 Fixed $5,000.00/Month $60,000.00/Year"""
+    assert [x.label.split(' [')[0] for x in parse_rent_schedule(t)] == ['years 1-5', 'years 6-10', 'years 11-15']
+    t = """annual Minimum Rent as follows: PERIOD ANNUAL MONTHLY Lease Years 1, 2 and 3 $60,000.00 $5,000.00
+    Lease Years 4 and 5 $63,000.00 $5,250.00"""
+    assert [x.label.split(' [')[0] for x in parse_rent_schedule(t)] == ['years 1-3', 'years 4-5']
+    r = rent(t, commencement=date(2023, 1, 1), commencement_confirmed=True)
+    assert r.monthly == 5250.0, r
+
+
+def test_months_counted_in_ordinals_from_the_commencement():
+    t = """Minimum Rent will be as follows: Commencement Date through end of 60th full calendar month
+    thereafter: $24.00 psf, $8,000.00 per month, $96,000.00 per annum."""
+    assert [x.label.split(' [')[0] for x in parse_rent_schedule(t)] == ['months 1-60']
+
+
 if __name__ == '__main__':
     fails = 0
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith('test_')]
