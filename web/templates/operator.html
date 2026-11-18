@@ -54,7 +54,10 @@
   {% endfor %}
 {% endwith %}
 
-{% set w = session.pop('provision_welcome', None) %}
+{% set k = take_once(session.pop('provision_key', None)) %}
+{% if k %}<div class="flash success">License key: {{ k }}</div>{% endif %}
+
+{% set w = take_once(session.pop('provision_welcome', None)) %}
 {% if w %}
 <div class="provision" style="margin-bottom:16px">
   <div style="font-size:12px;color:#4ec98a;margin-bottom:8px">

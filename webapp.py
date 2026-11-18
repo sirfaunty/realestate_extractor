@@ -336,6 +336,37 @@ def _login_locked(kind, email):
     return int(wait // 60) + 1 if wait else 0
 
 
+# Shown-once values that must not ride in the session cookie (it is signed,
+# not encrypted): a fresh invite or reset link, the operator's welcome
+# message. The cookie carries a random key; the value waits here, is handed
+# out once and forgotten after ten minutes. One server process (waitress).
+_ONE_SHOT = {}
+_ONE_SHOT_LOCK = threading.Lock()
+_ONE_SHOT_TTL = 600
+
+
+def _stash_once(value):
+    import secrets
+    key = secrets.token_urlsafe(18)
+    now = time.time()
+    with _ONE_SHOT_LOCK:
+        for k in [k for k, (t, _) in _ONE_SHOT.items() if now - t > _ONE_SHOT_TTL]:
+            _ONE_SHOT.pop(k, None)
+        _ONE_SHOT[key] = (now, value)
+    return key
+
+
+def _take_once(key):
+    if not key or not isinstance(key, str):
+        return None
+    with _ONE_SHOT_LOCK:
+        hit = _ONE_SHOT.pop(key, None)
+    return hit[1] if hit and time.time() - hit[0] <= _ONE_SHOT_TTL else None
+
+
+app.jinja_env.globals['take_once'] = _take_once
+
+
 def _login_failed(kind, email):
     now = time.time()
     with _login_lock:
@@ -1884,8 +1915,8 @@ def admin_users():
                 url = url_for('accept_invite', token=token, _external=True)
                 emailed = _email_invite({'display_name': name, 'email': email},
                                         session.get('org_name') or org_id, url)
-                session['invite_link'] = {'name': name, 'email': email,
-                                          'url': url, 'emailed': emailed}
+                session['invite_link'] = _stash_once({'name': name, 'email': email,
+                                                      'url': url, 'emailed': emailed})
                 _audit(org_id, 'user_added', user_id,
                        f'{email} as {role}; invite '
                        + ('emailed' if emailed else 'link issued'))
@@ -1912,9 +1943,9 @@ def admin_users():
                     _audit(org_id, 'invite_issued', target_user_id,
                            f"new set-password link for {target['email']}"
                            + ('; emailed' if emailed else ''))
-                    session['invite_link'] = {
+                    session['invite_link'] = _stash_once({
                         'name': target['display_name'], 'email': target['email'],
-                        'url': url, 'emailed': emailed}
+                        'url': url, 'emailed': emailed})
                     flash(f"New link for {target['display_name']}"
                           + (f" emailed to {target['email']}" if emailed else '')
                           + '. Any earlier link no longer works.', 'success')
@@ -1954,7 +1985,7 @@ def admin_users():
         u['needs_setup'] = not u.get('password_hash')
 
     # the link is shown once, on the page right after it was made
-    invite_link = session.pop('invite_link', None)
+    invite_link = _take_once(session.pop('invite_link', None))
     return render_template('admin_users.html', org=org, users=users,
                            invite_link=invite_link)
 
@@ -2508,13 +2539,13 @@ def operator_provision():
         pstore.init_user_permissions(user_id, org_id, role='admin')
     finally:
         pstore.close()
-    flash(f'Provisioned {org_name} ({org_id}) on {plan}. '
-          f'License key: {license_key}', 'success')
+    flash(f'Provisioned {org_name} ({org_id}) on {plan}.', 'success')
+    session['provision_key'] = _stash_once(license_key)     # shown once, never in the cookie
     if invite_url:
-        session['provision_welcome'] = {
+        session['provision_welcome'] = _stash_once({
             'org_name': org_name, 'admin_name': admin_name,
             'admin_email': admin_email, 'invite_url': invite_url, 'emailed': emailed,
-            'login_url': url_for('login', _external=True)}
+            'login_url': url_for('login', _external=True)})
     return redirect(url_for('operator_dashboard'))
 
 

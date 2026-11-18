@@ -219,6 +219,19 @@ def main():
          and link_in(msgs[0]))
     test('the console says it was emailed and keeps a copy', 'Emailed to rstone@birch.test' in page
          and 'welcome-msg' in page)
+    test('the console shows the license key once', 'License key: CAP-' in page
+         and 'License key: CAP-' not in op.get('/operator').get_data(as_text=True))
+    r = op.post('/operator/provision', data={
+        'org_name': 'Aspen Test Holdings', 'plan': 'standard', 'admin_name': 'Robin Vale',
+        'admin_email': 'robin@aspen.test'})
+    import base64
+    import zlib
+    raw = op.get_cookie('session').value
+    body = raw.lstrip('.').split('.')[0]
+    data = base64.urlsafe_b64decode(body + '=' * (-len(body) % 4))
+    held = (zlib.decompress(data) if raw.startswith('.') else data).decode('utf-8', 'replace')
+    test('neither the key nor the invite link rides in the session cookie',
+         r.status_code == 302 and 'provision_key' in held and 'CAP-' not in held and '/invite/' not in held)
     op.post(f'/operator/org/{ORG}/reset-password', data={
         'user_id': 'morgan', 'new_password': 'support-pass-1', 'new_password2': 'support-pass-1'})
     test('a support reset emails a changed notice',

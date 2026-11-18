@@ -73,6 +73,26 @@ test('the new user shows as Invited', 'Invited' in page)
 again = admin.get('/admin/users').get_data(as_text=True)
 test('the link is shown only once', invite_url(again) is None)
 
+
+def cookie_text(client):
+    """The session cookie's payload as the browser holds it (signed, readable)."""
+    import base64
+    import zlib
+    c = client.get_cookie('session')
+    raw = c.value if c else ''
+    packed = raw.startswith('.')
+    body = raw.lstrip('.').split('.')[0]
+    data = base64.urlsafe_b64decode(body + '=' * (-len(body) % 4)) if body else b''
+    return (zlib.decompress(data) if packed and data else data).decode('utf-8', 'replace')
+
+
+r = admin.post('/admin/users', data={'action': 'add', 'display_name': 'Kit Moreno',
+                                     'email': 'kit@harbor.test', 'role': 'viewer'})
+test('the fresh link never rides in the session cookie',
+     r.status_code == 302 and 'invite_link' in cookie_text(admin) and '/invite/' not in cookie_text(admin))
+test('it is still shown on the page that follows',
+     invite_url(admin.get('/admin/users').get_data(as_text=True)) is not None)
+
 print('\nBefore the link is used')
 sam = app.test_client()
 r = sam.post('/login', data={'email': 'sam@harbor.test', 'password': 'anything'},
