@@ -18,6 +18,10 @@
         </p>
     </div>
     <div style="display: flex; gap: 8px;">
+        {% if d.property_count %}
+        <a href="{{ url_for('report_rent_roll') }}" class="btn btn-secondary"
+           title="Every tenancy across all your properties, as an Excel workbook">Portfolio rent roll (.xlsx)</a>
+        {% endif %}
         {% if can_edit('extraction.upload') or can_edit('extraction.batch') %}
         <a href="{{ url_for('file_extractor') }}" class="btn btn-primary">Upload Documents</a>
         {% endif %}

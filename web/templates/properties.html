@@ -8,6 +8,8 @@
         <p>All property assets across your portfolios</p>
     </div>
     <div class="page-header-actions">
+        <a href="{{ url_for('report_rent_roll') }}" class="btn btn-secondary"
+           title="Every tenancy across all your properties, as an Excel workbook">Portfolio rent roll (.xlsx)</a>
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('dlg-bulk-add').showModal()">Bulk Add</button>
         <button type="button" class="btn btn-primary" onclick="document.getElementById('dlg-add-property').showModal()">Add Property</button>
     </div>

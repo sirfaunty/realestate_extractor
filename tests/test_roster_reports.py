@@ -159,6 +159,9 @@ test('the one-pager downloads', r.status_code == 200
 test('a property that does not exist is refused', c.get('/property/99/one-pager.docx').status_code == 302)
 page = c.get('/property/1/roster').get_data(as_text=True)
 test('the roster page links both reports', '/property/1/one-pager.docx' in page and '/reports/rent-roll.xlsx' in page)
+test('the dashboard and the properties page link the portfolio rent roll',
+     '/reports/rent-roll.xlsx' in c.get('/').get_data(as_text=True)
+     and '/reports/rent-roll.xlsx' in c.get('/properties').get_data(as_text=True))
 test('the download is in the Audit Trail', 'report downloaded' in c.get('/admin/audit').get_data(as_text=True))
 other = app.test_client()
 other.post('/login', data={'email': 'blake@birch.test', 'password': 'right-pass-1'})
