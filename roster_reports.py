@@ -40,19 +40,52 @@ def _psf(r) -> Optional[float]:
     return None
 
 
+def _expired(r, as_of: date) -> bool:
+    """Past its expiration on paper and still on the roster (holdover, or a
+    renewal not on file): never read as a current lease."""
+    return bool(r.expiration and r.expiration < as_of)
+
+
+def _lease_status(r, as_of: date) -> str:
+    if not r.expiration:
+        return 'No expiration on file'
+    return 'Expired' if _expired(r, as_of) else 'Current'
+
+
+_TOTAL_AMOUNT = re.compile(r'\$\s?[\d,]+(?:\.\d+)?\s+total')
+_ROLL_SHOWS = re.compile(r'rent roll shows \$\s?[\d,]+(?:\.\d+)?(?:/mo)?')
+_AMOUNT = re.compile(r'\$\s?[\d,]+(?:\.\d+)?(?:/mo)?')
+
+
+def _action(needs: str) -> str:
+    """A review step with its dollar figures left out, for a document that is
+    passed around: the step stays, the readings held back stay in review."""
+    s = needs or ''
+    if s.startswith('reconcile:'):
+        return 'reconcile the lease rent with the rent roll'
+    s = _ROLL_SHOWS.sub('rent roll shows a different rent', s)
+    s = _TOTAL_AMOUNT.sub('a total', s)
+    return re.sub(r' {2,}', ' ', _AMOUNT.sub('an amount', s)).strip()
+
+
 def _rollover(rows, as_of: date) -> list[dict]:
-    """Expirations by calendar year: this year .. +5, 'Later', 'Not on file'."""
+    """Expirations: already expired, then by calendar year (this year .. +5),
+    'Later', 'Not on file'."""
     years = [as_of.year + i for i in range(ROLLOVER_YEARS)]
-    buckets = {y: {'period': str(y), 'leases': 0, 'sf': 0.0, 'monthly_rent': 0.0} for y in years}
+    buckets = {'expired': {'period': f'Expired before {as_of.isoformat()}', 'leases': 0, 'sf': 0.0,
+                           'monthly_rent': 0.0}}
+    buckets.update({y: {'period': str(y), 'leases': 0, 'sf': 0.0, 'monthly_rent': 0.0} for y in years})
     buckets['later'] = {'period': f'{years[-1] + 1} and later', 'leases': 0, 'sf': 0.0, 'monthly_rent': 0.0}
     buckets['none'] = {'period': 'Expiration not on file', 'leases': 0, 'sf': 0.0, 'monthly_rent': 0.0}
     for r in _tenancies(rows):
         if not r.expiration:
             k = 'none'
+        elif _expired(r, as_of):
+            k = 'expired'
         elif r.expiration.year > years[-1]:
             k = 'later'
         else:
-            k = max(r.expiration.year, years[0])     # a term already past sits in this year
+            k = r.expiration.year
         b = buckets[k]
         b['leases'] += 1
         b['sf'] += r.square_feet or 0
@@ -165,16 +198,20 @@ def build_rent_roll_workbook(data: dict, prepared_for: str = '') -> bytes:
     ws.row_dimensions[3].height = 32
     titles = ['Property', 'Type', 'Tenancies', 'Leased SF', 'Tenancies with SF', 'Building SF', 'Occupancy',
               'Monthly rent shown', 'Annual rent shown', 'Rents shown', 'Avg rent / SF / yr',
-              'WALT (years)', 'Expiring ≤ 12 mo', 'Expiring ≤ 24 mo', 'In review']
-    fmts = [None, None, _INT, _INT, _INT, _INT, _PCT, _MONEY, _MONEY, _INT, _PSF, _YRS, _INT, _INT, _INT]
-    header(ws, 5, titles, [34, 12, 10, 12, 11, 12, 11, 16, 16, 9, 12, 9, 10, 10, 9])
+              'WALT (years)', 'Expiring ≤ 12 mo', 'Expiring ≤ 24 mo', 'In review',
+              'Expired leases', 'Monthly rent shown on expired leases']
+    fmts = [None, None, _INT, _INT, _INT, _INT, _PCT, _MONEY, _MONEY, _INT, _PSF, _YRS, _INT, _INT, _INT,
+            _INT, _MONEY]
+    header(ws, 5, titles, [34, 12, 10, 12, 11, 12, 11, 16, 16, 9, 12, 9, 10, 10, 9, 9, 16])
+    past = lambda p: [r for r in p['tenancies'] if _expired(r, as_of)]                      # noqa: E731
+    past_rent = lambda p: round(sum(r.monthly_rent for r in past(p) if r.show_rent), 2)     # noqa: E731
     row = 6
     for p in props:
         s = p['summary']
         put(ws, row, [p['name'], p.get('property_type'), s['tenancies'], s['leased_sf'], s['sf_known_for'],
                       p.get('total_sqft'), p['occupancy'], s['monthly_rent_confirmed'], p['annual_rent_shown'],
                       s['rent_confirmed_for'], p['avg_psf'], s['walt_years'], p['expiring_12mo'],
-                      p['expiring_24mo'], len(p['in_review'])], fmts)
+                      p['expiring_24mo'], len(p['in_review']), len(past(p)), past_rent(p)], fmts)
         row += 1
     if props:
         tot = lambda f: sum(f(p) or 0 for p in props)       # noqa: E731
@@ -184,7 +221,8 @@ def build_rent_roll_workbook(data: dict, prepared_for: str = '') -> bytes:
                       tot(lambda p: p['summary']['monthly_rent_confirmed']), tot(lambda p: p['annual_rent_shown']),
                       tot(lambda p: p['summary']['rent_confirmed_for']), None, None,
                       tot(lambda p: p['expiring_12mo']), tot(lambda p: p['expiring_24mo']),
-                      tot(lambda p: len(p['in_review']))], fmts, fill=total_fill, bold=True)
+                      tot(lambda p: len(p['in_review'])), tot(lambda p: len(past(p))), tot(past_rent)],
+            fmts, fill=total_fill, bold=True)
     else:
         ws.cell(row=row, column=1, value='No leases on file yet.')
 
@@ -192,9 +230,9 @@ def build_rent_roll_workbook(data: dict, prepared_for: str = '') -> bytes:
     ws = wb.create_sheet('Rent Roll')
     titles = ['Property', 'Tenant', 'Square feet', 'Commencement', 'Commencement from', 'Expiration',
               'Expiration from', 'Monthly rent', 'Annual rent', 'Rent / SF / yr', 'Rent status',
-              'How the rent was read', 'Source documents']
-    fmts = [None, None, _INT, _DATE, None, _DATE, None, _MONEY, _MONEY, _PSF, None, None, None]
-    header(ws, 1, titles, [30, 34, 11, 13, 14, 13, 14, 14, 14, 11, 13, 60, 70])
+              'Lease status', 'How the rent was read', 'Source documents']
+    fmts = [None, None, _INT, _DATE, None, _DATE, None, _MONEY, _MONEY, _PSF, None, None, None, None]
+    header(ws, 1, titles, [30, 34, 11, 13, 14, 13, 14, 14, 14, 11, 13, 14, 60, 70])
     row = 2
     for p in props:
         for r in sorted(p['tenancies'], key=lambda x: (x.tenant or '').lower()):
@@ -203,7 +241,7 @@ def build_rent_roll_workbook(data: dict, prepared_for: str = '') -> bytes:
                           r.expiration, r.expiration_source or None,
                           r.monthly_rent if shown else None,
                           round(r.monthly_rent * 12, 2) if shown else None, _psf(r),
-                          'Shown' if shown else 'In review',
+                          'Shown' if shown else 'In review', _lease_status(r, as_of),
                           r.rent_detail if shown else 'See the Review sheet',
                           '; '.join(r.filenames)], fmts, fill=None if shown else review_fill)
             row += 1
@@ -337,10 +375,16 @@ def build_one_pager(prop: dict, as_of: date, prepared_for: str = '') -> bytes:
         r2 = bottom.paragraphs[0].add_run(label)
         r2.font.size = Pt(7.5)
         r2.font.color.rgb = grey
-    line(f"Rent is shown for {s['rent_confirmed_for']} of {s['tenancies']} tenancies; square feet are on file "
-         f"for {s['sf_known_for']}. Figures cover only what is shown.", size=7.5, color=grey, after=6)
-
     ten = prop['tenancies']
+    past = [r for r in ten if _expired(r, as_of)]
+    past_rent = sum(r.monthly_rent for r in past if r.show_rent)
+    note = ''
+    if past:
+        note = (f" {len(past)} lease{'s are' if len(past) != 1 else ' is'} past expiration and still counted"
+                + (f', with ${past_rent:,.0f} of the monthly rent' if past_rent else '') + '.')
+    line(f"Rent is shown for {s['rent_confirmed_for']} of {s['tenancies']} tenancies; square feet are on file "
+         f"for {s['sf_known_for']}. Figures cover only what is shown.{note}", size=7.5, color=grey, after=6)
+
     top = sorted(ten, key=lambda r: (-(r.monthly_rent if r.show_rent else 0), -(r.square_feet or 0),
                                      (r.tenant or '').lower()))
     limit = 12
@@ -348,7 +392,8 @@ def build_one_pager(prop: dict, as_of: date, prepared_for: str = '') -> bytes:
     rows = [[r.tenant, f'{r.square_feet:,.0f}' if r.square_feet else None,
              f'${r.monthly_rent:,.2f}' if r.show_rent else 'in review',
              f'${_psf(r):,.2f}' if _psf(r) is not None else None,
-             r.expiration.isoformat() if r.expiration else None] for r in top[:limit]]
+             (r.expiration.isoformat() + (' (expired)' if _expired(r, as_of) else ''))
+             if r.expiration else None] for r in top[:limit]]
     rest = top[limit:]
     if rest:
         rows.append([f'{len(rest)} other tenancies',
@@ -356,7 +401,7 @@ def build_one_pager(prop: dict, as_of: date, prepared_for: str = '') -> bytes:
                      money(sum(r.monthly_rent for r in rest if r.show_rent)), None, None])
     if rows:
         table(['Tenant', 'Square feet', 'Monthly rent', 'Rent / SF / yr', 'Expiration'], rows,
-              [3.1, 1.0, 1.2, 1.0, 1.0])
+              [2.9, 1.0, 1.2, 1.0, 1.2])
     else:
         line('No tenancies on file yet.', color=grey)
 
@@ -374,7 +419,7 @@ def build_one_pager(prop: dict, as_of: date, prepared_for: str = '') -> bytes:
     line(f'Open items ({len(review)})', size=11, bold=True, color=navy, after=2)
     if review:
         for r in review[:8]:
-            line(f'• {r.tenant}: {r.needs}', size=8.5, after=0)
+            line(f'• {r.tenant}: {_action(r.needs)}', size=8.5, after=0)
         if len(review) > 8:
             line(f'… and {len(review) - 8} more on the lease roster.', size=8.5, color=grey, after=0)
     else:

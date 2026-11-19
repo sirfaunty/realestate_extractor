@@ -79,7 +79,7 @@ test('a high-confidence rent is a figure with rent per SF',
      roll['Bean Coffee'][7] == 5000.0 and roll['Bean Coffee'][9] == 30.0 and roll['Bean Coffee'][10] == 'Shown')
 test('a medium-confidence rent is blank on the rent roll',
      roll['Fern Dental'][7] is None and roll['Fern Dental'][8] is None and roll['Fern Dental'][10] == 'In review')
-test('every row names its source documents', all('Lease.pdf' in (r[12] or '') for r in roll.values()))
+test('every row names its source documents', all('Lease.pdf' in (r[13] or '') for r in roll.values()))
 rev = {r[1]: r for r in wb['Review'].iter_rows(min_row=2, values_only=True)}
 test('the review sheet lists what is held back with the step that resolves it',
      set(rev) == {'Fern Dental', 'Quick Print'} and rev['Fern Dental'][3] == 'confirm the commencement date'
@@ -104,6 +104,40 @@ test('a rent in review is never printed', 'in review' in cells and not any('3,10
      and '3,100' not in text)
 test('open items say what resolves each', 'Fern Dental: confirm the commencement date' in text)
 test('the headline says how much of the roster is shown', 'Rent is shown for 2 of 4 tenancies' in text)
+
+print('\nExpired leases and held-back figures')
+ROWS2 = [row('Bean Coffee', 2000, 5000.0, 'high', date(2027, 3, 31)),
+         row('Old Mill Cafe', 1000, 2000.0, 'high', date(2026, 3, 31)),
+         row('Fern Dental', 1500, 3100.0, 'medium', date(2028, 12, 31),
+             needs='reconcile: lease says $3,100.00/mo, rent roll says $3,400.00/mo'),
+         row('Pet Barn', 4000, 9000.0, 'medium', date(2030, 12, 31),
+             needs='rent roll shows $9,450.00/mo — another step of the lease schedule; check which applies today'),
+         row('Snow Globe Pop-Up', 3000, None, 'low', date(2026, 12, 31),
+             needs='seasonal lease: $12,000.00 total for 2026-10-01..2026-12-31 — not a monthly rent')]
+P2 = prop(2, 'Oak Plaza', ROWS2, 20000)
+wb = load_workbook(io.BytesIO(rr.build_rent_roll_workbook({'as_of': AS_OF, 'properties': [P2]})))
+ro = {r[1]: r for r in wb['Rollover'].iter_rows(min_row=2, values_only=True) if r[0] == 'Oak Plaza'}
+test('a lease past its expiration has its own rollover line, not this year',
+     ro['Expired before 2026-06-30'][2] == 1 and ro['Expired before 2026-06-30'][4] == 2000.0
+     and ro['2026'][2] == 1 and ro['2026'][3] == 3000)
+roll = {r[1]: r for r in wb['Rent Roll'].iter_rows(min_row=2, values_only=True)}
+test('the rent roll marks it Expired and the rest Current',
+     roll['Old Mill Cafe'][11] == 'Expired' and roll['Bean Coffee'][11] == 'Current'
+     and roll['Old Mill Cafe'][7] == 2000.0)
+vals = [c.value for c in wb['Summary'][6]]
+test('the summary counts expired leases and the rent they carry', vals[15] == 1 and vals[16] == 2000.0)
+rev = {r[1]: r for r in wb['Review'].iter_rows(min_row=2, values_only=True)}
+test('the review sheet keeps the figures', '$3,400.00' in rev['Fern Dental'][3] and rev['Fern Dental'][4] == 3100.0)
+doc = Document(io.BytesIO(rr.build_one_pager(P2, AS_OF)))
+text = '\n'.join(p.text for p in doc.paragraphs)
+cells = [c.text for t in doc.tables for r in t.rows for c in r.cells]
+items = text[text.index('Open items'):]
+test('the one-pager marks the expired lease', '2026-03-31 (expired)' in cells
+     and '1 lease is past expiration and still counted, with $2,000 of the monthly rent' in text)
+test('open items keep the step and drop the dollars', '$' not in items
+     and 'Fern Dental: reconcile the lease rent with the rent roll' in items
+     and 'Pet Barn: rent roll shows a different rent — another step of the lease schedule' in items
+     and 'Snow Globe Pop-Up: seasonal lease: a total for 2026-10-01..2026-12-31 — not a monthly rent' in items)
 
 print('\nIn the app')
 from werkzeug.security import generate_password_hash  # noqa: E402
