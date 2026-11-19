@@ -8,6 +8,7 @@ Multi-tenant with org/user authentication, feature gating,
 usage tracking, and admin panel.
 """
 
+import io
 import os
 import json
 import threading
@@ -3365,6 +3366,52 @@ def property_roster(property_id):
     finally:
         db.close()
     return render_template('roster.html', prop=prop, rows=rows, summary=summary)
+
+
+_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+
+@app.route('/reports/rent-roll.xlsx')
+@login_required
+def report_rent_roll():
+    """Portfolio Rent Roll: every tenancy across the org's properties, built
+    from the lease roster. A rent is a figure only when high-confidence; the
+    rest is on the workbook's Review sheet."""
+    from .roster_reports import build_rent_roll_workbook, rent_roll_filename, report_data
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        data = report_data(db)
+    finally:
+        db.close()
+    org_name = session.get('org_name') or ''
+    body = build_rent_roll_workbook(data, prepared_for=org_name)
+    _audit(org_id, 'report_downloaded', session.get('user_id'),
+           f"portfolio rent roll, {len(data['properties'])} properties")
+    return send_file(io.BytesIO(body), mimetype=_XLSX, as_attachment=True,
+                     download_name=rent_roll_filename(org_name or 'Portfolio', data['as_of']))
+
+
+@app.route('/property/<int:property_id>/one-pager.docx')
+@login_required
+def report_one_pager(property_id):
+    """Property One-Pager: one property at a glance, from its lease roster."""
+    from .roster_reports import build_one_pager, one_pager_filename, report_data
+    org_id = session['org_id']
+    db = get_org_db(org_id)
+    try:
+        data = report_data(db, property_id=property_id)
+    finally:
+        db.close()
+    if not data['properties']:
+        flash('Property not found.', 'error')
+        return redirect(url_for('properties'))
+    prop = data['properties'][0]
+    body = build_one_pager(prop, data['as_of'], prepared_for=session.get('org_name') or '')
+    _audit(org_id, 'report_downloaded', session.get('user_id'), f"one-pager, property {property_id}")
+    return send_file(io.BytesIO(body), mimetype=_DOCX, as_attachment=True,
+                     download_name=one_pager_filename(prop['name'], data['as_of']))
 
 
 @app.route('/property/<int:property_id>/roster/confirm', methods=['POST'])

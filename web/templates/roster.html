@@ -14,6 +14,12 @@
             places it with high confidence; everything else says what would resolve it.
         </p>
     </div>
+    <div style="display:flex; gap:8px; flex-shrink:0; margin-left:16px;">
+        <a class="btn btn-secondary" href="{{ url_for('report_one_pager', property_id=prop.id) }}"
+           title="This property at a glance, as a Word document">One-pager (.docx)</a>
+        <a class="btn btn-secondary" href="{{ url_for('report_rent_roll') }}"
+           title="Every tenancy across all your properties, as an Excel workbook">Portfolio rent roll (.xlsx)</a>
+    </div>
 </div>
 
 <div class="card-grid" style="margin-bottom:20px;">
